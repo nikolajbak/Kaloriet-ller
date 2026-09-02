@@ -143,6 +143,11 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .tjek input{width:auto;flex:none;transform:scale(1.25);margin:0;}
 .post .kom{font-size:12.5px;color:var(--daempet);font-style:italic;margin-top:3px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.opdater{position:fixed;left:0;right:0;top:0;z-index:40;background:var(--gron);color:#F4F6F2;
+  padding:calc(10px + env(safe-area-inset-top)) 14px 11px;display:flex;gap:12px;
+  align-items:center;justify-content:space-between;font-size:14px;line-height:1.3;}
+.opdater button{flex:none;background:#F4F6F2;color:var(--gron);border:none;border-radius:8px;
+  padding:8px 13px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
 .skjul{display:none;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -156,7 +161,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "6.0";
+var APP_VERSION = "7.0";
 var SKEMA = 4;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -168,7 +173,7 @@ var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris 
 var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_MODEL = "kd:model", K_SKEMA = "kd:skema", K_FORSLAG = "kd:forslag",
     K_BRUGER = "kd:navn", K_KAEK = "kd:kaek",
-    K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte";
+    K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek";
 var reserve = {};
 
 function laes(k){
@@ -1308,6 +1313,7 @@ function tegnIndstillinger(){
     + '<button class="knap sek" id="s-eksport" style="margin-top:8px">Gem sikkerhedskopi</button>'
     + '<button class="knap sek" id="s-import" style="margin-top:8px">Indlæs sikkerhedskopi</button>'
     + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data</button>'
+    + '<button class="knap sek" id="s-opdater" style="margin-top:8px">Søg efter opdatering</button>'
     + '<p class="fodnote" style="text-align:center">Version ' + APP_VERSION + '</p></div></div>';
   var gl = $("ind-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
@@ -1345,6 +1351,18 @@ function tegnIndstillinger(){
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
   };
   $("s-import").onclick = function(){ $("importfil").click(); };
+  $("s-opdater").onclick = function(){
+    var b = $("s-opdater");
+    b.textContent = "Søger …"; b.disabled = true;
+    tjekOpdatering(true).then(function(ny){
+      if (ny){ hentNyVersion(ny); return; }
+      b.textContent = "Du har den nyeste version";
+      setTimeout(function(){
+        var k = $("s-opdater");
+        if (k){ k.textContent = "Søg efter opdatering"; k.disabled = false; }
+      }, 2500);
+    });
+  };
   $("s-nulstil").onclick = function(){
     if (!confirm("Slet alle måltider og indstillinger på denne telefon? Det kan ikke fortrydes.")) return;
     alleNoegler().filter(function(k){ return k.indexOf("kd:") === 0; }).forEach(fjern);
@@ -1354,6 +1372,56 @@ function tegnIndstillinger(){
     var o = $("ind-overlay"); if (o) o.remove();
     tegn();
   };
+}
+
+/* ================= Opdatering =================
+   iOS kan holde fast i en gammel udgave af en hjemmeskaerms-app i lang tid.
+   Appen henter derfor sin egen index.html udenom cachen, laeser versionsnummeret
+   og genindlaeser paa en frisk adresse, hvis der ligger noget nyere paa GitHub. */
+
+function versionsTal(v){
+  return String(v).split(".").map(function(x){ return parseInt(x, 10) || 0; });
+}
+function erNyere(ny, gammel){
+  var a = versionsTal(ny), b = versionsTal(gammel);
+  for (var i = 0; i < Math.max(a.length, b.length); i++){
+    var x = a[i] || 0, y = b[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+function grundadresse(){
+  return location.origin + location.pathname.replace(/[^/]*$/, "");
+}
+/* Noget i gang, som ikke maa afbrydes af en genindlaesning? */
+function optaget(){
+  return !!(S.ark || S.indst || $("v-overlay"));
+}
+function hentNyVersion(nu){
+  location.replace(grundadresse() + "?v=" + encodeURIComponent(nu));
+}
+function visOpdatering(nu){
+  if ($("opdater-bjaelke")) return;
+  document.body.insertAdjacentHTML("afterbegin",
+    '<div class="opdater" id="opdater-bjaelke"><span>Version ' + esc(nu) + ' er klar.</span>'
+    + '<button id="b-opdater">Opdatér nu</button></div>');
+  $("b-opdater").onclick = function(){ hentNyVersion(nu); };
+}
+function tjekOpdatering(tvunget){
+  var nu = Date.now(), sidst = Number(laes(K_TJEK)) || 0;
+  if (!tvunget && nu - sidst < 20 * 60 * 1000) return Promise.resolve(null);
+  skriv(K_TJEK, String(nu));
+  return fetch(grundadresse() + "index.html?tjek=" + nu, { cache: "no-store" })
+    .then(function(r){ return r.ok ? r.text() : null; })
+    .then(function(t){
+      if (!t) return null;
+      /* Moenstret saettes sammen af stumper, saa det ikke kan finde sig selv i filen */
+      var m = t.match(new RegExp("var APP" + "_VERSION = \"([^\"]+)\""));
+      if (!m || !erNyere(m[1], APP_VERSION)) return null;
+      if (optaget()) visOpdatering(m[1]); else hentNyVersion(m[1]);
+      return m[1];
+    })
+    .catch(function(){ return null; });
 }
 
 /* ================= Haendelser ================= */
@@ -1424,6 +1492,7 @@ document.addEventListener("visibilitychange", function(){
   if (document.visibilityState === "visible"){
     var d = dagKey(new Date());
     if (d !== S.iDag){ S.iDag = d; S.valgt = null; tegn(); }
+    tjekOpdatering(false);
   }
 });
 
@@ -1438,6 +1507,7 @@ try {
 
 migrer();
 tegn();
+tjekOpdatering(false);
 </script>
 </body>
 </html>
