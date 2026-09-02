@@ -29,14 +29,12 @@ body{
 .indhold{max-width:520px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 18px 0;}
 .top{display:flex;justify-content:space-between;align-items:baseline;gap:14px;}
 .datolinje{font-size:13px;color:var(--daempet);}
-.topknapper{display:flex;gap:14px;flex:none;}
 .txtknap{background:none;border:none;padding:0;font:inherit;font-size:13px;
   color:var(--gron);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
-.hero{margin-top:14px;}
+.hero{margin-top:16px;}
 .stortal{font-family:Georgia,"Times New Roman",serif;font-size:64px;line-height:.95;
   letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
 .stortal.over{color:var(--ler);}
-.stortal.mellem{font-size:46px;}
 .maallinje{margin-top:6px;font-size:14px;color:var(--daempet);}
 .baand{height:6px;background:#DADCD3;border-radius:3px;margin:16px 0 14px;overflow:hidden;}
 .baand span{display:block;height:100%;background:var(--gron);
@@ -66,6 +64,7 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
 .bundindhold{max-width:520px;margin:0 auto;}
 button.knap{width:100%;border:none;border-radius:12px;padding:15px;font:inherit;
   font-size:16px;font-weight:600;background:var(--gron);color:#F4F6F2;cursor:pointer;}
+button.knap:disabled{opacity:.45;}
 button.knap.sek{background:none;color:var(--blaek);border:1px solid var(--linje);font-weight:500;}
 button.knap.fare{background:none;color:var(--ler);border:1px solid var(--linje);font-weight:500;}
 input,select,textarea{font-family:inherit;font-size:16px;width:100%;background:var(--kort);
@@ -89,10 +88,10 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   padding:calc(30px + env(safe-area-inset-top)) 20px calc(30px + env(safe-area-inset-bottom));}
 .opsaet h1{font-family:Georgia,serif;font-size:30px;font-weight:400;line-height:1.15;margin:0 0 12px;}
 .opsaet p{color:var(--daempet);font-size:14.5px;margin:0 0 14px;}
-/* --- historik --- */
-.valg{display:flex;border:1px solid var(--linje);border-radius:10px;overflow:hidden;margin:16px 0 4px;}
+.valg{display:flex;border:1px solid var(--linje);border-radius:10px;overflow:hidden;margin:14px 0 4px;}
 .valg button{flex:1;background:none;border:none;border-right:1px solid var(--linje);
-  padding:9px 4px;font:inherit;font-size:14px;color:var(--daempet);cursor:pointer;}
+  padding:9px 3px;font:inherit;font-size:13.5px;color:var(--daempet);cursor:pointer;
+  white-space:nowrap;}
 .valg button:last-child{border-right:none;}
 .valg button.aktiv{background:var(--gron);color:#F4F6F2;font-weight:600;}
 .graf{width:100%;height:auto;display:block;margin:14px 0 4px;}
@@ -111,6 +110,38 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .noegletal div{font-size:12.5px;color:var(--daempet);}
 .noegletal b{display:block;font-family:Georgia,serif;font-size:24px;font-weight:400;
   color:var(--blaek);font-variant-numeric:tabular-nums;margin-bottom:1px;}
+/* --- trends --- */
+.katraekke{padding:11px 2px 9px;border-bottom:1px solid var(--linje);}
+.kattop{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+.katnavn{font-size:14.5px;}
+.katnavn em{font-style:normal;font-size:11.5px;color:var(--daempet);}
+.kattal{font-family:Georgia,serif;font-size:16px;font-variant-numeric:tabular-nums;flex:none;}
+.katbar{height:5px;background:#DADCD3;border-radius:3px;margin-top:7px;overflow:hidden;}
+.katbar span{display:block;height:100%;background:#8FA39B;}
+.katraekke.top .katbar span{background:var(--gron);}
+.katraekke.top .katnavn{font-weight:600;}
+.maerke{display:inline-block;font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;
+  background:#DCE0D6;color:#4A554F;border-radius:4px;padding:2px 6px;margin-left:7px;vertical-align:2px;}
+.maerke.varm{background:#EFDCC6;color:#7A4A1E;}
+.kort{background:var(--kort);border:1px solid var(--linje);border-radius:12px;
+  padding:13px 14px;margin-bottom:9px;}
+.kort .fra{font-weight:600;}
+.kort .til{margin-top:5px;}
+.kort .til b{font-weight:600;color:var(--gron);}
+.kort .kom{margin-top:7px;font-size:13.5px;color:var(--daempet);font-style:italic;}
+.kort .spar{float:right;font-family:Georgia,serif;font-size:15px;color:var(--gron);
+  font-variant-numeric:tabular-nums;margin-left:10px;}
+.overskrift{font-family:Georgia,serif;font-size:20px;line-height:1.25;margin:4px 0 14px;}
+.chip{display:inline-block;background:var(--kort);border:1px solid var(--linje);
+  border-radius:999px;padding:8px 14px;margin:0 7px 8px 0;font:inherit;font-size:14.5px;
+  color:var(--blaek);cursor:pointer;}
+.chip.valgt{background:var(--gron);color:#F4F6F2;border-color:var(--gron);}
+.sp{margin-top:16px;}
+.sp .tekst{font-size:14.5px;margin-bottom:9px;}
+.tjek{display:flex;align-items:center;gap:11px;margin-top:15px;font-size:14px;line-height:1.3;}
+.tjek input{width:auto;flex:none;transform:scale(1.25);margin:0;}
+.post .kom{font-size:12.5px;color:var(--daempet);font-style:italic;margin-top:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .skjul{display:none;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -124,15 +155,19 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "2.0";
-var SKEMA = 2;   /* oeges kun naar dataformatet aendrer sig */
+var APP_VERSION = "5.0";
+var SKEMA = 4;
 
-/* ================= Lager =================
-   Alt ligger lokalt i browseren paa denne telefon under noeglen kd:*.
-   Naar index.html udskiftes paa samme adresse, roeres dataene ikke. */
+var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
+  "Mejeri & æg","Snacks & slik","Kage & bagværk","Fastfood & takeaway",
+  "Drikkevarer","Alkohol","Andet"];
+
+/* ================= Lager ================= */
 
 var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
-    K_MODEL = "kd:model", K_SKEMA = "kd:skema";
+    K_MODEL = "kd:model", K_SKEMA = "kd:skema", K_FORSLAG = "kd:forslag",
+    K_BRUGER = "kd:navn", K_KAEK = "kd:kaek",
+    K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte";
 var reserve = {};
 
 function laes(k){
@@ -156,8 +191,6 @@ function alleNoegler(){
 function dagNoegler(){
   return alleNoegler().filter(function(k){ return k.indexOf(P_DAG) === 0; }).sort();
 }
-
-/* Enhver post laeses gennem denne, saa gamle og halve formater aldrig braender appen ned */
 function normaliser(p, i){
   p = p && typeof p === "object" ? p : {};
   return {
@@ -165,6 +198,9 @@ function normaliser(p, i){
     tid: typeof p.tid === "string" ? p.tid : "",
     navn: typeof p.navn === "string" && p.navn ? p.navn : "Måltid",
     portion: typeof p.portion === "string" ? p.portion : "",
+    kommentar: typeof p.kommentar === "string" ? p.kommentar : "",
+    genstande: Number(p.genstande) || 0,
+    kategori: KATEGORIER.indexOf(p.kategori) >= 0 ? p.kategori : "Andet",
     kalorier: Number(p.kalorier) || 0,
     protein_g: Number(p.protein_g) || 0,
     kulhydrat_g: Number(p.kulhydrat_g) || 0,
@@ -199,21 +235,18 @@ function gemDag(noegle, poster){
     })));
   }
 }
-
-/* Migrering: koeres ved hver start. Nye versioner tilfoejer trin nedenfor
-   og roerer aldrig data, der allerede er i orden. */
 function migrer(){
   var fra = Number(laes(K_SKEMA)) || 1;
-  if (fra < 2){
+  if (fra < 4){
     dagNoegler().forEach(function(k){
       var n = k.slice(P_DAG.length);
-      gemDag(n, hentDag(n));           /* skriver posterne i normaliseret form */
+      gemDag(n, hentDag(n));     /* faar bl.a. kategori paa gamle poster */
     });
   }
   if (fra !== SKEMA) skriv(K_SKEMA, String(SKEMA));
 }
 
-/* ================= Datoer og smaating ================= */
+/* ================= Datoer ================= */
 
 function dagKey(d){
   return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
@@ -228,14 +261,11 @@ function esc(s){
   });
 }
 function $(id){ return document.getElementById(id); }
-
-/* Mandag i ugen for en dato */
 function mandag(d){
   var t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   t.setDate(t.getDate() - ((t.getDay() + 6) % 7));
   return t;
 }
-/* ISO-ugenummer, som danske uger regnes */
 function ugeNr(d){
   var t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   t.setDate(t.getDate() - ((t.getDay() + 6) % 7) + 3);
@@ -249,11 +279,17 @@ var S = {
   iDag: dagKey(new Date()),
   maal: Number(laes(K_MAAL)) || 2000,
   model: laes(K_MODEL) || "claude-sonnet-5",
+  navn: laes(K_BRUGER) || "",
+  profil: (function(){ try { return JSON.parse(laes(K_PROFIL) || "{}") || {}; } catch(e){ return {}; } })(),
+  kaek: laes(K_KAEK) !== "0",
   skaerm: "idag",
   periode: "dag",
+  vindue: 30,
   valgt: null,
   ark: null,
-  indst: false
+  indst: false,
+  forslag: null,
+  forslagStatus: "tom"
 };
 
 /* ================= Historik ================= */
@@ -265,9 +301,6 @@ function dageMedData(){
   return dagNoegler().map(function(k){ return k.slice(P_DAG.length); })
     .filter(function(n){ return hentDag(n).length; });
 }
-
-/* Bygger de perioder, grafen og listen viser. Bjaelkerne er altid snit pr. dag,
-   saa maallinjen betyder det samme i alle tre visninger. */
 function byggPerioder(type){
   var dage = dageMedData();
   if (!dage.length) return [];
@@ -317,8 +350,6 @@ function byggPerioder(type){
   }
   return ud;
 }
-
-/* Simpel soejlegraf i ren SVG, med maallinjen som stiplet reference */
 function graf(perioder){
   var B = 340, H = 150, top = 10, bund = 24, hoejde = H - top - bund;
   var maks = Math.max(S.maal || 0, 1);
@@ -326,7 +357,6 @@ function graf(perioder){
   maks *= 1.1;
   var n = perioder.length, plads = B / n, bredde = Math.max(3, Math.min(26, plads * 0.62));
   var s = '<svg class="graf" viewBox="0 0 ' + B + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Kalorier pr. dag i snit">';
-
   if (S.maal > 0){
     var y = top + hoejde - (S.maal / maks) * hoejde;
     s += '<line x1="0" y1="' + y.toFixed(1) + '" x2="' + B + '" y2="' + y.toFixed(1)
@@ -347,8 +377,7 @@ function graf(perioder){
     var hvert = n > 16 ? 5 : (n > 8 ? 2 : 1);
     if (i % hvert === 0 || i === n - 1){
       var mrk = S.periode === "dag" ? tilDato(p.id).getDate()
-              : (S.periode === "uge" ? ugeNr(tilDato(p.id.slice(1)))
-              : p.titel.slice(0,3));
+              : (S.periode === "uge" ? ugeNr(tilDato(p.id.slice(1))) : p.titel.slice(0,3));
       s += '<text x="' + (x + bredde/2).toFixed(1) + '" y="' + (H - 8)
          + '" text-anchor="middle" font-size="9" fill="#6C7873">' + mrk + '</text>';
     }
@@ -356,22 +385,180 @@ function graf(perioder){
   return s + '</svg>';
 }
 
-/* ================= Analyse ================= */
+/* ================= Vaegt og profil ================= */
 
-function byggPrompt(note){
-  return 'Du er ernaeringsfaglig og vurderer et maaltid ud fra et foto.\n\n'
-    + 'Estimer portionsstoerrelsen ud fra synlige holdepunkter: tallerken, bestik, haender, emballage. '
-    + 'Er der flere retter paa billedet, laegges de sammen til et maaltid. '
-    + 'Husk synligt fedtstof, dressing og sovs.'
-    + (note ? '\n\nBrugerens egen note om maaltidet: "' + note + '". Vaegt den hoejere end dit eget gaet.' : '')
-    + '\n\nSvar udelukkende med et JSON-objekt, uden markdown og uden indledning:\n'
-    + '{"er_mad": true/false, "navn": "kort dansk navn", "portion": "kort beskrivelse af den maengde du har regnet med", '
-    + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
-    + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort saetning om det vaesentligste forbehold"}\n\n'
-    + 'Er der hverken mad eller drikke paa billedet, saettes er_mad til false og resten til 0 eller tom tekst.';
+var AKTIVITET = [
+  ["1.2",   "Stillesiddende"],
+  ["1.375", "Let aktiv — lidt motion"],
+  ["1.55",  "Moderat aktiv"],
+  ["1.725", "Meget aktiv"]
+];
+
+function hentVaegte(){
+  try { var o = JSON.parse(laes(K_VAEGT) || "{}"); return (o && typeof o === "object") ? o : {}; }
+  catch(e){ return {}; }
+}
+function vaegtListe(){
+  var v = hentVaegte();
+  return Object.keys(v).sort()
+    .map(function(d){ return { dag:d, kg:Number(v[d]) || 0 }; })
+    .filter(function(x){ return x.kg > 0; });
+}
+function gemVaegt(dag, kg){
+  var v = hentVaegte();
+  if (kg > 0) v[dag] = Math.round(kg * 10) / 10; else delete v[dag];
+  skriv(K_VAEGT, JSON.stringify(v));
+}
+function gemProfil(aendring){
+  S.profil = Object.assign({}, S.profil, aendring);
+  skriv(K_PROFIL, JSON.stringify(S.profil));
+}
+/* Mifflin-St Jeor. Uden koen, hoejde eller alder giver den ingenting —
+   den gaetter hellere ingenting end noget forkert. */
+function kropstal(){
+  var p = S.profil, liste = vaegtListe();
+  var nu = liste.length ? liste[liste.length - 1].kg : 0;
+  var foerste = liste.length ? liste[0] : null;
+  var hoejde = Number(p.hoejde) || 0, alder = Number(p.alder) || 0;
+  var bmi = (nu > 0 && hoejde > 0) ? nu / Math.pow(hoejde / 100, 2) : 0;
+  var bmr = 0, tdee = 0;
+  if (nu > 0 && hoejde > 0 && alder > 0 && (p.koen === "mand" || p.koen === "kvinde")){
+    bmr = 10 * nu + 6.25 * hoejde - 5 * alder + (p.koen === "mand" ? 5 : -161);
+    tdee = bmr * (Number(p.aktivitet) || 1.375);
+  }
+  var maal = Number(p.maalvaegt) || 0;
+  return {
+    liste: liste, nu: nu, foerste: foerste, bmi: bmi, bmr: bmr, tdee: tdee, maalvaegt: maal,
+    tilMaal: (nu > 0 && maal > 0) ? nu - maal : null,
+    aendring: (foerste && nu > 0) ? nu - foerste.kg : null,
+    maalBmi: (maal > 0 && hoejde > 0) ? maal / Math.pow(hoejde / 100, 2) : 0
+  };
 }
 
-function analyser(dataUrl, note){
+/* Linjegraf over vaegten. X foelger den faktiske kalender, saa et hul
+   paa tre uger ogsaa ser ud som tre uger. */
+function vaegtgraf(liste, maalvaegt){
+  var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 34;
+  var bredde = B - venstre - hoejre, hoejdeP = H - top - bund;
+  var vaerdier = liste.map(function(x){ return x.kg; });
+  if (maalvaegt > 0) vaerdier = vaerdier.concat([maalvaegt]);
+  var min = Math.min.apply(null, vaerdier), maks = Math.max.apply(null, vaerdier);
+  var luft = Math.max(0.6, (maks - min) * 0.18);
+  min -= luft; maks += luft;
+  var t0 = tilDato(liste[0].dag).getTime();
+  var t1 = tilDato(liste[liste.length - 1].dag).getTime();
+  var spand = Math.max(1, t1 - t0);
+  function X(d){ return venstre + (liste.length < 2 ? bredde / 2 : (tilDato(d).getTime() - t0) / spand * bredde); }
+  function Y(kg){ return top + hoejdeP - (kg - min) / (maks - min) * hoejdeP; }
+
+  var s = '<svg class="graf" viewBox="0 0 ' + B + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Vaegtudvikling">';
+  if (maalvaegt > 0){
+    var ym = Y(maalvaegt);
+    s += '<line x1="' + venstre + '" y1="' + ym.toFixed(1) + '" x2="' + (venstre + bredde)
+       + '" y2="' + ym.toFixed(1) + '" stroke="#B98A1E" stroke-width="1" stroke-dasharray="4 3"/>'
+       + '<text x="' + (B - 2) + '" y="' + (ym + 3.5).toFixed(1) + '" text-anchor="end" font-size="9.5" fill="#B98A1E">mål</text>';
+  }
+  var punkter = liste.map(function(x){ return X(x.dag).toFixed(1) + "," + Y(x.kg).toFixed(1); });
+  if (liste.length > 1){
+    s += '<polyline points="' + punkter.join(" ") + '" fill="none" stroke="#1F5D4C" '
+       + 'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+  }
+  liste.forEach(function(x, i){
+    var sidste = i === liste.length - 1;
+    s += '<circle cx="' + X(x.dag).toFixed(1) + '" cy="' + Y(x.kg).toFixed(1) + '" r="'
+       + (sidste ? 4 : 2.4) + '" fill="' + (sidste ? "#17211D" : "#1F5D4C") + '"/>';
+  });
+  var sid = liste[liste.length - 1];
+  s += '<text x="' + (B - 2) + '" y="' + (Y(sid.kg) - 9).toFixed(1) + '" text-anchor="end" '
+     + 'font-size="10" fill="#17211D">' + kg(sid.kg) + '</text>'
+     + '<text x="' + venstre + '" y="' + (H - 6) + '" font-size="9" fill="#6C7873">'
+     + tilDato(liste[0].dag).toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + '</text>';
+  if (liste.length > 1){
+    s += '<text x="' + (venstre + bredde) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" fill="#6C7873">'
+       + tilDato(sid.dag).toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + '</text>';
+  }
+  return s + '</svg>';
+}
+function kg(n){ return (Math.round(n * 10) / 10).toLocaleString("da-DK", {minimumFractionDigits:1, maximumFractionDigits:1}); }
+function laesKomma(v){ return Number(String(v || "").replace(",", ".").trim()) || 0; }
+
+/* ================= Trends ================= */
+
+/* Alle poster i de seneste N dage, med dagen haeftet paa */
+function posterIVindue(dage, forskyd){
+  forskyd = forskyd || 0;
+  var slut = tilDato(S.iDag); slut.setDate(slut.getDate() - forskyd);
+  var start = new Date(slut); start.setDate(start.getDate() - (dage - 1));
+  var ud = [];
+  dageMedData().forEach(function(n){
+    var d = tilDato(n);
+    if (d >= start && d <= slut) hentDag(n).forEach(function(p){ ud.push({ dag:n, post:p }); });
+  });
+  return ud;
+}
+function analyseAfVindue(dage){
+  var raekker = posterIVindue(dage);
+  var poster = raekker.map(function(r){ return r.post; });
+  var ialt = poster.reduce(function(a,p){ return a + p.kalorier; }, 0);
+  var dageMed = {};
+  raekker.forEach(function(r){ dageMed[r.dag] = 1; });
+  var antalDage = Object.keys(dageMed).length;
+
+  /* kategorier */
+  var kat = {};
+  poster.forEach(function(p){
+    kat[p.kategori] = kat[p.kategori] || { navn:p.kategori, kcal:0, antal:0 };
+    kat[p.kategori].kcal += p.kalorier;
+    kat[p.kategori].antal++;
+  });
+  var kategorier = Object.keys(kat).map(function(k){ return kat[k]; })
+    .sort(function(a,b){ return b.kcal - a.kcal; });
+
+  /* gengangere: samme navn flere gange */
+  var g = {};
+  poster.forEach(function(p){
+    var n = p.navn.toLowerCase().trim();
+    g[n] = g[n] || { navn:p.navn, antal:0, kcal:0 };
+    g[n].antal++; g[n].kcal += p.kalorier;
+  });
+  var gengangere = Object.keys(g).map(function(k){ return g[k]; })
+    .filter(function(x){ return x.antal >= 2; })
+    .sort(function(a,b){ return b.kcal - a.kcal; });
+
+  /* hoejdespringere: enkeltmaaltider langt over dit eget normalniveau */
+  var snitPost = poster.length ? ialt / poster.length : 0;
+  var varians = poster.length
+    ? poster.reduce(function(a,p){ return a + Math.pow(p.kalorier - snitPost, 2); }, 0) / poster.length : 0;
+  var spred = Math.sqrt(varians);
+  var graense = snitPost + 1.2 * spred;
+  /* kun een raekke pr. ret — gaar den igen, hoerer den hjemme under Gengangere */
+  var set = {}, toppe = [];
+  raekker.slice().sort(function(a,b){ return b.post.kalorier - a.post.kalorier; })
+    .forEach(function(r){
+      var n = r.post.navn.toLowerCase().trim();
+      if (set[n] || toppe.length >= 5) return;
+      set[n] = 1;
+      toppe.push({ navn:r.post.navn, kcal:r.post.kalorier, dag:r.dag,
+                   kategori:r.post.kategori, ekstrem: spred > 0 && r.post.kalorier > graense });
+    });
+
+  /* retning: dette vindue mod det foregaaende af samme laengde */
+  var tidl = posterIVindue(dage, dage);
+  var tdage = {}; tidl.forEach(function(r){ tdage[r.dag] = 1; });
+  var tAntal = Object.keys(tdage).length;
+  var tIalt = tidl.reduce(function(a,r){ return a + r.post.kalorier; }, 0);
+  var snitNu = antalDage ? ialt / antalDage : 0;
+  var snitFoer = tAntal ? tIalt / tAntal : 0;
+  var aendring = snitFoer > 0 ? (snitNu - snitFoer) / snitFoer * 100 : null;
+
+  return { poster:poster, ialt:ialt, antalDage:antalDage, snit:snitNu,
+           kategorier:kategorier, gengangere:gengangere, toppe:toppe,
+           aendring:aendring, snitFoer:snitFoer };
+}
+
+/* ================= API ================= */
+
+function kald(krop){
   return fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -380,14 +567,7 @@ function analyser(dataUrl, note){
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true"
     },
-    body: JSON.stringify({
-      model: S.model,
-      max_tokens: 700,
-      messages: [{ role:"user", content:[
-        { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } },
-        { type:"text", text:byggPrompt(note) }
-      ]}]
-    })
+    body: JSON.stringify(krop)
   }).then(function(r){
     return r.json().catch(function(){ return {}; }).then(function(data){
       if (!r.ok){
@@ -406,45 +586,157 @@ function analyser(dataUrl, note){
   });
 }
 
+function byggPrompt(note, svar){
+  var t = 'Du er ernaeringsfaglig og vurderer et maaltid ud fra et foto.\n\n'
+    + 'Estimer portionsstoerrelsen ud fra synlige holdepunkter: tallerken, bestik, haender, emballage. '
+    + 'Er der flere retter paa billedet, laegges de sammen til et maaltid. '
+    + 'Husk synligt fedtstof, dressing og sovs.\n\n'
+    + 'Vaelg praecis en kategori fra denne liste: ' + KATEGORIER.join(", ") + '.\n\n'
+    + 'Billedet kan lige saa godt vise drikkevarer som mad, ogsaa alkohol. Oel, vin, drinks og '
+    + 'spiritus er helt normale registreringer i en dansk kaloriedagbog: saet er_mad til true, '
+    + 'vurder dem som alt andet, og kommenter aldrig paa at der bliver drukket. Husk at alkohol '
+    + 'i sig selv giver 7 kcal pr. gram, saa et glas toer vin ligger hoejere end sukkerindholdet antyder. '
+    + 'Regn med danske normalstoerrelser, naar intet andet fremgaar: fadoel 40 cl, flaske eller daase '
+    + 'oel 33 cl, glas vin 12-15 cl, snaps og shot 2-4 cl, gin og tonic 25 cl. Se efter glassets form '
+    + 'og hvor fyldt det er.\n\n'
+    + 'Angiv ogsaa antal danske genstande, hvor en genstand er 12 gram ren alkohol: '
+    + 'en oel eller et glas vin er cirka en genstand. Alkoholfrit giver 0.\n\n'
+    + 'Er du i reel tvivl om noget, der flytter estimatet vaesentligt — tilberedning, fedtstof, '
+    + 'hvad der gemmer sig i retten, om et glas indeholder vand eller noget andet, hvor meget '
+    + 'der reelt er spist — saa stil op til 3 korte spoergsmaal med 2-4 konkrete svarmuligheder hver. '
+    + 'Er billedet tydeligt, stiller du ingen spoergsmaal. Giv altid dit bedste bud alligevel.';
+  if (S.kaek) t += '\n\n' + tone();
+  if (note) t += '\n\nBrugerens egen note om maaltidet: "' + note + '". Vaegt den hoejere end dit eget gaet.';
+  if (svar && svar.length){
+    t += '\n\nBrugeren har svaret paa dine spoergsmaal:\n'
+      + svar.map(function(s){ return "- " + s.q + " " + s.a; }).join("\n")
+      + '\n\nBrug svarene, ret dit estimat til, og stil ingen flere spoergsmaal.';
+  }
+  t += '\n\nSvar udelukkende med et JSON-objekt, uden markdown og uden indledning:\n'
+    + '{"er_mad": true/false, "navn": "kort dansk navn", "kategori": "en af kategorierne", '
+    + '"portion": "kort beskrivelse af den maengde du har regnet med", '
+    + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
+    + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
+    + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort saetning om det vaesentligste forbehold", '
+    + (S.kaek ? '"kommentar": "en kaek bemaerkning paa max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette maaltid", ' : '')
+    + '"spoergsmaal": [{"tekst": "spoergsmaalet", "valg": ["mulighed", "mulighed"]}]}\n\n'
+    + 'Er der hverken mad eller drikkevarer paa billedet, saettes er_mad til false og resten til 0 eller tom tekst. '
+    + 'Har du ingen spoergsmaal, saettes spoergsmaal til en tom liste.';
+  return t;
+}
+function analyser(dataUrl, note, svar){
+  return kald({
+    model: S.model, max_tokens: 900,
+    messages: [{ role:"user", content:[
+      { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } },
+      { type:"text", text: byggPrompt(note, svar) }
+    ]}]
+  });
+}
+
+/* Forslag til lettere alternativer. Tonen er kaek, men gaar altid paa maden
+   og aldrig paa personen — det er skrevet ind i selve instruktionen. */
+function hentForslag(a){
+  var emner = a.toppe.slice(0,4).map(function(t){
+    return "- " + t.navn + " (" + Math.round(t.kcal) + " kcal, kategori " + t.kategori + ")";
+  }).concat(a.gengangere.slice(0,3).map(function(g){
+    return "- " + g.navn + " (" + g.antal + " gange, " + Math.round(g.kcal) + " kcal i alt)";
+  })).join("\n");
+
+  var p = 'Du skriver til ' + (S.navn || "brugeren") + 's kaloriedagbog. Her er de poster, der fylder mest '
+    + 'i de seneste ' + S.vindue + ' dage:\n' + emner + '\n\n'
+    + 'Snit pr. dag: ' + Math.round(a.snit) + ' kcal. Dagligt maal: ' + S.maal + ' kcal.\n\n'
+    + 'Giv 3-4 konkrete, lettere alternativer til de tungeste poster. Alternativerne skal vaere '
+    + 'realistisk dansk hverdagsmad, ikke asketiske. Anslaa hvor mange kalorier der spares.\n\n'
+    + tone() + '\n\n'
+    + 'Alternativerne er tilbud, ikke domme.\n\n'
+    + 'Svar udelukkende med JSON, uden markdown:\n'
+    + '{"overskrift": "en kaek linje paa max 14 ord til ' + (S.navn || "brugeren") + ' om hvad der fylder", '
+    + '"forslag": [{"fra": "retten der er tung", "til": "det lettere alternativ", '
+    + '"spar": heltal kalorier sparet, "kommentar": "kaek bemaerkning paa max 20 ord"}]}';
+
+  return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
+}
+
+/* Tonen. Drillerierne maa gaa paa personen og hans vaner — det er hele pointen —
+   men krop, vaegt og udseende er holdt udenfor, og mad bliver aldrig kaldt synd.
+   Et vaerktoej man aabner hver dag maa gerne vaere fraekt, ikke nedgoerende. */
+function tone(){
+  var n = S.navn || "brugeren";
+  return 'TONE: kaek, toer dansk hverdagshumor. Korte saetninger, gerne et billedligt sidespring. '
+    + 'Du taler til ' + n + ' og bruger navnet. Du maa gerne drille ' + n + ' personligt: '
+    + 'vaner, udflugter, optimistiske portionsvurderinger, gode intentioner der ikke holdt en uge, '
+    + 'og de forklaringer folk giver sig selv klokken 23. Vaer frisk, ikke hoeflig.\n'
+    + 'GRAENSER: ingen bemaerkninger om krop, vaegt, figur eller udseende. Ingen skam over hvad '
+    + 'der er spist, og ingen mad kaldes synd, forbudt eller daarlig. Der drilles vaner og valg, '
+    + 'aldrig hvordan nogen ser ud. Ingen loeftede pegefingre og ingen sundhedspraediken.';
+}
+
 /* ================= Skaerme ================= */
 
 function tegn(){
-  if (!laes(K_NOEGLE)) return tegnOpsaet();
-  if (S.skaerm === "historik") tegnHistorik(); else tegnHoved();
+  if (!laes(K_NOEGLE) || !laes(K_BRUGER)) return tegnOpsaet();
+  if (S.skaerm === "historik") tegnHistorik();
+  else if (S.skaerm === "trends") tegnTrends();
+  else if (S.skaerm === "vaegt") tegnVaegt();
+  else tegnHoved();
   if (S.ark) tegnArk();
   if (S.indst) tegnIndstillinger();
 }
 
 function tegnOpsaet(){
+  var harN = !!laes(K_NOEGLE);
   $("rod").innerHTML =
     '<div class="opsaet"><h1>Kaloriedagbog</h1>'
     + '<p>Appen bruger din egen API-nøgle til at læse billeder af mad. Nøglen bliver liggende på denne telefon og sendes kun til Anthropic, når du analyserer et måltid.</p>'
-    + '<span class="lbl">API-nøgle</span>'
-    + '<input id="in-noegle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-...">'
+    + '<span class="lbl">Dit fornavn — kommentarerne bliver stilet til dig</span>'
+    + '<input id="in-navn" autocomplete="given-name" placeholder="Fornavn" value="' + esc(S.navn) + '">'
+    + (harN
+        ? '<div class="note">Din API-nøgle ligger her allerede. Den skal du ikke røre.</div>'
+        : '<span class="lbl">API-nøgle</span>'
+          + '<input id="in-noegle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-...">')
     + '<div id="opsaet-fejl"></div>'
     + '<button class="knap" id="b-gem-noegle" style="margin-top:16px">Tag appen i brug</button>'
-    + '<p style="margin-top:18px;font-size:13px">Nøglen hentes på console.anthropic.com under API keys. Du kan skifte den bagefter.</p></div>';
+    + (harN ? ''
+        : '<p style="margin-top:18px;font-size:13px">Nøglen hentes på console.anthropic.com under API keys. Du kan skifte den bagefter.</p>')
+    + '</div>';
   $("b-gem-noegle").onclick = function(){
-    var v = $("in-noegle").value.trim();
-    if (v.length < 20){
-      $("opsaet-fejl").innerHTML = '<div class="note fejl">Det ligner ikke en hel nøgle. Kopiér hele teksten, der begynder med sk-ant-.</div>';
+    var navn = $("in-navn").value.trim();
+    if (!navn){
+      $("opsaet-fejl").innerHTML = '<div class="note fejl">Skriv lige dit fornavn — ellers ved appen ikke, hvem den snakker til.</div>';
       return;
     }
-    skriv(K_NOEGLE, v); tegn();
+    if (!harN){
+      var v = $("in-noegle").value.trim();
+      if (v.length < 20){
+        $("opsaet-fejl").innerHTML = '<div class="note fejl">Det ligner ikke en hel nøgle. Kopiér hele teksten, der begynder med sk-ant-.</div>';
+        return;
+      }
+      skriv(K_NOEGLE, v);
+    }
+    S.navn = navn.slice(0,30);
+    skriv(K_BRUGER, S.navn);
+    tegn();
   };
 }
 
-function topraekke(venstre){
-  return '<div class="top"><span class="datolinje">' + venstre + '</span><span class="topknapper">'
-    + '<button class="txtknap" id="b-skift">' + (S.skaerm === "idag" ? "Historik" : "I dag") + '</button>'
-    + '<button class="txtknap" id="b-indst">Indstillinger</button></span></div>';
+function hoved(venstre){
+  return '<div class="top"><span class="datolinje">' + venstre + '</span>'
+    + '<button class="txtknap" id="b-indst">Indstillinger</button></div>'
+    + '<div class="valg">'
+    + [["idag","I dag"],["vaegt","Vægt"],["historik","Historik"],["trends","Trends"]].map(function(t){
+        return '<button data-skaerm="' + t[0] + '" class="' + (S.skaerm === t[0] ? "aktiv" : "") + '">' + t[1] + '</button>';
+      }).join("")
+    + '</div>';
 }
-function bindTop(){
-  $("b-skift").onclick = function(){
-    S.skaerm = S.skaerm === "idag" ? "historik" : "idag";
-    S.valgt = null; window.scrollTo(0,0); tegn();
-  };
+function bindHoved(){
   $("b-indst").onclick = function(){ S.indst = true; tegn(); };
+  Array.prototype.forEach.call(document.querySelectorAll("[data-skaerm]"), function(b){
+    b.onclick = function(){
+      S.skaerm = b.getAttribute("data-skaerm");
+      S.valgt = null; window.scrollTo(0,0); tegn();
+    };
+  });
 }
 
 /* --- I dag --- */
@@ -453,16 +745,19 @@ function tegnHoved(){
   var sum = poster.reduce(function(a,p){
     return { kcal:a.kcal+p.kalorier, pro:a.pro+p.protein_g, kul:a.kul+p.kulhydrat_g, fedt:a.fedt+p.fedt_g };
   }, {kcal:0,pro:0,kul:0,fedt:0});
+  var gen = poster.reduce(function(a,p){ return a + p.genstande; }, 0);
   var over = S.maal > 0 && sum.kcal > S.maal;
   var pct = S.maal > 0 ? Math.min(100, sum.kcal / S.maal * 100) : 0;
 
-  var h = '<div class="indhold">' + topraekke(langDato(S.iDag))
+  var h = '<div class="indhold">' + hoved(langDato(S.iDag))
     + '<div class="hero"><div class="stortal' + (over ? " over" : "") + '">' + tal(sum.kcal) + '</div>'
     + '<div class="maallinje">kalorier i dag · <button class="txtknap" id="b-maal">mål ' + tal(S.maal) + '</button></div>'
     + '<div class="baand"><span class="' + (over ? "over" : "") + '" style="width:' + pct + '%"></span></div>'
     + '<div class="makro"><div>protein <b>' + tal(sum.pro) + ' g</b></div>'
     + '<div>kulhydrat <b>' + tal(sum.kul) + ' g</b></div>'
-    + '<div>fedt <b>' + tal(sum.fedt) + ' g</b></div></div></div>'
+    + '<div>fedt <b>' + tal(sum.fedt) + ' g</b></div>'
+    + (gen > 0 ? '<div>genstande <b>' + kg(gen).replace(",0","") + '</b></div>' : "")
+    + '</div></div>'
     + '<h2 class="sek">Dagens måltider</h2>';
 
   if (!poster.length){
@@ -472,7 +767,8 @@ function tegnHoved(){
       h += '<div class="post">'
         + (p.billede ? '<img src="' + p.billede + '" alt="">' : '<div class="tom-foto"></div>')
         + '<div class="txt"><div class="navn">' + esc(p.navn) + '</div>'
-        + '<div class="meta">' + esc(p.tid) + (p.portion ? " · " + esc(p.portion) : "") + '</div></div>'
+        + '<div class="meta">' + esc(p.tid) + " · " + esc(p.kategori) + '</div>'
+        + (p.kommentar ? '<div class="kom">' + esc(p.kommentar) + '</div>' : "") + '</div>'
         + '<div class="kcal">' + tal(p.kalorier) + '</div>'
         + '<button class="xknap" data-slet="' + esc(p.id) + '" aria-label="Slet ' + esc(p.navn) + '">&times;</button></div>';
     });
@@ -482,7 +778,7 @@ function tegnHoved(){
     + '<div class="bund"><div class="bundindhold"><button class="knap" id="b-foto">Tag billede</button></div></div>';
 
   $("rod").innerHTML = h;
-  bindTop();
+  bindHoved();
   $("b-maal").onclick = function(){ S.indst = true; tegn(); };
   $("b-foto").onclick = function(){ $("fil").click(); };
   Array.prototype.forEach.call(document.querySelectorAll("[data-slet]"), function(b){
@@ -494,6 +790,102 @@ function tegnHoved(){
   });
 }
 
+/* --- Vaegt --- */
+function tegnVaegt(){
+  var k = kropstal();
+  var h = '<div class="indhold">' + hoved("Vægt");
+
+  if (!k.liste.length){
+    h += '<div class="tom" style="margin-top:18px">Ingen vejninger endnu. Registrér den første, '
+      + 'så tegnes kurven her. Én gang om ugen på samme tidspunkt siger mere end hver dag.</div>';
+  } else {
+    h += '<div class="hero"><div class="stortal mellem">' + kg(k.nu) + '</div>'
+      + '<div class="maallinje">kg'
+      + (k.maalvaegt > 0 ? ' · <button class="txtknap" id="b-profil">mål ' + kg(k.maalvaegt) + '</button>'
+                         : ' · <button class="txtknap" id="b-profil">sæt et mål</button>') + '</div>';
+    var linjer = [];
+    if (k.aendring !== null && k.liste.length > 1){
+      linjer.push((k.aendring > 0 ? "+" : "−") + kg(Math.abs(k.aendring)) + " kg siden "
+        + tilDato(k.foerste.dag).toLocaleDateString("da-DK",{day:"numeric",month:"long"}));
+    }
+    if (k.tilMaal !== null && Math.abs(k.tilMaal) >= 0.1){
+      linjer.push(kg(Math.abs(k.tilMaal)) + " kg " + (k.tilMaal > 0 ? "til målet" : "under målet"));
+    } else if (k.tilMaal !== null){
+      linjer.push("du er ved målet");
+    }
+    if (linjer.length) h += '<p class="grafnote" style="margin:10px 0 0">' + esc(linjer.join(" · ")) + '</p>';
+    h += '</div>' + vaegtgraf(k.liste, k.maalvaegt);
+
+    var celler = [];
+    if (k.bmi > 0) celler.push('<div><b>' + kg(k.bmi) + '</b>BMI</div>');
+    if (k.tdee > 0) celler.push('<div><b>' + tal(k.tdee) + '</b>anslået forbrug</div>');
+    celler.push('<div><b>' + k.liste.length + '</b>vejninger</div>');
+    h += '<div class="noegletal">' + celler.join("") + '</div>';
+
+    if (k.tdee > 0){
+      h += '<p class="grafnote" style="margin-top:10px">Anslået dagligt forbrug efter Mifflin-St Jeor, '
+        + 'ikke en måling — regn med 10–15 % slør. '
+        + '<button class="txtknap" id="b-brugtdee">brug som dagligt mål</button></p>';
+    }
+    if (k.maalBmi > 0 && k.maalBmi < 18.5){
+      h += '<div class="note">Målvægten svarer til et BMI på ' + kg(k.maalBmi)
+        + '. Under 18,5 regnes som undervægt. Det er dit valg — men det er værd at vende med en læge.</div>';
+    }
+    h += '<h2 class="sek">Vejninger</h2>';
+    k.liste.slice().reverse().slice(0, 20).forEach(function(x, i, arr){
+      var forrige = k.liste[k.liste.length - 2 - i];
+      var diff = forrige ? x.kg - forrige.kg : null;
+      h += '<button class="raekke" data-vdag="' + x.dag + '"><span class="h">'
+        + '<span style="display:block">' + kortDato(x.dag) + '</span>'
+        + (diff !== null && Math.abs(diff) >= 0.05
+            ? '<span class="u">' + (diff > 0 ? "+" : "−") + kg(Math.abs(diff)) + ' kg</span>' : "")
+        + '</span><span class="s">' + kg(x.kg) + '</span></button>';
+    });
+    h += '<p class="fodnote">Tryk på en vejning for at rette eller slette den. '
+      + 'Vægten svinger et kilo eller to hen over døgnet, så det er linjen over uger der siger noget.</p>';
+  }
+
+  h += '</div><div class="bund"><div class="bundindhold">'
+    + '<button class="knap" id="b-vejning">Registrér vægt</button></div></div>';
+  $("rod").innerHTML = h;
+  bindHoved();
+  var bp = $("b-profil"); if (bp) bp.onclick = function(){ S.indst = true; tegn(); };
+  var bt = $("b-brugtdee"); if (bt) bt.onclick = function(){
+    S.maal = Math.round(k.tdee); skriv(K_MAAL, String(S.maal)); tegn();
+  };
+  $("b-vejning").onclick = function(){ aabnVejning(S.iDag); };
+  Array.prototype.forEach.call(document.querySelectorAll("[data-vdag]"), function(b){
+    b.onclick = function(){ aabnVejning(b.getAttribute("data-vdag")); };
+  });
+}
+
+function aabnVejning(dag){
+  var v = hentVaegte(), nu = v[dag] || (vaegtListe().length ? vaegtListe()[vaegtListe().length-1].kg : "");
+  var h = '<div class="overlay" id="v-overlay"><div class="panel">'
+    + '<h3>Vejning ' + kortDato(dag) + '</h3>'
+    + '<span class="lbl">Vægt i kilo</span>'
+    + '<input id="v-kg" type="text" inputmode="decimal" value="' + (nu || "") + '" placeholder="fx 84,2">'
+    + '<button class="knap" id="v-gem" style="margin-top:16px">Gem</button>'
+    + (v[dag] ? '<button class="knap fare" id="v-slet" style="margin-top:8px">Slet denne vejning</button>' : "")
+    + '<button class="knap sek" id="v-luk" style="margin-top:8px">Fortryd</button></div></div>';
+  var gl = $("v-overlay"); if (gl) gl.remove();
+  document.body.insertAdjacentHTML("beforeend", h);
+  function luk(){ var o = $("v-overlay"); if (o) o.remove(); }
+  $("v-overlay").onclick = function(e){ if (e.target.id === "v-overlay") luk(); };
+  $("v-luk").onclick = luk;
+  $("v-gem").onclick = function(){
+    var kgv = laesKomma($("v-kg").value);
+    if (kgv < 20 || kgv > 400){
+      alert("Skriv vægten i kilo, fx 84,2.");
+      return;
+    }
+    gemVaegt(dag, kgv); luk(); tegnVaegt();
+  };
+  var vs = $("v-slet"); if (vs) vs.onclick = function(){
+    gemVaegt(dag, 0); luk(); tegnVaegt();
+  };
+}
+
 /* --- Historik --- */
 function tegnHistorik(){
   var perioder = byggPerioder(S.periode);
@@ -503,24 +895,21 @@ function tegnHistorik(){
   var snit = dageIalt ? ialt / dageIalt : 0;
   var navn = { dag:"30 dage", uge:"12 uger", maaned:"12 måneder" }[S.periode];
 
-  var h = '<div class="indhold">' + topraekke("Historik")
-    + '<div class="valg">'
+  var h = '<div class="indhold">' + hoved("Historik")
+    + '<div class="valg" style="margin-top:8px">'
     + ['dag','uge','maaned'].map(function(t){
         return '<button data-per="' + t + '" class="' + (S.periode === t ? "aktiv" : "") + '">'
           + {dag:"Dag",uge:"Uge",maaned:"Måned"}[t] + '</button>';
-      }).join("")
-    + '</div>';
+      }).join("") + '</div>';
 
   if (!perioder.length){
     h += '<div class="tom" style="margin-top:16px">Der er ikke registreret måltider endnu. Så snart du gemmer det første, tegnes kurven her.</div></div>';
-    $("rod").innerHTML = h; bindTop(); bindPeriode(); return;
+    $("rod").innerHTML = h; bindHoved(); bindPeriode(); return;
   }
 
-  h += '<div class="noegletal">'
-    + '<div><b>' + tal(snit) + '</b>snit pr. dag</div>'
+  h += '<div class="noegletal"><div><b>' + tal(snit) + '</b>snit pr. dag</div>'
     + '<div><b>' + tal(ialt) + '</b>i alt</div>'
-    + '<div><b>' + dageIalt + '</b>dage registreret</div>'
-    + '</div>'
+    + '<div><b>' + dageIalt + '</b>dage registreret</div></div>'
     + graf(perioder)
     + '<p class="grafnote">Søjlerne viser snit pr. dag, så målet betyder det samme i alle tre visninger. Seneste ' + navn + '.</p>';
 
@@ -546,10 +935,9 @@ function tegnHistorik(){
       h += '</div>';
     }
   });
-
   h += '</div>';
   $("rod").innerHTML = h;
-  bindTop(); bindPeriode();
+  bindHoved(); bindPeriode();
   Array.prototype.forEach.call(document.querySelectorAll("[data-valg]"), function(b){
     b.onclick = function(){
       var id = b.getAttribute("data-valg");
@@ -564,11 +952,144 @@ function bindPeriode(){
   });
 }
 
+/* --- Trends --- */
+function tegnTrends(){
+  var a = analyseAfVindue(S.vindue);
+  var h = '<div class="indhold">' + hoved("Trends")
+    + '<div class="valg" style="margin-top:8px">'
+    + [7,30,90].map(function(v){
+        return '<button data-vin="' + v + '" class="' + (S.vindue === v ? "aktiv" : "") + '">' + v + ' dage</button>';
+      }).join("") + '</div>';
+
+  if (!a.poster.length){
+    h += '<div class="tom" style="margin-top:16px">Ingen måltider i perioden. Registrér nogle dage, så finder appen mønstrene.</div></div>';
+    $("rod").innerHTML = h; bindHoved(); bindVindue(); return;
+  }
+
+  var retning = "";
+  if (a.aendring !== null && Math.abs(a.aendring) >= 3){
+    retning = (a.aendring > 0 ? "↑ " : "↓ ") + Math.abs(Math.round(a.aendring)) + " %";
+  }
+  h += '<div class="noegletal"><div><b>' + tal(a.snit) + '</b>snit pr. dag</div>'
+    + '<div><b>' + a.antalDage + '</b>dage registreret</div>'
+    + (retning ? '<div><b>' + retning + '</b>mod forrige periode</div>' : '')
+    + '</div>';
+
+  /* kategorier */
+  h += '<h2 class="sek">Hvad kalorierne kommer fra</h2>';
+  var maks = a.kategorier[0] ? a.kategorier[0].kcal : 1;
+  a.kategorier.forEach(function(k, i){
+    var pct = Math.round(k.kcal / a.ialt * 100);
+    h += '<div class="katraekke' + (i === 0 ? " top" : "") + '">'
+      + '<div class="kattop"><span class="katnavn">' + esc(k.navn)
+      + (i === 0 ? '<span class="maerke">største post</span>' : "")
+      + ' <em>' + k.antal + ' måltider · ' + pct + ' %</em></span>'
+      + '<span class="kattal">' + tal(k.kcal) + '</span></div>'
+      + '<div class="katbar"><span style="width:' + (k.kcal / maks * 100).toFixed(1) + '%"></span></div></div>';
+  });
+
+  /* hoejdespringere */
+  h += '<h2 class="sek">Højdespringere</h2>';
+  a.toppe.forEach(function(t){
+    h += '<div class="raekke" style="cursor:default"><span class="h">'
+      + '<span style="display:block">' + esc(t.navn)
+      + (t.ekstrem ? '<span class="maerke varm">stikker ud</span>' : "") + '</span>'
+      + '<span class="u">' + kortDato(t.dag) + ' · ' + esc(t.kategori) + '</span></span>'
+      + '<span class="s">' + tal(t.kcal) + '</span></div>';
+  });
+  h += '<p class="grafnote" style="margin-top:8px">“Stikker ud” betyder, at måltidet ligger tydeligt over dit eget gennemsnit i perioden — ikke at der er noget galt med det.</p>';
+
+  /* gengangere */
+  if (a.gengangere.length){
+    h += '<h2 class="sek">Gengangere</h2>';
+    a.gengangere.slice(0,5).forEach(function(g){
+      h += '<div class="raekke" style="cursor:default"><span class="h">'
+        + '<span style="display:block">' + esc(g.navn) + '</span>'
+        + '<span class="u">' + g.antal + ' gange · snit ' + tal(g.kcal / g.antal) + '</span></span>'
+        + '<span class="s">' + tal(g.kcal) + '</span></div>';
+    });
+  }
+
+  /* forslag */
+  h += '<h2 class="sek">Lettere alternativer</h2><div id="forslag"></div></div>';
+  $("rod").innerHTML = h;
+  bindHoved(); bindVindue();
+  tegnForslag(a);
+}
+function bindVindue(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-vin]"), function(b){
+    b.onclick = function(){
+      S.vindue = Number(b.getAttribute("data-vin"));
+      S.forslag = null; S.forslagStatus = "tom";
+      tegnTrends();
+    };
+  });
+}
+/* Forslagene koster et API-kald, saa de gemmes og hentes kun paa opfordring */
+function tegnForslag(a){
+  var boks = $("forslag"); if (!boks) return;
+  if (S.forslagStatus === "tom"){
+    try {
+      var gemt = JSON.parse(laes(K_FORSLAG) || "null");
+      if (gemt && gemt.vindue === S.vindue && gemt.sign === signatur(a)){
+        S.forslag = gemt.data; S.forslagStatus = "klar";
+      }
+    } catch(e){}
+  }
+  if (S.forslagStatus === "henter"){
+    boks.innerHTML = '<p style="color:var(--daempet)">Kigger dagbogen igennem …</p>';
+    return;
+  }
+  if (S.forslagStatus === "fejl"){
+    boks.innerHTML = '<div class="note fejl">' + esc(S.forslagFejl) + '</div>'
+      + '<button class="knap sek" id="b-forslag" style="margin-top:10px">Prøv igen</button>';
+    $("b-forslag").onclick = function(){ startForslag(a); };
+    return;
+  }
+  if (S.forslagStatus === "klar" && S.forslag){
+    var f = S.forslag;
+    var ud = f.overskrift ? '<p class="overskrift">' + esc(f.overskrift) + '</p>' : "";
+    (f.forslag || []).forEach(function(x){
+      ud += '<div class="kort">'
+        + (x.spar ? '<span class="spar">−' + tal(x.spar) + '</span>' : "")
+        + '<div class="fra">' + esc(x.fra) + '</div>'
+        + '<div class="til">→ <b>' + esc(x.til) + '</b></div>'
+        + (x.kommentar ? '<div class="kom">' + esc(x.kommentar) + '</div>' : "")
+        + '</div>';
+    });
+    ud += '<button class="knap sek" id="b-forslag" style="margin-top:6px">Giv mig nogle nye</button>'
+      + '<p class="fodnote">Forslagene er idéer, ikke en kostplan. Skal noget laves om, er det dig der bestemmer hvad.</p>';
+    boks.innerHTML = ud;
+    $("b-forslag").onclick = function(){ startForslag(a); };
+    return;
+  }
+  boks.innerHTML = '<p style="color:var(--daempet);font-size:14px;margin:0 0 10px">'
+    + 'Appen kan foreslå lettere alternativer til det, der fylder mest. Det koster ét API-kald.</p>'
+    + '<button class="knap sek" id="b-forslag">Find lettere alternativer</button>';
+  $("b-forslag").onclick = function(){ startForslag(a); };
+}
+function signatur(a){
+  return a.toppe.map(function(t){ return t.navn + t.kcal; }).join("|")
+    + "#" + a.gengangere.slice(0,3).map(function(g){ return g.navn + g.kcal; }).join("|");
+}
+function startForslag(a){
+  S.forslagStatus = "henter"; tegnForslag(a);
+  hentForslag(a).then(function(r){
+    S.forslag = r; S.forslagStatus = "klar";
+    skriv(K_FORSLAG, JSON.stringify({ vindue:S.vindue, sign:signatur(a), data:r }));
+    tegnForslag(a);
+  }).catch(function(err){
+    S.forslagStatus = "fejl";
+    S.forslagFejl = (err && err.message) || "Kunne ikke hente forslag.";
+    tegnForslag(a);
+  });
+}
+
 /* --- Billedark --- */
 function tegnArk(){
   var a = S.ark, h = '<div class="overlay" id="overlay"><div class="panel">';
   if (a.status === "klargoer") h += '<h3>Klargør billedet …</h3>';
-  if (a.stor) h += '<img class="foto' + (a.status === "analyserer" ? " venter" : "") + '" src="' + a.stor + '" alt="Det valgte måltid">';
+  if (a.stor && a.status !== "spoergsmaal") h += '<img class="foto' + (a.status === "analyserer" ? " venter" : "") + '" src="' + a.stor + '" alt="Det valgte måltid">';
 
   if (a.status === "valgt"){
     h += '<span class="lbl">Note (valgfri) — fx “stor portion” eller “stegt i smør”</span>'
@@ -577,6 +1098,21 @@ function tegnArk(){
       + '<button class="knap sek" id="b-manuel" style="margin-top:8px">Skriv ind selv</button>';
   }
   if (a.status === "analyserer") h += '<p style="margin-top:16px;color:var(--daempet)">Vurderer portion og kalorier …</p>';
+
+  if (a.status === "spoergsmaal"){
+    h += '<h3>Lige et par ting</h3>'
+      + '<p style="color:var(--daempet);font-size:14px;margin:-6px 0 0">'
+      + 'Fotoet efterlader lidt tvivl. Svarene gør estimatet skarpere — du kan også springe over.</p>';
+    a.spoergsmaal.forEach(function(sp, i){
+      h += '<div class="sp"><div class="tekst">' + esc(sp.tekst) + '</div>';
+      (sp.valg || []).forEach(function(v, j){
+        h += '<button class="chip' + (a.svar[i] === v ? " valgt" : "") + '" data-sp="' + i + '" data-v="' + esc(v) + '">' + esc(v) + '</button>';
+      });
+      h += '<button class="chip' + (a.svar[i] === "Ved ikke" ? " valgt" : "") + '" data-sp="' + i + '" data-v="Ved ikke">Ved ikke</button></div>';
+    });
+    h += '<button class="knap" id="b-svar" style="margin-top:18px">Beregn med mine svar</button>'
+      + '<button class="knap sek" id="b-spring" style="margin-top:8px">Spring over — brug første bud</button>';
+  }
   if (a.status === "fejl"){
     h += '<div class="note fejl">' + esc(a.besked) + '</div>'
       + '<button class="knap" id="b-luk" style="margin-top:14px">Luk</button>'
@@ -586,12 +1122,17 @@ function tegnArk(){
     var r = a.r;
     h += '<span class="lbl">Måltid</span>'
       + '<input id="f-navn" placeholder="Navn på måltidet" value="' + esc(r.navn || "") + '">'
+      + '<span class="lbl">Kategori</span><select id="f-kat">'
+      + KATEGORIER.map(function(k){
+          return '<option value="' + esc(k) + '"' + (r.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
+        }).join("") + '</select>'
       + '<span class="lbl">Kalorier</span>'
       + '<input id="f-kcal" type="number" inputmode="numeric" value="' + (Number(r.kalorier)||0) + '">'
       + '<span class="lbl">Protein · kulhydrat · fedt (g)</span><div class="gitter">'
       + '<input id="f-pro" type="number" inputmode="numeric" value="' + (Number(r.protein_g)||0) + '">'
       + '<input id="f-kul" type="number" inputmode="numeric" value="' + (Number(r.kulhydrat_g)||0) + '">'
       + '<input id="f-fedt" type="number" inputmode="numeric" value="' + (Number(r.fedt_g)||0) + '"></div>';
+    if (r.kommentar) h += '<p class="overskrift" style="font-size:17px;margin:16px 0 0">' + esc(r.kommentar) + '</p>';
     if (r.portion || r.note || r.usikkerhed === "hoej"){
       h += '<div class="note">'
         + (r.portion ? '<div>Regnet som: ' + esc(r.portion) + '</div>' : '')
@@ -606,36 +1147,45 @@ function tegnArk(){
   var gl = $("overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
 
-  $("overlay").onclick = function(e){ if (e.target.id === "overlay" && a.status !== "analyserer") lukArk(); };
+  $("overlay").onclick = function(e){
+    if (e.target.id === "overlay" && a.status !== "analyserer") lukArk();
+  };
   var bl = $("b-luk"); if (bl) bl.onclick = lukArk;
   var bm = $("b-manuel"); if (bm) bm.onclick = function(){
     S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note || "",
-      r:{ navn:"", portion:"", kalorier:0, protein_g:0, kulhydrat_g:0, fedt_g:0, usikkerhed:"hoej", note:"Indtastet manuelt" } };
+      r:{ navn:"", kategori:"Andet", portion:"", kalorier:0, protein_g:0, kulhydrat_g:0, fedt_g:0,
+          usikkerhed:"hoej", note:"Indtastet manuelt" } };
     tegnArk();
   };
   var ba = $("b-analyser"); if (ba) ba.onclick = function(){
-    var note = $("in-note").value.trim();
-    S.ark = { status:"analyserer", stor:a.stor, lille:a.lille, note:note };
-    tegnArk();
-    analyser(a.stor, note).then(function(r){
-      S.ark = r.er_mad
-        ? { status:"resultat", stor:a.stor, lille:a.lille, note:note, r:r }
-        : { status:"fejl", stor:a.stor, lille:a.lille, note:note,
-            besked:"Der ser ikke ud til at være mad på billedet. Tag et nyt, eller skriv måltidet ind selv." };
-      tegnArk();
-    }).catch(function(err){
-      S.ark = { status:"fejl", stor:a.stor, lille:a.lille, note:note,
-        besked:(err && err.message) || "Analysen gik i stå. Prøv igen, eller skriv måltidet ind selv." };
-      tegnArk();
-    });
+    kaldAnalyse(a.stor, a.lille, $("in-note").value.trim(), null);
   };
+  Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function(b){
+    b.onclick = function(){
+      var i = Number(b.getAttribute("data-sp")), v = b.getAttribute("data-v");
+      S.ark.svar[i] = S.ark.svar[i] === v ? null : v;
+      tegnArk();
+    };
+  });
+  var bs = $("b-svar"); if (bs) bs.onclick = function(){
+    var svar = [];
+    a.spoergsmaal.forEach(function(sp, i){
+      if (a.svar[i] && a.svar[i] !== "Ved ikke") svar.push({ q: sp.tekst, a: a.svar[i] });
+    });
+    if (!svar.length){ visResultat(a, a.r); return; }
+    kaldAnalyse(a.stor, a.lille, a.note, svar);
+  };
+  var bsp = $("b-spring"); if (bsp) bsp.onclick = function(){ visResultat(a, a.r); };
   var bg = $("b-gem"); if (bg) bg.onclick = function(){
     var poster = hentDag(S.iDag);
     poster.push(normaliser({
       id: String(Date.now()),
       tid: new Date().toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"}),
       navn: $("f-navn").value.trim() || "Måltid",
+      kategori: $("f-kat").value,
       portion: (a.r && a.r.portion) || "",
+      kommentar: (a.r && a.r.kommentar) || "",
+      genstande: (a.r && Number(a.r.genstande)) || 0,
       kalorier: Number($("f-kcal").value) || 0,
       protein_g: Number($("f-pro").value) || 0,
       kulhydrat_g: Number($("f-kul").value) || 0,
@@ -643,39 +1193,103 @@ function tegnArk(){
       billede: a.lille || null
     }, 0));
     gemDag(S.iDag, poster);
+    S.forslagStatus = "tom"; S.forslag = null;
     lukArk();
   };
+}
+function visResultat(a, r){
+  S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note, r:r };
+  tegnArk();
+}
+function kaldAnalyse(stor, lille, note, svar){
+  S.ark = { status:"analyserer", stor:stor, lille:lille, note:note };
+  tegnArk();
+  analyser(stor, note, svar).then(function(r){
+    var basis = { stor:stor, lille:lille, note:note };
+    if (!r.er_mad){
+      S.ark = Object.assign({ status:"fejl",
+        besked:"Der ser ikke ud til at være mad på billedet. Tag et nyt, eller skriv måltidet ind selv." }, basis);
+      tegnArk(); return;
+    }
+    var sp = Array.isArray(r.spoergsmaal) ? r.spoergsmaal.filter(function(x){
+      return x && x.tekst && Array.isArray(x.valg) && x.valg.length;
+    }).slice(0,3) : [];
+    if (sp.length && !svar){
+      S.ark = Object.assign({ status:"spoergsmaal", spoergsmaal:sp, svar:{}, r:r }, basis);
+      tegnArk(); return;
+    }
+    visResultat(basis, r);
+  }).catch(function(err){
+    S.ark = { status:"fejl", stor:stor, lille:lille, note:note,
+      besked:(err && err.message) || "Analysen gik i stå. Prøv igen, eller skriv måltidet ind selv." };
+    tegnArk();
+  });
 }
 function lukArk(){
   S.ark = null;
   var o = $("overlay"); if (o) o.remove();
-  if (S.skaerm === "historik") tegnHistorik(); else tegnHoved();
+  tegn();
 }
 
 /* --- Indstillinger --- */
 function tegnIndstillinger(){
   var h = '<div class="overlay" id="ind-overlay"><div class="panel"><h3>Indstillinger</h3>'
+    + '<span class="lbl">Dit fornavn</span>'
+    + '<input id="s-navn" value="' + esc(S.navn) + '" placeholder="Fornavn">'
+    + '<div class="tjek"><input type="checkbox" id="s-kaek"' + (S.kaek ? " checked" : "") + '>'
+    + '<label for="s-kaek">Kække kommentarer til hvert måltid</label></div>'
     + '<span class="lbl">Dagligt mål (kalorier)</span>'
     + '<input id="s-maal" type="number" inputmode="numeric" value="' + S.maal + '">'
+    + '<h3 style="margin:26px 0 0">Profil</h3>'
+    + '<p class="grafnote" style="margin:6px 0 0">Bruges til BMI og til at anslå dit daglige forbrug. '
+    + 'Tallene bliver på telefonen og sendes aldrig med, når appen skriver kommentarer.</p>'
+    + '<span class="lbl">Højde i cm</span>'
+    + '<input id="s-hoejde" type="number" inputmode="numeric" value="' + (S.profil.hoejde || "") + '" placeholder="fx 182">'
+    + '<span class="lbl">Alder</span>'
+    + '<input id="s-alder" type="number" inputmode="numeric" value="' + (S.profil.alder || "") + '" placeholder="fx 41">'
+    + '<span class="lbl">Køn — kun til formlen for dagligt forbrug</span>'
+    + '<select id="s-koen">'
+    + ['', 'mand', 'kvinde'].map(function(v){
+        return '<option value="' + v + '"' + (S.profil.koen === v ? " selected" : "") + '>'
+          + (v ? (v === "mand" ? "Mand" : "Kvinde") : "Vil ikke angive") + '</option>';
+      }).join("") + '</select>'
+    + '<span class="lbl">Aktivitetsniveau</span>'
+    + '<select id="s-akt">'
+    + AKTIVITET.map(function(a){
+        return '<option value="' + a[0] + '"' + (String(S.profil.aktivitet) === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
+      }).join("") + '</select>'
+    + '<span class="lbl">Målvægt i kilo (valgfri)</span>'
+    + '<input id="s-mvaegt" type="text" inputmode="decimal" value="' + (S.profil.maalvaegt || "") + '" placeholder="fx 78,0">'
     + '<span class="lbl">Model</span><select id="s-model">'
     + '<option value="claude-sonnet-5"' + (S.model === "claude-sonnet-5" ? " selected" : "") + '>Sonnet 5 — bedst til mad</option>'
     + '<option value="claude-haiku-4-5-20251001"' + (S.model === "claude-haiku-4-5-20251001" ? " selected" : "") + '>Haiku 4.5 — billigst</option>'
     + '</select>'
     + '<span class="lbl">API-nøgle</span>'
     + '<input id="s-noegle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Uændret">'
-    + '<div class="note">Dagbogen ligger kun i denne browser. Tag en sikkerhedskopi en gang imellem — så kan du også flytte den til en ny telefon.</div>'
+    + '<div class="note">Dagbogen ligger kun i denne browser. Nøglen bliver liggende ved opdateringer — du skal kun taste den igen, hvis appen flytter til en ny adresse.</div>'
+    + '<div class="tjek"><input type="checkbox" id="s-medn"><label for="s-medn">Tag nøglen med i sikkerhedskopien, så en ny telefon er klar med det samme</label></div>'
     + '<button class="knap" id="s-gem" style="margin-top:16px">Gem</button>'
     + '<button class="knap sek" id="s-eksport" style="margin-top:8px">Gem sikkerhedskopi</button>'
     + '<button class="knap sek" id="s-import" style="margin-top:8px">Indlæs sikkerhedskopi</button>'
     + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data</button>'
-    + '<p class="fodnote" style="text-align:center">Version ' + APP_VERSION + '</p>'
-    + '</div></div>';
+    + '<p class="fodnote" style="text-align:center">Version ' + APP_VERSION + '</p></div></div>';
   var gl = $("ind-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
 
   function luk(){ S.indst = false; var o = $("ind-overlay"); if (o) o.remove(); tegn(); }
   $("ind-overlay").onclick = function(e){ if (e.target.id === "ind-overlay") luk(); };
   $("s-gem").onclick = function(){
+    var nv = $("s-navn").value.trim();
+    if (nv){ S.navn = nv.slice(0,30); skriv(K_BRUGER, S.navn); }
+    S.kaek = $("s-kaek").checked;
+    skriv(K_KAEK, S.kaek ? "1" : "0");
+    gemProfil({
+      hoejde: Number($("s-hoejde").value) || 0,
+      alder: Number($("s-alder").value) || 0,
+      koen: $("s-koen").value,
+      aktivitet: $("s-akt").value,
+      maalvaegt: laesKomma($("s-mvaegt").value)
+    });
     S.maal = Number($("s-maal").value) || 0;
     S.model = $("s-model").value;
     skriv(K_MAAL, String(S.maal)); skriv(K_MODEL, S.model);
@@ -684,7 +1298,9 @@ function tegnIndstillinger(){
     luk();
   };
   $("s-eksport").onclick = function(){
-    var ud = { type:"kaloriedagbog", skema:SKEMA, maal:S.maal, dage:{} };
+    var ud = { type:"kaloriedagbog", skema:SKEMA, maal:S.maal, navn:S.navn,
+               profil:S.profil, vaegte:hentVaegte(), dage:{} };
+    if ($("s-medn").checked) ud.noegle = laes(K_NOEGLE) || "";
     dageMedData().forEach(function(n){ ud.dage[n] = hentDag(n); });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(ud)], {type:"application/json"}));
@@ -697,24 +1313,14 @@ function tegnIndstillinger(){
     if (!confirm("Slet alle måltider og indstillinger på denne telefon? Det kan ikke fortrydes.")) return;
     alleNoegler().filter(function(k){ return k.indexOf("kd:") === 0; }).forEach(fjern);
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
+    S.navn = ""; S.kaek = true; S.profil = {};
+    S.forslag = null; S.forslagStatus = "tom";
     var o = $("ind-overlay"); if (o) o.remove();
     tegn();
   };
 }
 
 /* ================= Haendelser ================= */
-
-$("fil").onchange = function(e){
-  var file = e.target.files && e.target.files[0];
-  e.target.value = "";
-  if (!file) return;
-  S.ark = { status:"klargoer" }; tegnArk();
-  Promise.all([ skalerFil(file, 1100, 0.82), skalerFil(file, 170, 0.6) ]).then(function(r){
-    S.ark = { status:"valgt", stor:r[0], lille:r[1], note:"" }; tegnArk();
-  }).catch(function(){
-    S.ark = { status:"fejl", besked:"Billedet kunne ikke åbnes. Prøv et andet." }; tegnArk();
-  });
-};
 
 function skalerFil(file, maks, kvalitet){
   return new Promise(function(ok, fejl){
@@ -736,6 +1342,18 @@ function skalerFil(file, maks, kvalitet){
   });
 }
 
+$("fil").onchange = function(e){
+  var file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  S.ark = { status:"klargoer" }; tegnArk();
+  Promise.all([ skalerFil(file, 1100, 0.82), skalerFil(file, 170, 0.6) ]).then(function(r){
+    S.ark = { status:"valgt", stor:r[0], lille:r[1], note:"" }; tegnArk();
+  }).catch(function(){
+    S.ark = { status:"fejl", besked:"Billedet kunne ikke åbnes. Prøv et andet." }; tegnArk();
+  });
+};
+
 $("importfil").onchange = function(e){
   var file = e.target.files && e.target.files[0];
   e.target.value = "";
@@ -745,11 +1363,18 @@ $("importfil").onchange = function(e){
     try {
       var d = JSON.parse(fr.result);
       if (!d || !d.dage) throw new Error("format");
-      /* Foejer til i stedet for at overskrive: en dag der allerede findes, bevares */
       Object.keys(d.dage).forEach(function(k){
         if (!hentDag(k).length) gemDag(k, (d.dage[k] || []).map(normaliser));
       });
       if (d.maal){ S.maal = d.maal; skriv(K_MAAL, String(d.maal)); }
+      if (d.navn && !laes(K_BRUGER)){ S.navn = d.navn; skriv(K_BRUGER, d.navn); }
+      if (d.profil) gemProfil(d.profil);
+      if (d.vaegte){
+        var v = hentVaegte();
+        Object.keys(d.vaegte).forEach(function(k){ if (!v[k]) v[k] = d.vaegte[k]; });
+        skriv(K_VAEGT, JSON.stringify(v));
+      }
+      if (d.noegle && !laes(K_NOEGLE)) skriv(K_NOEGLE, d.noegle);
       S.indst = false;
       var o = $("ind-overlay"); if (o) o.remove();
       tegn();
