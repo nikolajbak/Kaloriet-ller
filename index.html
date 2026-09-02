@@ -61,7 +61,8 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
 .bund{position:fixed;left:0;right:0;bottom:0;z-index:10;
   padding:14px 18px calc(18px + env(safe-area-inset-bottom));
   background:linear-gradient(to top,var(--papir) 66%,rgba(232,233,227,0));}
-.bundindhold{max-width:520px;margin:0 auto;}
+.bundindhold{max-width:520px;margin:0 auto;display:flex;gap:8px;}
+button.knap.smal{flex:none;width:122px;}
 button.knap{width:100%;border:none;border-radius:12px;padding:15px;font:inherit;
   font-size:16px;font-weight:600;background:var(--gron);color:#F4F6F2;cursor:pointer;}
 button.knap:disabled{opacity:.45;}
@@ -155,7 +156,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "5.0";
+var APP_VERSION = "6.0";
 var SKEMA = 4;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -586,25 +587,37 @@ function kald(krop){
   });
 }
 
-function byggPrompt(note, svar){
-  var t = 'Du er ernaeringsfaglig og vurderer et maaltid ud fra et foto.\n\n'
-    + 'Estimer portionsstoerrelsen ud fra synlige holdepunkter: tallerken, bestik, haender, emballage. '
-    + 'Er der flere retter paa billedet, laegges de sammen til et maaltid. '
-    + 'Husk synligt fedtstof, dressing og sovs.\n\n'
+function byggPrompt(note, svar, beskrivelse){
+  var t = beskrivelse
+    ? 'Du er ernaeringsfaglig og vurderer et maaltid ud fra en kort beskrivelse.\n\n'
+      + 'Brugeren har skrevet: "' + beskrivelse + '"\n\n'
+      + 'Regn med danske normalportioner, naar maengden ikke fremgaar, og med at retten er '
+      + 'lavet paa almindelig vis med det fedtstof den plejer at have. Naevnes flere ting, '
+      + 'laegges de sammen til et maaltid. Er beskrivelsen upraecis paa noget, der flytter '
+      + 'estimatet meget, saa spoerg hellere end at gaette vildt.\n\n'
+    : 'Du er ernaeringsfaglig og vurderer et maaltid ud fra et foto.\n\n'
+      + 'Estimer portionsstoerrelsen ud fra synlige holdepunkter: tallerken, bestik, haender, emballage. '
+      + 'Er der flere retter paa billedet, laegges de sammen til et maaltid. '
+      + 'Husk synligt fedtstof, dressing og sovs.\n\n';
+  t += ''
     + 'Vaelg praecis en kategori fra denne liste: ' + KATEGORIER.join(", ") + '.\n\n'
-    + 'Billedet kan lige saa godt vise drikkevarer som mad, ogsaa alkohol. Oel, vin, drinks og '
+    + (beskrivelse ? 'Det kan lige saa godt vaere drikkevarer som mad, ogsaa alkohol. '
+                   : 'Billedet kan lige saa godt vise drikkevarer som mad, ogsaa alkohol. ')
+    + 'Oel, vin, drinks og '
     + 'spiritus er helt normale registreringer i en dansk kaloriedagbog: saet er_mad til true, '
     + 'vurder dem som alt andet, og kommenter aldrig paa at der bliver drukket. Husk at alkohol '
     + 'i sig selv giver 7 kcal pr. gram, saa et glas toer vin ligger hoejere end sukkerindholdet antyder. '
     + 'Regn med danske normalstoerrelser, naar intet andet fremgaar: fadoel 40 cl, flaske eller daase '
-    + 'oel 33 cl, glas vin 12-15 cl, snaps og shot 2-4 cl, gin og tonic 25 cl. Se efter glassets form '
-    + 'og hvor fyldt det er.\n\n'
+    + 'oel 33 cl, glas vin 12-15 cl, snaps og shot 2-4 cl, gin og tonic 25 cl.'
+    + (beskrivelse ? '\n\n' : ' Se efter glassets form og hvor fyldt det er.\n\n')
     + 'Angiv ogsaa antal danske genstande, hvor en genstand er 12 gram ren alkohol: '
     + 'en oel eller et glas vin er cirka en genstand. Alkoholfrit giver 0.\n\n'
     + 'Er du i reel tvivl om noget, der flytter estimatet vaesentligt — tilberedning, fedtstof, '
     + 'hvad der gemmer sig i retten, om et glas indeholder vand eller noget andet, hvor meget '
     + 'der reelt er spist — saa stil op til 3 korte spoergsmaal med 2-4 konkrete svarmuligheder hver. '
-    + 'Er billedet tydeligt, stiller du ingen spoergsmaal. Giv altid dit bedste bud alligevel.';
+    + (beskrivelse ? 'Er beskrivelsen praecis nok, stiller du ingen spoergsmaal. '
+                   : 'Er billedet tydeligt, stiller du ingen spoergsmaal. ')
+    + 'Giv altid dit bedste bud alligevel.';
   if (S.kaek) t += '\n\n' + tone();
   if (note) t += '\n\nBrugerens egen note om maaltidet: "' + note + '". Vaegt den hoejere end dit eget gaet.';
   if (svar && svar.length){
@@ -620,18 +633,19 @@ function byggPrompt(note, svar){
     + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort saetning om det vaesentligste forbehold", '
     + (S.kaek ? '"kommentar": "en kaek bemaerkning paa max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette maaltid", ' : '')
     + '"spoergsmaal": [{"tekst": "spoergsmaalet", "valg": ["mulighed", "mulighed"]}]}\n\n'
-    + 'Er der hverken mad eller drikkevarer paa billedet, saettes er_mad til false og resten til 0 eller tom tekst. '
+    + (beskrivelse
+        ? 'Handler beskrivelsen hverken om mad eller drikkevarer, saettes er_mad til false. '
+        : 'Er der hverken mad eller drikkevarer paa billedet, saettes er_mad til false og resten til 0 eller tom tekst. ')
     + 'Har du ingen spoergsmaal, saettes spoergsmaal til en tom liste.';
   return t;
 }
-function analyser(dataUrl, note, svar){
-  return kald({
-    model: S.model, max_tokens: 900,
-    messages: [{ role:"user", content:[
-      { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } },
-      { type:"text", text: byggPrompt(note, svar) }
-    ]}]
-  });
+function analyser(dataUrl, note, svar, beskrivelse){
+  var indhold = [];
+  if (dataUrl){
+    indhold.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } });
+  }
+  indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse) });
+  return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:indhold }] });
 }
 
 /* Forslag til lettere alternativer. Tonen er kaek, men gaar altid paa maden
@@ -775,12 +789,15 @@ function tegnHoved(){
   }
   h += '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
     + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div>'
-    + '<div class="bund"><div class="bundindhold"><button class="knap" id="b-foto">Tag billede</button></div></div>';
+    + '<div class="bund"><div class="bundindhold">'
+    + '<button class="knap" id="b-foto">Tag billede</button>'
+    + '<button class="knap sek smal" id="b-skriv">Skriv det</button></div></div>';
 
   $("rod").innerHTML = h;
   bindHoved();
   $("b-maal").onclick = function(){ S.indst = true; tegn(); };
   $("b-foto").onclick = function(){ $("fil").click(); };
+  $("b-skriv").onclick = function(){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); };
   Array.prototype.forEach.call(document.querySelectorAll("[data-slet]"), function(b){
     b.onclick = function(){
       var id = b.getAttribute("data-slet");
@@ -1097,6 +1114,15 @@ function tegnArk(){
       + '<button class="knap" id="b-analyser" style="margin-top:14px">Analysér måltidet</button>'
       + '<button class="knap sek" id="b-manuel" style="margin-top:8px">Skriv ind selv</button>';
   }
+  if (a.status === "skriv"){
+    h += '<h3>Skriv hvad du har spist eller drukket</h3>'
+      + '<textarea id="s-tekst" rows="2" placeholder="fx to fadøl og en hotdog med det hele">' + esc(a.tekst || "") + '</textarea>'
+      + '<p class="grafnote" style="margin:8px 0 0">Appen regner på beskrivelsen ligesom på et billede — '
+      + 'og spørger, hvis noget er uklart. Skriv mængden med, hvis du kender den.</p>'
+      + '<button class="knap" id="b-beregn" style="margin-top:14px">Beregn kalorier</button>'
+      + '<button class="knap sek" id="b-manuel" style="margin-top:8px">Indtast tallene selv</button>'
+      + '<button class="knap sek" id="b-luk" style="margin-top:8px">Fortryd</button>';
+  }
   if (a.status === "analyserer") h += '<p style="margin-top:16px;color:var(--daempet)">Vurderer portion og kalorier …</p>';
 
   if (a.status === "spoergsmaal"){
@@ -1116,7 +1142,7 @@ function tegnArk(){
   if (a.status === "fejl"){
     h += '<div class="note fejl">' + esc(a.besked) + '</div>'
       + '<button class="knap" id="b-luk" style="margin-top:14px">Luk</button>'
-      + (a.stor ? '<button class="knap sek" id="b-manuel" style="margin-top:8px">Skriv ind selv</button>' : '');
+      + '<button class="knap sek" id="b-manuel" style="margin-top:8px">Indtast tallene selv</button>';
   }
   if (a.status === "resultat"){
     var r = a.r;
@@ -1152,13 +1178,21 @@ function tegnArk(){
   };
   var bl = $("b-luk"); if (bl) bl.onclick = lukArk;
   var bm = $("b-manuel"); if (bm) bm.onclick = function(){
+    var st = $("s-tekst");
     S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note || "",
-      r:{ navn:"", kategori:"Andet", portion:"", kalorier:0, protein_g:0, kulhydrat_g:0, fedt_g:0,
+      beskrivelse: st ? st.value.trim() : a.beskrivelse,
+      r:{ navn: st ? st.value.trim().slice(0,60) : "", kategori:"Andet", portion:"",
+          kalorier:0, protein_g:0, kulhydrat_g:0, fedt_g:0, genstande:0,
           usikkerhed:"hoej", note:"Indtastet manuelt" } };
     tegnArk();
   };
+  var bb = $("b-beregn"); if (bb) bb.onclick = function(){
+    var t = $("s-tekst").value.trim();
+    if (t.length < 2){ $("s-tekst").focus(); return; }
+    kaldAnalyse(null, null, "", null, t);
+  };
   var ba = $("b-analyser"); if (ba) ba.onclick = function(){
-    kaldAnalyse(a.stor, a.lille, $("in-note").value.trim(), null);
+    kaldAnalyse(a.stor, a.lille, $("in-note").value.trim(), null, null);
   };
   Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function(b){
     b.onclick = function(){
@@ -1173,7 +1207,7 @@ function tegnArk(){
       if (a.svar[i] && a.svar[i] !== "Ved ikke") svar.push({ q: sp.tekst, a: a.svar[i] });
     });
     if (!svar.length){ visResultat(a, a.r); return; }
-    kaldAnalyse(a.stor, a.lille, a.note, svar);
+    kaldAnalyse(a.stor, a.lille, a.note, svar, a.beskrivelse);
   };
   var bsp = $("b-spring"); if (bsp) bsp.onclick = function(){ visResultat(a, a.r); };
   var bg = $("b-gem"); if (bg) bg.onclick = function(){
@@ -1198,17 +1232,19 @@ function tegnArk(){
   };
 }
 function visResultat(a, r){
-  S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note, r:r };
+  S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note,
+            beskrivelse:a.beskrivelse, r:r };
   tegnArk();
 }
-function kaldAnalyse(stor, lille, note, svar){
-  S.ark = { status:"analyserer", stor:stor, lille:lille, note:note };
+function kaldAnalyse(stor, lille, note, svar, beskrivelse){
+  S.ark = { status:"analyserer", stor:stor, lille:lille, note:note, beskrivelse:beskrivelse };
   tegnArk();
-  analyser(stor, note, svar).then(function(r){
-    var basis = { stor:stor, lille:lille, note:note };
+  analyser(stor, note, svar, beskrivelse).then(function(r){
+    var basis = { stor:stor, lille:lille, note:note, beskrivelse:beskrivelse };
     if (!r.er_mad){
-      S.ark = Object.assign({ status:"fejl",
-        besked:"Der ser ikke ud til at være mad på billedet. Tag et nyt, eller skriv måltidet ind selv." }, basis);
+      S.ark = Object.assign({ status:"fejl", besked: beskrivelse
+        ? "Det lyder ikke som mad eller drikke. Prøv en anden formulering, eller indtast tallene selv."
+        : "Der ser ikke ud til at være mad på billedet. Tag et nyt, eller indtast tallene selv." }, basis);
       tegnArk(); return;
     }
     var sp = Array.isArray(r.spoergsmaal) ? r.spoergsmaal.filter(function(x){
@@ -1220,8 +1256,8 @@ function kaldAnalyse(stor, lille, note, svar){
     }
     visResultat(basis, r);
   }).catch(function(err){
-    S.ark = { status:"fejl", stor:stor, lille:lille, note:note,
-      besked:(err && err.message) || "Analysen gik i stå. Prøv igen, eller skriv måltidet ind selv." };
+    S.ark = { status:"fejl", stor:stor, lille:lille, note:note, beskrivelse:beskrivelse,
+      besked:(err && err.message) || "Analysen gik i stå. Prøv igen, eller indtast tallene selv." };
     tegnArk();
   });
 }
