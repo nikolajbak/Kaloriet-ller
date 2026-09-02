@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -161,7 +162,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "7.0";
+var APP_VERSION = "9.0";
 var SKEMA = 4;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -173,7 +174,9 @@ var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris 
 var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_MODEL = "kd:model", K_SKEMA = "kd:skema", K_FORSLAG = "kd:forslag",
     K_BRUGER = "kd:navn", K_KAEK = "kd:kaek",
-    K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek";
+    K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek",
+    K_LAAS = "kd:laas", K_LAASTID = "kd:laastid", K_FEJL = "kd:fejl",
+    K_FORBRUG = "kd:forbrug";
 var reserve = {};
 
 function laes(k){
@@ -250,6 +253,73 @@ function migrer(){
     });
   }
   if (fra !== SKEMA) skriv(K_SKEMA, String(SKEMA));
+}
+
+/* ================= Kodelaas =================
+   Koden er ikke et gardin foran skaermen: API-noeglen bliver krypteret med den
+   (PBKDF2 + AES-GCM), og uden koden ligger den ikke laesbart nogen steder paa
+   telefonen. Selve dagbogen staar derimod ukrypteret — se noten i indstillinger. */
+
+var ITERATIONER = 310000;
+var aktivNoegle = null;   /* kun i hukommelsen, forsvinder ved genindlaesning */
+var aktivKode = null;
+
+function b64(buf){
+  var u = new Uint8Array(buf), s = "";
+  for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+  return btoa(s);
+}
+function fraB64(t){ return Uint8Array.from(atob(t), function(c){ return c.charCodeAt(0); }); }
+
+function afledNoegle(kode, salt){
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(kode), "PBKDF2", false, ["deriveKey"])
+    .then(function(basis){
+      return crypto.subtle.deriveKey(
+        { name:"PBKDF2", salt:salt, iterations:ITERATIONER, hash:"SHA-256" },
+        basis, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]);
+    });
+}
+function krypter(kode, klartekst){
+  var salt = crypto.getRandomValues(new Uint8Array(16));
+  var iv = crypto.getRandomValues(new Uint8Array(12));
+  return afledNoegle(kode, salt).then(function(n){
+    return crypto.subtle.encrypt({ name:"AES-GCM", iv:iv }, n, new TextEncoder().encode(klartekst));
+  }).then(function(ct){
+    return { salt:b64(salt), iv:b64(iv), ct:b64(ct), iter:ITERATIONER };
+  });
+}
+function dekrypter(kode, pakke){
+  return afledNoegle(kode, fraB64(pakke.salt)).then(function(n){
+    return crypto.subtle.decrypt({ name:"AES-GCM", iv:fraB64(pakke.iv) }, n, fraB64(pakke.ct));
+  }).then(function(buf){ return new TextDecoder().decode(buf); });
+}
+function laasPakke(){
+  try { return JSON.parse(laes(K_LAAS) || "null"); } catch(e){ return null; }
+}
+function harLaas(){ return !!laasPakke(); }
+
+/* Ventetid efter gentagne fejlforsoeg — bremser den, der proever sig frem */
+function fejlstand(){
+  try { return JSON.parse(laes(K_FEJL) || '{"antal":0,"indtil":0}'); }
+  catch(e){ return { antal:0, indtil:0 }; }
+}
+function noterFejl(){
+  var f = fejlstand();
+  f.antal++;
+  if (f.antal >= 5) f.indtil = Date.now() + Math.min(15 * 60000, Math.pow(2, f.antal - 5) * 30000);
+  skriv(K_FEJL, JSON.stringify(f));
+  return f;
+}
+function nulstilFejl(){ fjern(K_FEJL); }
+function spaerretI(){
+  var f = fejlstand();
+  return Math.max(0, Math.ceil((f.indtil - Date.now()) / 1000));
+}
+function laasNu(){
+  aktivNoegle = null; aktivKode = null;
+  S.ark = null; S.indst = false;
+  ["overlay","ind-overlay","v-overlay"].forEach(function(i){ var o = $(i); if (o) o.remove(); });
+  tegn();
 }
 
 /* ================= Datoer ================= */
@@ -564,12 +634,26 @@ function analyseAfVindue(dage){
 
 /* ================= API ================= */
 
+/* Taeller kald pr. maaned, saa et uventet spring kan ses uden at logge ind i konsollen */
+function tael(){
+  var m = S.iDag.slice(0, 7), f;
+  try { f = JSON.parse(laes(K_FORBRUG) || "{}"); } catch(e){ f = {}; }
+  f[m] = (f[m] || 0) + 1;
+  Object.keys(f).sort().slice(0, -6).forEach(function(k){ delete f[k]; });
+  skriv(K_FORBRUG, JSON.stringify(f));
+}
+function forbrugDenneMaaned(){
+  try { return (JSON.parse(laes(K_FORBRUG) || "{}"))[S.iDag.slice(0, 7)] || 0; }
+  catch(e){ return 0; }
+}
+
 function kald(krop){
+  tael();
   return fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-api-key": laes(K_NOEGLE) || "",
+      "x-api-key": aktivNoegle || laes(K_NOEGLE) || "",
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true"
     },
@@ -694,13 +778,56 @@ function tone(){
 /* ================= Skaerme ================= */
 
 function tegn(){
-  if (!laes(K_NOEGLE) || !laes(K_BRUGER)) return tegnOpsaet();
+  if (harLaas() && !aktivNoegle) return tegnLaas();
+  if (!aktivNoegle && !laes(K_NOEGLE)) return tegnOpsaet();
+  if (!laes(K_BRUGER)) return tegnOpsaet();
   if (S.skaerm === "historik") tegnHistorik();
   else if (S.skaerm === "trends") tegnTrends();
   else if (S.skaerm === "vaegt") tegnVaegt();
   else tegnHoved();
   if (S.ark) tegnArk();
   if (S.indst) tegnIndstillinger();
+}
+
+function tegnLaas(){
+  var spaerret = spaerretI();
+  $("rod").innerHTML =
+    '<div class="opsaet"><h1>Kaloriedagbog</h1>'
+    + '<p>Skriv din kode for at låse op.</p>'
+    + '<input id="l-kode" type="password" inputmode="numeric" autocomplete="off" placeholder="Kode">'
+    + '<div id="l-fejl">' + (spaerret
+        ? '<div class="note fejl">For mange forsøg. Prøv igen om ' + spaerret + ' sekunder.</div>' : '') + '</div>'
+    + '<button class="knap" id="l-op" style="margin-top:16px"' + (spaerret ? " disabled" : "") + '>Lås op</button>'
+    + '<button class="knap sek" id="l-glemt" style="margin-top:8px">Jeg har glemt koden</button></div>';
+
+  $("l-op").onclick = function(){
+    if (spaerretI()){ tegnLaas(); return; }
+    var kode = $("l-kode").value;
+    var b = $("l-op");
+    b.textContent = "Låser op …"; b.disabled = true;
+    dekrypter(kode, laasPakke()).then(function(noegle){
+      nulstilFejl();
+      aktivNoegle = noegle; aktivKode = kode;
+      tegn();
+    }).catch(function(){
+      var f = noterFejl();
+      var rest = 5 - f.antal;
+      $("l-fejl").innerHTML = '<div class="note fejl">Forkert kode.'
+        + (rest > 0 && rest <= 2 ? ' Efter ' + rest + ' forsøg mere sættes der ventetid på.' : '') + '</div>';
+      var k = $("l-op");
+      if (k){ k.textContent = "Lås op"; k.disabled = false; }
+      if (spaerretI()) tegnLaas();
+    });
+  };
+  $("l-glemt").onclick = function(){
+    if (!confirm("Uden koden kan API-nøglen ikke hentes frem igen — den er krypteret med koden. "
+      + "Fjerner du låsen, skal du indsætte en ny nøgle fra console.anthropic.com. "
+      + "Måltider, vægt og profil bliver stående. Vil du det?")) return;
+    fjern(K_LAAS); fjern(K_NOEGLE); nulstilFejl();
+    aktivNoegle = null; aktivKode = null;
+    tegn();
+  };
+  var f = $("l-kode"); if (f && !spaerret) setTimeout(function(){ f.focus(); }, 120);
 }
 
 function tegnOpsaet(){
@@ -732,6 +859,7 @@ function tegnOpsaet(){
         return;
       }
       skriv(K_NOEGLE, v);
+      aktivNoegle = v;
     }
     S.navn = navn.slice(0,30);
     skriv(K_BRUGER, S.navn);
@@ -1313,8 +1441,21 @@ function tegnIndstillinger(){
     + '<button class="knap sek" id="s-eksport" style="margin-top:8px">Gem sikkerhedskopi</button>'
     + '<button class="knap sek" id="s-import" style="margin-top:8px">Indlæs sikkerhedskopi</button>'
     + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data</button>'
+    + '<h3 style="margin:26px 0 0">Sikkerhed</h3>'
+    + '<p class="grafnote" style="margin:6px 0 0">Koden krypterer din API-nøgle. Uden den ligger '
+    + 'nøglen ikke læsbart på telefonen, og ingen kan bruge din konto. Måltider og vægt gemmes '
+    + 'derimod ukrypteret — koden holder nysgerrige ude, ikke en teknisk kyndig med din ulåste telefon.</p>'
+    + (harLaas()
+        ? '<span class="lbl">Lås automatisk efter</span><select id="s-laastid">'
+          + [["0","Med det samme"],["1","1 minut"],["5","5 minutter"],["15","15 minutter"]].map(function(a){
+              return '<option value="' + a[0] + '"' + (String(laasTid()) === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
+            }).join("") + '</select>'
+          + '<button class="knap sek" id="s-laasnu" style="margin-top:12px">Lås appen nu</button>'
+          + '<button class="knap fare" id="s-laasfra" style="margin-top:8px">Slå kodelås fra</button>'
+        : '<button class="knap sek" id="s-laastil" style="margin-top:12px">Slå kodelås til</button>')
     + '<button class="knap sek" id="s-opdater" style="margin-top:8px">Søg efter opdatering</button>'
-    + '<p class="fodnote" style="text-align:center">Version ' + APP_VERSION + '</p></div></div>';
+    + '<p class="fodnote" style="text-align:center">Version ' + APP_VERSION
+    + ' · ' + forbrugDenneMaaned() + ' analyser denne måned</p></div></div>';
   var gl = $("ind-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
 
@@ -1336,13 +1477,23 @@ function tegnIndstillinger(){
     S.model = $("s-model").value;
     skriv(K_MAAL, String(S.maal)); skriv(K_MODEL, S.model);
     var n = $("s-noegle").value.trim();
-    if (n) skriv(K_NOEGLE, n);
+    if (n){
+      aktivNoegle = n;
+      if (harLaas() && aktivKode){
+        krypter(aktivKode, n).then(function(pk){ skriv(K_LAAS, JSON.stringify(pk)); });
+      } else {
+        skriv(K_NOEGLE, n);
+      }
+    }
     luk();
   };
   $("s-eksport").onclick = function(){
     var ud = { type:"kaloriedagbog", skema:SKEMA, maal:S.maal, navn:S.navn,
                profil:S.profil, vaegte:hentVaegte(), dage:{} };
-    if ($("s-medn").checked) ud.noegle = laes(K_NOEGLE) || "";
+    if ($("s-medn").checked){
+      if (harLaas()) ud.laas = laasPakke();      /* stadig beskyttet af koden */
+      else ud.noegle = aktivNoegle || laes(K_NOEGLE) || "";
+    }
     dageMedData().forEach(function(n){ ud.dage[n] = hentDag(n); });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(ud)], {type:"application/json"}));
@@ -1351,6 +1502,19 @@ function tegnIndstillinger(){
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
   };
   $("s-import").onclick = function(){ $("importfil").click(); };
+  var lt = $("s-laastil"); if (lt) lt.onclick = function(){ opsaetKode(); };
+  var lf = $("s-laasfra"); if (lf) lf.onclick = function(){
+    if (!confirm("Slå kodelåsen fra? API-nøglen bliver derefter liggende ukrypteret på telefonen.")) return;
+    if (!aktivNoegle){ alert("Lås op først."); return; }
+    skriv(K_NOEGLE, aktivNoegle);
+    fjern(K_LAAS); fjern(K_LAASTID); nulstilFejl();
+    aktivKode = null;
+    S.indst = false;
+    var o = $("ind-overlay"); if (o) o.remove();
+    tegn();
+  };
+  var ln = $("s-laasnu"); if (ln) ln.onclick = function(){ laasNu(); };
+  var ltid = $("s-laastid"); if (ltid) ltid.onchange = function(){ skriv(K_LAASTID, ltid.value); };
   $("s-opdater").onclick = function(){
     var b = $("s-opdater");
     b.textContent = "Søger …"; b.disabled = true;
@@ -1367,6 +1531,7 @@ function tegnIndstillinger(){
     if (!confirm("Slet alle måltider og indstillinger på denne telefon? Det kan ikke fortrydes.")) return;
     alleNoegler().filter(function(k){ return k.indexOf("kd:") === 0; }).forEach(fjern);
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
+    aktivNoegle = null; aktivKode = null;
     S.navn = ""; S.kaek = true; S.profil = {};
     S.forslag = null; S.forslagStatus = "tom";
     var o = $("ind-overlay"); if (o) o.remove();
@@ -1424,6 +1589,57 @@ function tjekOpdatering(tvunget){
     .catch(function(){ return null; });
 }
 
+/* --- Opret eller skift kode --- */
+function opsaetKode(){
+  var h = '<div class="overlay" id="k-overlay"><div class="panel">'
+    + '<h3>Vælg en kode</h3>'
+    + '<p class="grafnote" style="margin:-6px 0 0">4 til 8 cifre. Seks er mærkbart sværere at '
+    + 'gætte end fire. Koden kan ikke gendannes, hvis du glemmer den — så skal der en ny '
+    + 'API-nøgle til.</p>'
+    + '<span class="lbl">Kode</span>'
+    + '<input id="k-1" type="password" inputmode="numeric" autocomplete="off" placeholder="4–8 cifre">'
+    + '<span class="lbl">Gentag koden</span>'
+    + '<input id="k-2" type="password" inputmode="numeric" autocomplete="off" placeholder="Samme igen">'
+    + '<div id="k-fejl"></div>'
+    + '<button class="knap" id="k-gem" style="margin-top:16px">Slå kodelås til</button>'
+    + '<button class="knap sek" id="k-luk" style="margin-top:8px">Fortryd</button></div></div>';
+  var gl = $("k-overlay"); if (gl) gl.remove();
+  document.body.insertAdjacentHTML("beforeend", h);
+  function luk(){ var o = $("k-overlay"); if (o) o.remove(); }
+  $("k-luk").onclick = luk;
+  $("k-overlay").onclick = function(e){ if (e.target.id === "k-overlay") luk(); };
+  $("k-gem").onclick = function(){
+    var a = $("k-1").value, b = $("k-2").value;
+    if (!/^[0-9]{4,8}$/.test(a)){
+      $("k-fejl").innerHTML = '<div class="note fejl">Koden skal være 4 til 8 cifre.</div>'; return;
+    }
+    if (a !== b){
+      $("k-fejl").innerHTML = '<div class="note fejl">De to koder er ikke ens.</div>'; return;
+    }
+    var noegle = aktivNoegle || laes(K_NOEGLE);
+    if (!noegle){ $("k-fejl").innerHTML = '<div class="note fejl">Der er ingen API-nøgle at beskytte.</div>'; return; }
+    var kn = $("k-gem"); kn.textContent = "Krypterer …"; kn.disabled = true;
+    krypter(a, noegle).then(function(pk){
+      skriv(K_LAAS, JSON.stringify(pk));
+      fjern(K_NOEGLE);                 /* den ukrypterede kopi fjernes */
+      aktivNoegle = noegle; aktivKode = a;
+      nulstilFejl();
+      luk();
+      S.indst = false;
+      var o = $("ind-overlay"); if (o) o.remove();
+      tegn();
+      alert("Kodelåsen er slået til. Nøglen ligger nu krypteret.");
+    }).catch(function(){
+      $("k-fejl").innerHTML = '<div class="note fejl">Krypteringen mislykkedes. Prøv igen.</div>';
+      var k = $("k-gem"); if (k){ k.textContent = "Slå kodelås til"; k.disabled = false; }
+    });
+  };
+}
+function laasTid(){
+  var v = laes(K_LAASTID);
+  return v === null ? 5 : Number(v);
+}
+
 /* ================= Haendelser ================= */
 
 function skalerFil(file, maks, kvalitet){
@@ -1478,7 +1694,8 @@ $("importfil").onchange = function(e){
         Object.keys(d.vaegte).forEach(function(k){ if (!v[k]) v[k] = d.vaegte[k]; });
         skriv(K_VAEGT, JSON.stringify(v));
       }
-      if (d.noegle && !laes(K_NOEGLE)) skriv(K_NOEGLE, d.noegle);
+      if (d.noegle && !laes(K_NOEGLE) && !harLaas()) skriv(K_NOEGLE, d.noegle);
+      if (d.laas && !harLaas() && !laes(K_NOEGLE)) skriv(K_LAAS, JSON.stringify(d.laas));
       S.indst = false;
       var o = $("ind-overlay"); if (o) o.remove();
       tegn();
@@ -1488,12 +1705,16 @@ $("importfil").onchange = function(e){
   fr.readAsText(file);
 };
 
+var skjultSiden = 0;
 document.addEventListener("visibilitychange", function(){
-  if (document.visibilityState === "visible"){
-    var d = dagKey(new Date());
-    if (d !== S.iDag){ S.iDag = d; S.valgt = null; tegn(); }
-    tjekOpdatering(false);
+  if (document.visibilityState === "hidden"){ skjultSiden = Date.now(); return; }
+  if (harLaas() && aktivNoegle && skjultSiden){
+    var minutter = (Date.now() - skjultSiden) / 60000;
+    if (minutter >= laasTid()){ laasNu(); return; }
   }
+  var d = dagKey(new Date());
+  if (d !== S.iDag){ S.iDag = d; S.valgt = null; tegn(); }
+  tjekOpdatering(false);
 });
 
 try {
@@ -1506,6 +1727,7 @@ try {
 } catch(e){}
 
 migrer();
+if (!harLaas()) aktivNoegle = laes(K_NOEGLE);
 tegn();
 tjekOpdatering(false);
 </script>
