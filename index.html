@@ -207,8 +207,8 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "18.0";
-var SKEMA = 4;
+var APP_VERSION = "19.0";
+var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
   "Mejeri & æg","Snacks & slik","Kage & bagværk","Fastfood & takeaway",
@@ -249,20 +249,74 @@ function dagNoegler(){
 }
 function normaliser(p, i){
   p = p && typeof p === "object" ? p : {};
+  var ant = Number(p.portioner);
+  if (!(ant > 0)) ant = 1;
+  var tal = {
+    kalorier: Number(p.kalorier) || 0,
+    protein_g: Number(p.protein_g) || 0,
+    kulhydrat_g: Number(p.kulhydrat_g) || 0,
+    fedt_g: Number(p.fedt_g) || 0,
+    genstande: Number(p.genstande) || 0
+  };
+  /* pr_portion er grundlaget, saa antallet kan aendres igen senere uden at tallene
+     skrider. Mangler det — en post fra en aeldre version — udledes det af totalen. */
+  var pr = (p.pr_portion && typeof p.pr_portion === "object") ? p.pr_portion : null;
+  if (!pr){
+    pr = {};
+    Object.keys(tal).forEach(function(k){ pr[k] = tal[k] / ant; });
+  }
   return {
     id: String(p.id != null ? p.id : "gl" + i),
     tid: typeof p.tid === "string" ? p.tid : "",
     navn: typeof p.navn === "string" && p.navn ? p.navn : "Måltid",
     portion: typeof p.portion === "string" ? p.portion : "",
     kommentar: typeof p.kommentar === "string" ? p.kommentar : "",
-    genstande: Number(p.genstande) || 0,
     kategori: KATEGORIER.indexOf(p.kategori) >= 0 ? p.kategori : "Andet",
-    kalorier: Number(p.kalorier) || 0,
-    protein_g: Number(p.protein_g) || 0,
-    kulhydrat_g: Number(p.kulhydrat_g) || 0,
-    fedt_g: Number(p.fedt_g) || 0,
+    portioner: ant,
+    pr_portion: {
+      kalorier: Number(pr.kalorier) || 0,
+      protein_g: Number(pr.protein_g) || 0,
+      kulhydrat_g: Number(pr.kulhydrat_g) || 0,
+      fedt_g: Number(pr.fedt_g) || 0,
+      genstande: Number(pr.genstande) || 0
+    },
+    genstande: tal.genstande,
+    kalorier: tal.kalorier,
+    protein_g: tal.protein_g,
+    kulhydrat_g: tal.kulhydrat_g,
+    fedt_g: tal.fedt_g,
     billede: typeof p.billede === "string" ? p.billede : null
   };
+}
+
+/* Faelles opfoersel for portionsfeltet i begge ark: aendres antallet, skaleres de
+   tal der staar i felterne — ogsaa dem brugeren selv har rettet. */
+function bindPortioner(idAntal, felter, efter){
+  var el = $(idAntal);
+  if (!el) return;
+  var forrige = laesKomma(el.value) || 1;
+  el.onchange = function(){
+    var ny = laesKomma(el.value);
+    if (!(ny > 0)){ el.value = forrige; return; }
+    var f = ny / forrige;
+    felter.forEach(function(id){
+      var i = $(id);
+      if (!i) return;
+      var v = laesKomma(i.value) * f;
+      i.value = id.slice(-4) === "-gen" ? Math.round(v * 10) / 10 : Math.round(v);
+    });
+    forrige = ny;
+    if (efter) efter();
+  };
+}
+function prPortion(totaler, antal){
+  var ud = {};
+  Object.keys(totaler).forEach(function(k){ ud[k] = (Number(totaler[k]) || 0) / (antal || 1); });
+  return ud;
+}
+function portionsTekst(p){
+  if (!p.portioner || p.portioner === 1) return "";
+  return kg(p.portioner).replace(",0", "") + " portioner";
 }
 function hentDag(noegle){
   var r;
@@ -429,7 +483,7 @@ function dageSidenEksport(){
 function migrer(){
   var fra = Number(laes(K_SKEMA)) || 1;
   if (fra !== SKEMA) tagSnap("før opdatering af dataformat", true);
-  if (fra < 4){
+  if (fra < 5){
     dagNoegler().forEach(function(k){
       var n = k.slice(P_DAG.length);
       gemDag(n, hentDag(n));     /* faar bl.a. kategori paa gamle poster */
@@ -1345,7 +1399,8 @@ function tegnHoved(){
       h += '<div class="post">'
         + (p.billede ? '<img src="' + p.billede + '" alt="">' : '<div class="tom-foto"></div>')
         + '<div class="txt" data-red="' + esc(S.iDag) + '|' + esc(p.id) + '"><div class="navn">' + esc(p.navn) + '</div>'
-        + '<div class="meta">' + esc(p.tid) + " · " + esc(p.kategori) + '</div>'
+        + '<div class="meta">' + esc(p.tid) + " · " + esc(p.kategori)
+        + (portionsTekst(p) ? " · " + portionsTekst(p) : "") + '</div>'
         + (p.kommentar ? '<div class="kom">' + esc(p.kommentar) + '</div>' : "") + '</div>'
         + '<div class="kcal">' + tal(p.kalorier) + '</div>'
         + '<button class="xknap" data-slet="' + esc(p.id) + '" aria-label="Slet ' + esc(p.navn) + '">&times;</button></div>';
@@ -1654,7 +1709,9 @@ function aabnRediger(dag, id){
     + KATEGORIER.map(function(k){
         return '<option value="' + esc(k) + '"' + (m.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
       }).join("") + '</select>'
-    + '<span class="lbl">Kalorier</span>'
+    + '<span class="lbl">Antal portioner — tallene herunder følger med</span>'
+    + '<input id="r-ant" type="text" inputmode="decimal" value="' + kg(m.portioner).replace(",0","") + '">'
+    + '<span class="lbl">Kalorier i alt</span>'
     + '<input id="r-kcal" type="number" inputmode="numeric" value="' + m.kalorier + '">'
     + '<span class="lbl">Protein · kulhydrat · fedt (g)</span><div class="gitter">'
     + '<input id="r-pro" type="number" inputmode="numeric" value="' + m.protein_g + '">'
@@ -1671,6 +1728,7 @@ function aabnRediger(dag, id){
   var gl = $("r-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
 
+  bindPortioner("r-ant", ["r-kcal","r-pro","r-kul","r-fedt","r-gen"]);
   function luk(){ var o = $("r-overlay"); if (o) o.remove(); }
   function opdater(){
     S.forslag = null; S.forslagStatus = "tom";
@@ -1683,6 +1741,14 @@ function aabnRediger(dag, id){
   $("r-gem").onclick = function(){
     var nye = hentDag(dag).map(function(p){
       if (p.id !== id) return p;
+      var ant = laesKomma($("r-ant").value) || 1;
+      var totaler = {
+        kalorier: Number($("r-kcal").value) || 0,
+        protein_g: Number($("r-pro").value) || 0,
+        kulhydrat_g: Number($("r-kul").value) || 0,
+        fedt_g: Number($("r-fedt").value) || 0,
+        genstande: laesKomma($("r-gen").value)
+      };
       return normaliser({
         id: p.id,
         tid: $("r-tid").value.trim(),
@@ -1690,11 +1756,13 @@ function aabnRediger(dag, id){
         kategori: $("r-kat").value,
         portion: p.portion,
         kommentar: p.kommentar,
-        kalorier: Number($("r-kcal").value) || 0,
-        protein_g: Number($("r-pro").value) || 0,
-        kulhydrat_g: Number($("r-kul").value) || 0,
-        fedt_g: Number($("r-fedt").value) || 0,
-        genstande: laesKomma($("r-gen").value),
+        portioner: ant,
+        pr_portion: prPortion(totaler, ant),
+        kalorier: totaler.kalorier,
+        protein_g: totaler.protein_g,
+        kulhydrat_g: totaler.kulhydrat_g,
+        fedt_g: totaler.fedt_g,
+        genstande: totaler.genstande,
         billede: p.billede
       }, 0);
     });
@@ -2035,12 +2103,16 @@ function tegnArk(){
       + KATEGORIER.map(function(k){
           return '<option value="' + esc(k) + '"' + (r.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
         }).join("") + '</select>'
-      + '<span class="lbl">Kalorier</span>'
+      + '<span class="lbl">Antal portioner — tallene herunder følger med</span>'
+      + '<input id="f-ant" type="text" inputmode="decimal" value="1">'
+      + '<span class="lbl">Kalorier i alt</span>'
       + '<input id="f-kcal" type="number" inputmode="numeric" value="' + (Number(r.kalorier)||0) + '">'
       + '<span class="lbl">Protein · kulhydrat · fedt (g)</span><div class="gitter">'
       + '<input id="f-pro" type="number" inputmode="numeric" value="' + (Number(r.protein_g)||0) + '">'
       + '<input id="f-kul" type="number" inputmode="numeric" value="' + (Number(r.kulhydrat_g)||0) + '">'
-      + '<input id="f-fedt" type="number" inputmode="numeric" value="' + (Number(r.fedt_g)||0) + '"></div>';
+      + '<input id="f-fedt" type="number" inputmode="numeric" value="' + (Number(r.fedt_g)||0) + '"></div>'
+      + '<span class="lbl">Genstande, hvis der var alkohol</span>'
+      + '<input id="f-gen" type="text" inputmode="decimal" value="' + (Number(r.genstande)||0) + '">';
     var b = dagsbudget();
     var efter = b.spist + (Number(r.kalorier) || 0);
     var rest = S.maal - efter;
@@ -2119,6 +2191,11 @@ function tegnArk(){
     kaldAnalyse(a.stor, a.lille, a.note, svar, a.beskrivelse);
   };
   var bsp = $("b-spring"); if (bsp) bsp.onclick = function(){ visResultat(a, a.r); };
+  bindPortioner("f-ant", ["f-kcal","f-pro","f-kul","f-fedt","f-gen"], function(){
+    var bb = $("budgetboks");
+    if (bb) bb.innerHTML = budgetTekst(dagsbudget().spist,
+      dagsbudget().spist + (Number($("f-kcal").value) || 0));
+  });
   var altListe = (a.r && Array.isArray(a.r.alternativer))
     ? a.r.alternativer.filter(function(x){ return x && x.til; }).slice(0,3) : [];
   Array.prototype.forEach.call(document.querySelectorAll("[data-alt]"), function(knap){
@@ -2147,7 +2224,15 @@ function tegnArk(){
       kategori: $("f-kat").value,
       portion: (a.r && a.r.portion) || "",
       kommentar: (a.r && a.r.kommentar) || "",
-      genstande: (a.r && Number(a.r.genstande)) || 0,
+      portioner: laesKomma($("f-ant").value) || 1,
+      pr_portion: prPortion({
+        kalorier: Number($("f-kcal").value) || 0,
+        protein_g: Number($("f-pro").value) || 0,
+        kulhydrat_g: Number($("f-kul").value) || 0,
+        fedt_g: Number($("f-fedt").value) || 0,
+        genstande: laesKomma($("f-gen").value)
+      }, laesKomma($("f-ant").value) || 1),
+      genstande: laesKomma($("f-gen").value),
       kalorier: Number($("f-kcal").value) || 0,
       protein_g: Number($("f-pro").value) || 0,
       kulhydrat_g: Number($("f-kul").value) || 0,
