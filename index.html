@@ -144,6 +144,21 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .kort .til{margin-top:5px;}
 .kort .til b{font-weight:600;color:var(--gron);}
 .kort .kom{margin-top:7px;font-size:13.5px;color:var(--daempet);font-style:italic;}
+.kort.klik{cursor:pointer;}
+.kort .pil{float:right;color:var(--daempet);font-size:13px;margin-left:10px;}
+.opskrift{border-top:1px solid var(--linje);margin-top:12px;padding-top:12px;}
+.opskrift img{width:100%;border-radius:10px;display:block;background:#DDE0D8;}
+.opskrift .foto-tom{width:100%;height:130px;border-radius:10px;background:#DDE0D8;
+  display:flex;align-items:center;justify-content:center;color:var(--daempet);font-size:13px;
+  text-align:center;padding:0 20px;line-height:1.35;}
+.opskrift .kilde{font-size:11px;color:var(--daempet);margin-top:5px;}
+.opskrift .kilde a{color:var(--daempet);}
+.opskrift .fakta{display:flex;gap:18px;font-size:12.5px;color:var(--daempet);margin-top:11px;}
+.opskrift .fakta b{color:var(--blaek);font-weight:600;}
+.opskrift h4{font-size:12.5px;color:var(--daempet);margin:15px 0 7px;font-weight:600;}
+.opskrift ul,.opskrift ol{margin:0;padding-left:19px;font-size:14px;}
+.opskrift li{margin-bottom:5px;}
+.opskrift .tip{font-size:13.5px;color:var(--daempet);font-style:italic;margin-top:12px;}
 .kort button.mini{margin-top:10px;background:none;border:1px solid var(--linje);
   border-radius:8px;padding:8px 12px;font:inherit;font-size:13.5px;color:var(--gron);cursor:pointer;}
 .kort button.mini:disabled{color:var(--daempet);border-style:dashed;cursor:default;}
@@ -178,7 +193,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "11.0";
+var APP_VERSION = "13.0";
 var SKEMA = 4;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -192,7 +207,7 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_BRUGER = "kd:navn", K_KAEK = "kd:kaek",
     K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek",
     K_LAAS = "kd:laas", K_LAASTID = "kd:laastid", K_FEJL = "kd:fejl",
-    K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud";
+    K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash";
 var reserve = {};
 
 function laes(k){
@@ -384,6 +399,8 @@ var S = {
   forslagStatus: "tom",
   spise: null,
   spiseStatus: "tom",
+  aabenRet: null,
+  opskrifter: {},
   tilskud: null,
   tilskudStatus: "tom"
 };
@@ -844,6 +861,91 @@ function hentSpiseforslag(){
   return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
 }
 
+/* Opskrift til et forslag. Hentes foerst naar kortet aabnes, og gemmes bagefter. */
+function opskriftNoegle(ret){
+  return P_OPSKRIFT + ret.toLowerCase().replace(/[^a-z0-9æøå]+/g, "-").slice(0, 60);
+}
+function hentOpskrift(ret, kcal){
+  var p = 'Skriv en opskrift paa "' + ret + '" til en dansk kaloriedagbog.\n\n'
+    + 'Den skal ramme cirka ' + (kcal || 500) + ' kcal pr. portion og vaere til to personer. '
+    + 'Almindelige danske ingredienser fra et supermarked, ingen specialbutikker. '
+    + 'Hverdagsmad man kan naa, ikke restaurantprojekt. Maengder i gram, deciliter eller stykker.\n\n'
+    + 'Feltet billedsoeg skal vaere 2-4 ord paa engelsk, der er velegnede til at finde et foto af '
+    + 'retten i et aabent billedarkiv — brug det almindelige engelske navn paa retten eller '
+    + 'hovedingrediensen, ikke en lang beskrivelse. Er retten saerligt dansk, saa brug det danske '
+    + 'navn, hvis det er kendt, ellers hovedingrediensen paa engelsk.\n\n'
+    + 'Vaelg ogsaa en kategori fra: ' + KATEGORIER.join(", ") + '.\n\n'
+    + 'Svar udelukkende med JSON, uden markdown:\n'
+    + '{"titel": "rettens navn", "tid_min": heltal minutter, "portioner": heltal, '
+    + '"kcal_pr_portion": heltal, "kategori": "en af kategorierne", "billedsoeg": "engelske soegeord", '
+    + '"ingredienser": ["maengde og vare", "..."], "fremgangsmaade": ["trin", "..."], '
+    + '"tip": "et kort tip, max 18 ord"}';
+  return kald({ model:S.model, max_tokens:1200, messages:[{ role:"user", content:p }] });
+}
+
+/* Billeder. Unsplash foerst, Wikimedia Commons som reserve, ellers en pæn tom plads.
+   Unsplashs retningslinjer kraever tre ting, som alle er med herunder: at billedet
+   hotlinkes fra deres egne URL'er, at fotografen krediteres med link og utm-parametre,
+   og at download-endepunktet kaldes, naar billedet tages i brug. */
+var UNSPLASH_STANDARD = "AKpIiZFYDYL7V_EvC6Jd6DVI1aFutfIhq6KkOYeu7mQ";
+var UTM = "?utm_source=kaloriedagbog&utm_medium=referral";
+
+function unsplashNoegle(){ return laes(K_UNSPLASH) || UNSPLASH_STANDARD; }
+
+function hentFraUnsplash(soeg){
+  var n = unsplashNoegle();
+  if (!n) return Promise.resolve(null);
+  var u = "https://api.unsplash.com/search/photos?per_page=1&orientation=landscape&content_filter=high"
+    + "&query=" + encodeURIComponent(soeg) + "&client_id=" + encodeURIComponent(n);
+  return fetch(u).then(function(r){
+    if (!r.ok) return null;
+    return r.json();
+  }).then(function(d){
+    var f = d && d.results && d.results[0];
+    if (!f) return null;
+    /* Paakraevet haendelseskald — taeller kun statistik, henter ikke billedet */
+    if (f.links && f.links.download_location){
+      fetch(f.links.download_location + "&client_id=" + encodeURIComponent(n)).catch(function(){});
+    }
+    return {
+      url: (f.urls && (f.urls.regular || f.urls.small)) || null,
+      fotograf: (f.user && f.user.name) || "Ukendt",
+      profil: (f.user && f.user.links && f.user.links.html) || "https://unsplash.com",
+      kilde: "unsplash"
+    };
+  }).catch(function(){ return null; });
+}
+
+function hentFraCommons(soeg){
+  var u = "https://commons.wikimedia.org/w/api.php?action=query&generator=search"
+    + "&gsrnamespace=6&gsrlimit=1&gsrsearch=" + encodeURIComponent("filetype:bitmap " + soeg)
+    + "&prop=imageinfo&iiprop=url&iiurlwidth=760&format=json&origin=*";
+  return fetch(u).then(function(r){ return r.json(); }).then(function(d){
+    var sider = (d && d.query && d.query.pages) || {};
+    var f = Object.keys(sider).map(function(k){ return sider[k]; })[0];
+    var ii = f && f.imageinfo && f.imageinfo[0];
+    if (!ii) return null;
+    return { url: ii.thumburl || ii.url, titel: (f.title || "").replace(/^File:/, ""), kilde:"commons" };
+  }).catch(function(){ return null; });
+}
+
+function hentBillede(soeg, reserve){
+  return hentFraUnsplash(soeg).then(function(b){
+    if (b && b.url) return b;
+    return hentFraCommons(reserve || soeg);
+  }).catch(function(){ return null; });
+}
+
+function billedKredit(b){
+  if (!b) return "";
+  if (b.kilde === "unsplash"){
+    return 'Foto: <a href="' + esc(b.profil) + UTM + '" target="_blank" rel="noopener">'
+      + esc(b.fotograf) + '</a> på <a href="https://unsplash.com' + UTM
+      + '" target="_blank" rel="noopener">Unsplash</a>';
+  }
+  return 'Foto: ' + esc(b.titel) + ' · Wikimedia Commons';
+}
+
 /* Vurdering af kosten over tid og eventuelle tilskud. Bygger paa hvad der er
    registreret, som er kalorier og kategorier — ikke maalinger af naeringsstoffer. */
 function hentTilskud(a){
@@ -1144,17 +1246,48 @@ function tegnSpiseforslag(){
   }
   if (S.spiseStatus === "klar" && S.spise){
     var f = S.spise, ud = f.linje ? '<p class="overskrift">' + esc(f.linje) + '</p>' : "";
-    (f.forslag || []).slice(0,4).forEach(function(x){
-      ud += '<div class="kort">'
+    (f.forslag || []).slice(0,4).forEach(function(x, i){
+      var aaben = S.aabenRet === i;
+      ud += '<div class="kort klik" data-ret="' + i + '">'
+        + '<span class="pil">' + (aaben ? "skjul" : "opskrift") + '</span>'
         + (x.kcal ? '<span class="spar" style="color:var(--blaek)">' + tal(x.kcal) + '</span>' : "")
         + '<div class="fra">' + esc(x.ret) + '</div>'
         + (x.hvornaar ? '<div class="til">' + esc(x.hvornaar) + '</div>' : "")
         + (x.hvorfor ? '<div class="kom">' + esc(x.hvorfor) + '</div>' : "")
+        + (aaben ? opskriftHtml(i) : "")
         + '</div>';
     });
     ud += '<button class="knap sek" id="b-spise" style="margin-top:6px">Giv mig nogle nye</button>';
     boks.innerHTML = ud;
     $("b-spise").onclick = startSpiseforslag;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-ret]"), function(k){
+      k.onclick = function(e){
+        if (e.target.closest("button.mini")) return;
+        var i = Number(k.getAttribute("data-ret"));
+        S.aabenRet = S.aabenRet === i ? null : i;
+        if (S.aabenRet !== null) aabnOpskrift(i);
+        tegnSpiseforslag();
+      };
+    });
+    var tf = $("b-tilfoej"); if (tf) tf.onclick = function(){
+      var o = S.opskrifter[S.aabenRet];
+      if (!o || !o.data) return;
+      var d = o.data;
+      var poster = hentDag(S.iDag);
+      poster.push(normaliser({
+        id: String(Date.now()),
+        tid: new Date().toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"}),
+        navn: d.titel || (S.spise.forslag[S.aabenRet] || {}).ret || "Måltid",
+        kategori: d.kategori,
+        portion: "1 portion efter opskriften",
+        kalorier: Number(d.kcal_pr_portion) || 0
+      }, 0));
+      gemDag(S.iDag, poster);
+      S.aabenRet = null;
+      S.spiseStatus = "tom"; S.spise = null;
+      S.forslagStatus = "tom"; S.forslag = null;
+      tegn();
+    };
     return;
   }
   boks.innerHTML = '<p style="color:var(--daempet);font-size:14px;margin:0 0 10px">'
@@ -1162,8 +1295,75 @@ function tegnSpiseforslag(){
     + '<button class="knap sek" id="b-spise">Hvad kan jeg spise nu</button>';
   $("b-spise").onclick = startSpiseforslag;
 }
+function opskriftHtml(i){
+  var o = S.opskrifter[i];
+  if (!o || o.status === "henter") return '<div class="opskrift"><p style="color:var(--daempet);margin:0">Skriver opskriften …</p></div>';
+  if (o.status === "fejl") return '<div class="opskrift"><div class="note fejl" style="margin:0">' + esc(o.fejl) + '</div></div>';
+  var d = o.data;
+  var h = '<div class="opskrift">';
+  if (o.billede){
+    h += '<img src="' + esc(o.billede.url) + '" alt="' + esc(d.titel || "") + '" loading="lazy">'
+      + '<div class="kilde">' + billedKredit(o.billede) + '</div>';
+  } else if (o.billedeStatus === "henter"){
+    h += '<div class="foto-tom">Leder efter et billede …</div>';
+  } else {
+    h += '<div class="foto-tom">Der var ikke noget frit billede af netop denne ret</div>';
+  }
+  h += '<div class="fakta">'
+    + (d.tid_min ? '<span><b>' + d.tid_min + '</b> min</span>' : "")
+    + (d.portioner ? '<span><b>' + d.portioner + '</b> portioner</span>' : "")
+    + (d.kcal_pr_portion ? '<span><b>' + tal(d.kcal_pr_portion) + '</b> kcal pr. portion</span>' : "")
+    + '</div>';
+  if (Array.isArray(d.ingredienser) && d.ingredienser.length){
+    h += '<h4>Ingredienser</h4><ul>'
+      + d.ingredienser.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join("") + '</ul>';
+  }
+  if (Array.isArray(d.fremgangsmaade) && d.fremgangsmaade.length){
+    h += '<h4>Sådan gør du</h4><ol>'
+      + d.fremgangsmaade.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join("") + '</ol>';
+  }
+  if (d.tip) h += '<div class="tip">' + esc(d.tip) + '</div>';
+  h += '<button class="mini" id="b-tilfoej" style="margin-top:14px">Tilføj til dagbogen</button>';
+  return h + '</div>';
+}
+
+function aabnOpskrift(i){
+  if (S.opskrifter[i]) return;
+  var x = (S.spise.forslag || [])[i];
+  if (!x) return;
+  var gemt = null;
+  try { gemt = JSON.parse(laes(opskriftNoegle(x.ret)) || "null"); } catch(e){}
+  if (gemt){
+    S.opskrifter[i] = { status:"klar", data:gemt.data, billede:gemt.billede };
+    tegnSpiseforslag();
+    return;
+  }
+  S.opskrifter[i] = { status:"henter" };
+  hentOpskrift(x.ret, x.kcal).then(function(d){
+    S.opskrifter[i] = { status:"klar", data:d, billede:null, billedeStatus:"henter" };
+    tegnSpiseforslag();
+    return hentBillede(d.billedsoeg || x.ret, x.ret).then(function(b){
+      if (!S.opskrifter[i]) return;
+      S.opskrifter[i].billede = b;
+      S.opskrifter[i].billedeStatus = "klar";
+      skriv(opskriftNoegle(x.ret), JSON.stringify({ data:d, billede:b }));
+      ryddOpskrifter();
+      if (S.aabenRet === i) tegnSpiseforslag();
+    });
+  }).catch(function(err){
+    S.opskrifter[i] = { status:"fejl", fejl:(err && err.message) || "Opskriften kunne ikke hentes." };
+    tegnSpiseforslag();
+  });
+}
+/* Behold de 20 nyeste opskrifter, saa lageret ikke loeber fuldt */
+function ryddOpskrifter(){
+  var n = alleNoegler().filter(function(k){ return k.indexOf(P_OPSKRIFT) === 0; });
+  if (n.length > 20) n.slice(0, n.length - 20).forEach(fjern);
+}
+
 function startSpiseforslag(){
-  S.spiseStatus = "henter"; tegnSpiseforslag();
+  S.spiseStatus = "henter"; S.aabenRet = null; S.opskrifter = {};
+  tegnSpiseforslag();
   hentSpiseforslag().then(function(r){
     S.spise = r; S.spiseStatus = "klar";
     skriv(K_SPISE, JSON.stringify({ sign:spiseSignatur(), data:r }));
@@ -1786,6 +1986,8 @@ function tegnIndstillinger(){
     + '</select>'
     + '<span class="lbl">API-nøgle</span>'
     + '<input id="s-noegle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Uændret">'
+    + '<span class="lbl">Unsplash-nøgle til billeder (valgfri — der ligger en i appen)</span>'
+    + '<input id="s-unsplash" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Uændret">'
     + '<div class="note">Dagbogen ligger kun i denne browser. Nøglen bliver liggende ved opdateringer — du skal kun taste den igen, hvis appen flytter til en ny adresse.</div>'
     + '<div class="tjek"><input type="checkbox" id="s-medn"><label for="s-medn">Tag nøglen med i sikkerhedskopien, så en ny telefon er klar med det samme</label></div>'
     + '<button class="knap" id="s-gem" style="margin-top:16px">Gem</button>'
@@ -1828,6 +2030,8 @@ function tegnIndstillinger(){
     S.maal = Number($("s-maal").value) || 0;
     S.model = $("s-model").value;
     skriv(K_MAAL, String(S.maal)); skriv(K_MODEL, S.model);
+    var us = $("s-unsplash").value.trim();
+    if (us) skriv(K_UNSPLASH, us);
     var n = $("s-noegle").value.trim();
     if (n){
       aktivNoegle = n;
