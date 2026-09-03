@@ -41,6 +41,11 @@ body{
 .baand span{display:block;height:100%;background:var(--gron);
   transition:width .45s cubic-bezier(.2,.7,.3,1);}
 .baand span.over{background:var(--ler);}
+.rest{display:flex;justify-content:space-between;align-items:baseline;
+  border-top:1px solid var(--linje);padding-top:12px;margin-top:2px;}
+.rest .txt{font-size:13px;color:var(--daempet);}
+.rest .num{font-family:Georgia,serif;font-size:27px;font-variant-numeric:tabular-nums;}
+.rest .num.over{color:var(--ler);}
 .makro{display:flex;gap:22px;font-size:13px;color:var(--daempet);
   border-top:1px solid var(--linje);padding-top:12px;}
 .makro b{font-weight:600;color:var(--blaek);font-variant-numeric:tabular-nums;}
@@ -125,12 +130,23 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .maerke{display:inline-block;font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;
   background:#DCE0D6;color:#4A554F;border-radius:4px;padding:2px 6px;margin-left:7px;vertical-align:2px;}
 .maerke.varm{background:#EFDCC6;color:#7A4A1E;}
+.maerke.god{background:#D3E1CE;color:#2B5738;}
+.maerke.stor{display:block;margin:16px 0 0;font-size:11.5px;padding:4px 9px;
+  width:-moz-fit-content;width:fit-content;}
+.budget{background:var(--kort);border:1px solid var(--linje);border-radius:10px;
+  padding:12px 13px;margin-top:10px;font-size:14px;}
+.budget b{font-family:Georgia,serif;font-size:17px;font-variant-numeric:tabular-nums;font-weight:400;}
+.budget .rest{color:var(--daempet);font-size:13px;margin-top:3px;}
+.budget .rest.over{color:var(--ler);}
 .kort{background:var(--kort);border:1px solid var(--linje);border-radius:12px;
   padding:13px 14px;margin-bottom:9px;}
 .kort .fra{font-weight:600;}
 .kort .til{margin-top:5px;}
 .kort .til b{font-weight:600;color:var(--gron);}
 .kort .kom{margin-top:7px;font-size:13.5px;color:var(--daempet);font-style:italic;}
+.kort button.mini{margin-top:10px;background:none;border:1px solid var(--linje);
+  border-radius:8px;padding:8px 12px;font:inherit;font-size:13.5px;color:var(--gron);cursor:pointer;}
+.kort button.mini:disabled{color:var(--daempet);border-style:dashed;cursor:default;}
 .kort .spar{float:right;font-family:Georgia,serif;font-size:15px;color:var(--gron);
   font-variant-numeric:tabular-nums;margin-left:10px;}
 .overskrift{font-family:Georgia,serif;font-size:20px;line-height:1.25;margin:4px 0 14px;}
@@ -162,7 +178,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "9.0";
+var APP_VERSION = "11.0";
 var SKEMA = 4;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -176,7 +192,7 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_BRUGER = "kd:navn", K_KAEK = "kd:kaek",
     K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek",
     K_LAAS = "kd:laas", K_LAASTID = "kd:laastid", K_FEJL = "kd:fejl",
-    K_FORBRUG = "kd:forbrug";
+    K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud";
 var reserve = {};
 
 function laes(k){
@@ -365,7 +381,11 @@ var S = {
   ark: null,
   indst: false,
   forslag: null,
-  forslagStatus: "tom"
+  forslagStatus: "tom",
+  spise: null,
+  spiseStatus: "tom",
+  tilskud: null,
+  tilskudStatus: "tom"
 };
 
 /* ================= Historik ================= */
@@ -632,6 +652,20 @@ function analyseAfVindue(dage){
            aendring:aendring, snitFoer:snitFoer };
 }
 
+/* Hvad er der spist indtil nu i dag — bruges som kontekst for vurderingen */
+function budgetTekst(spist, efter){
+  var rest = S.maal - efter;
+  return '<b>' + tal(efter) + '</b> af ' + tal(S.maal) + ' kcal i dag'
+    + '<div class="rest' + (rest < 0 ? " over" : "") + '">'
+    + (rest >= 0 ? tal(rest) + ' kcal tilbage efter dette måltid'
+                 : tal(-rest) + ' kcal over målet')
+    + '</div>';
+}
+function dagsbudget(){
+  var spist = hentDag(S.iDag).reduce(function(a,p){ return a + p.kalorier; }, 0);
+  return { spist:spist, maal:S.maal, tilbage:S.maal - spist };
+}
+
 /* ================= API ================= */
 
 /* Taeller kald pr. maaned, saa et uventet spring kan ses uden at logge ind i konsollen */
@@ -676,6 +710,37 @@ function kald(krop){
   });
 }
 
+/* Vurderingen maales mod dagens budget, ikke mod maden i sig selv. Det samme
+   maaltid kan vaere rigeligt plads klokken tolv og trangt klokken ni om aftenen. */
+function vurderingsdel(){
+  var b = dagsbudget();
+  var hensigt = S.profil.hensigt === "holde"
+    ? "holde vaegten stabil"
+    : "tabe sig ved at begraense kalorieindtaget";
+  return 'DAGENS STATUS: maalet er ' + b.maal + ' kcal. Foer dette maaltid er der spist '
+    + b.spist + ' kcal, saa der var ' + b.tilbage + ' kcal tilbage. Klokken er '
+    + new Date().toLocaleTimeString("da-DK", {hour:"2-digit", minute:"2-digit"}) + '. '
+    + 'Brugerens hensigt med appen er at ' + hensigt + '.\n\n'
+    + 'Maaltidet er ikke spist endnu, saa vurderingen er en melding foer forste bid, ikke en dom bagefter. '
+    + 'Vurder det i forhold til dagens budget og tidspunktet — ikke i forhold til maden i sig selv. '
+    + 'Et stort maaltid midt paa dagen med rigelig plads tilbage er fint. Det samme maaltid oven i en dag, '
+    + 'der allerede er fyldt, er noget andet. Saet status til "godt", naar maaltidet passer godt ind eller '
+    + 'er et fornuftigt valg, "fint" naar det er hverken eller, og "tungt" naar det bruger en stor del af '
+    + 'det, der var tilbage. Er budgettet allerede overskredet, saa vaer saglig og fremadrettet frem for '
+    + 'bebrejdende — dagen er som den er, og i morgen er en ny.\n\n'
+    + 'VIGTIGT OM TIDSPUNKTET: maaltidet staar foran brugeren og er endnu ikke spist — det er '
+    + 'derfor der kan tages et billede af det. Dine forslag skal foerst og fremmest vaere noget, '
+    + 'der kan naas lige nu med det, der staar paa bordet: lade sovsen staa, spise halvdelen af '
+    + 'risene, droppe det andet stykke broed, tage vand i stedet for den naeste oel, skrabe '
+    + 'dressingen af. Saet "naar" til "nu" paa den slags.\n'
+    + 'Kan der intet goeres ved lige dette maaltid, maa du give et forslag til naeste gang samme '
+    + 'ret staar paa bordet, og saette "naar" til "naeste".\n\n'
+    + 'Giv 1-3 forslag, men kun naar der reelt er mindst 75 kcal at spare, og maaltidet ligger i '
+    + 'den tunge ende af dagens budget. Ellers en tom liste: er valget godt, staar rosen fint '
+    + 'alene, og gode raad til en skaal havregryn er spild af begges tid. Hold forslagene til '
+    + 'realistisk dansk hverdagsmad, og skriv dem som noget man kan goere, ikke som noget man burde.';
+}
+
 function byggPrompt(note, svar, beskrivelse){
   var t = beskrivelse
     ? 'Du er ernaeringsfaglig og vurderer et maaltid ud fra en kort beskrivelse.\n\n'
@@ -706,7 +771,8 @@ function byggPrompt(note, svar, beskrivelse){
     + 'der reelt er spist — saa stil op til 3 korte spoergsmaal med 2-4 konkrete svarmuligheder hver. '
     + (beskrivelse ? 'Er beskrivelsen praecis nok, stiller du ingen spoergsmaal. '
                    : 'Er billedet tydeligt, stiller du ingen spoergsmaal. ')
-    + 'Giv altid dit bedste bud alligevel.';
+    + 'Giv altid dit bedste bud alligevel.\n\n'
+    + vurderingsdel();
   if (S.kaek) t += '\n\n' + tone();
   if (note) t += '\n\nBrugerens egen note om maaltidet: "' + note + '". Vaegt den hoejere end dit eget gaet.';
   if (svar && svar.length){
@@ -720,12 +786,15 @@ function byggPrompt(note, svar, beskrivelse){
     + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
     + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort saetning om det vaesentligste forbehold", '
+    + '"status": "godt"/"fint"/"tungt", '
+    + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, "note": "kort hvordan, max 12 ord"}], '
     + (S.kaek ? '"kommentar": "en kaek bemaerkning paa max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette maaltid", ' : '')
     + '"spoergsmaal": [{"tekst": "spoergsmaalet", "valg": ["mulighed", "mulighed"]}]}\n\n'
     + (beskrivelse
         ? 'Handler beskrivelsen hverken om mad eller drikkevarer, saettes er_mad til false. '
         : 'Er der hverken mad eller drikkevarer paa billedet, saettes er_mad til false og resten til 0 eller tom tekst. ')
-    + 'Har du ingen spoergsmaal, saettes spoergsmaal til en tom liste.';
+    + 'Har du ingen spoergsmaal, saettes spoergsmaal til en tom liste. '
+    + 'Har du ingen alternativer at foreslaa, saettes alternativer til en tom liste.';
   return t;
 }
 function analyser(dataUrl, note, svar, beskrivelse){
@@ -735,6 +804,84 @@ function analyser(dataUrl, note, svar, beskrivelse){
   }
   indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse) });
   return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:indhold }] });
+}
+
+/* Hvad kan der spises for resten af dagen. Kender dagens maaltider, klokkeslaet,
+   resten af budgettet og profilen. */
+function hentSpiseforslag(){
+  var poster = hentDag(S.iDag);
+  var spist = poster.reduce(function(a, x){ return a + x.kalorier; }, 0);
+  var pro = poster.reduce(function(a, x){ return a + x.protein_g; }, 0);
+  var rest = S.maal - spist;
+  var t = new Date();
+  var liste = poster.length
+    ? poster.map(function(x){ return "- " + x.tid + " " + x.navn + " (" + x.kalorier + " kcal)"; }).join("\n")
+    : "- ingenting endnu";
+
+  var p = 'Du raadgiver ' + (S.navn || "brugeren") + ' om resten af dagens mad.\n\n'
+    + 'Klokken er ' + t.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"})
+    + ' paa en ' + t.toLocaleDateString("da-DK",{weekday:"long"}) + '.\n'
+    + 'Dagligt maal: ' + S.maal + ' kcal. Spist indtil nu: ' + spist + ' kcal, heraf '
+    + Math.round(pro) + ' g protein. Tilbage: ' + rest + ' kcal.\n'
+    + 'Dagens maaltider:\n' + liste + '\n'
+    + 'Om personen: ' + profiltekst() + '.\n\n'
+    + kostgrundlag() + '\n\n'
+    + 'Giv 3 konkrete forslag til hvad der kan spises og drikkes i resten af dagen. Realistisk '
+    + 'dansk hverdagsmad, ting man har eller kan naa at koebe. Hvert forslag med et anslaaet '
+    + 'kalorietal, der passer i det der er tilbage, og som daekker de maaltider der mangler '
+    + 'inden sengetid — er klokken 10, skal der baade vaere frokost og aftensmad; er klokken 20, '
+    + 'er det hoejst en aftensnack. Skæv efter det kostraadene peger paa, som personen mangler i dag: '
+    + 'groentsager, fisk, fuldkorn, baelgfrugter, vand.\n\n'
+    + 'VIGTIGT: foreslaa aldrig at springe et maaltid over, at faste resten af dagen eller at gaa '
+    + 'sulten i seng. Er der lidt eller ingenting tilbage af budgettet, saa foreslaa noget maettende '
+    + 'og let alligevel, og skriv roligt at en enkelt dag ikke afgoer noget. Ingen skraemmekampagne '
+    + 'og ingen moralisering.\n\n'
+    + 'Svar udelukkende med JSON, uden markdown:\n'
+    + '{"linje": "en kort saetning om hvor dagen staar, max 16 ord", '
+    + '"forslag": [{"ret": "hvad", "hvornaar": "fx frokost eller aftensmad", "kcal": heltal, '
+    + '"hvorfor": "kort begrundelse, max 14 ord"}]}';
+
+  return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
+}
+
+/* Vurdering af kosten over tid og eventuelle tilskud. Bygger paa hvad der er
+   registreret, som er kalorier og kategorier — ikke maalinger af naeringsstoffer. */
+function hentTilskud(a){
+  var maaneder = ["januar","februar","marts","april","maj","juni","juli",
+                  "august","september","oktober","november","december"];
+  var kat = a.kategorier.map(function(k){
+    return "- " + k.navn + ": " + Math.round(k.kcal) + " kcal fordelt paa " + k.antal + " maaltider";
+  }).join("\n");
+  var retter = a.gengangere.slice(0,8).map(function(g){
+    return "- " + g.navn + " (" + g.antal + " gange)";
+  }).join("\n") || "- ingen gengangere endnu";
+
+  var p = 'Vurder ' + (S.navn || "brugerens") + ' kost over de seneste ' + S.vindue + ' dage.\n\n'
+    + 'Der er registreret ' + a.antalDage + ' dage med i alt ' + a.poster.length + ' maaltider. '
+    + 'Snit ' + Math.round(a.snit) + ' kcal pr. dag mod et maal paa ' + S.maal + '.\n'
+    + 'Om personen: ' + profiltekst() + '.\n'
+    + 'Vi er i ' + maaneder[new Date().getMonth()] + '.\n\n'
+    + 'Fordeling paa kategorier:\n' + kat + '\n\nGengangere:\n' + retter + '\n\n'
+    + kostgrundlag() + '\n\n'
+    + 'AFGOERENDE OM DATAGRUNDLAGET: registreringen indeholder kalorier, makronaeringsstoffer og '
+    + 'en grov kategori pr. maaltid. Den indeholder INGEN maalinger af vitaminer eller mineraler. '
+    + 'Du kan derfor kun tale om moenstre — at der sjaeldent registreres fisk, eller at groent '
+    + 'fylder lidt — og aldrig konstatere en mangel. Kun en blodproeve hos laegen kan det. '
+    + 'Sig det tydeligt, og vaer mere forbeholden jo faerre dage der er registreret: '
+    + 'under 14 dage er et loest indtryk, over 60 dage er et rimeligt billede.\n\n'
+    + 'Mad foerst, tilskud bagefter: peg paa hvad der kan spises i stedet, og naevn kun tilskud '
+    + 'hvor det er relevant. Hold dig inden for de officielle danske anbefalinger og foreslaa '
+    + 'aldrig hoeje doser. D-vitamin i vinterhalvaaret gaelder alle voksne uanset hvad der staar '
+    + 'i dagbogen, saa den maa gerne med, naar vi er i oktober til april. Anbefal ikke tilskud '
+    + 'paa noget, dagbogen ikke kan sige noget om.\n\n'
+    + 'Svar udelukkende med JSON, uden markdown:\n'
+    + '{"sikkerhed": "loest indtryk"/"nogenlunde"/"rimeligt billede", '
+    + '"opsummering": "hvad moenstret viser, max 25 ord", '
+    + '"moenstre": [{"emne": "fx fisk og omega-3", "set": "hvad dagbogen viser, max 14 ord", '
+    + '"mad": "hvad der kan spises i stedet, max 16 ord", '
+    + '"tilskud": "tilskudsraad hvis relevant, ellers tom tekst, max 16 ord"}]}';
+
+  return kald({ model:S.model, max_tokens:1000, messages:[{ role:"user", content:p }] });
 }
 
 /* Forslag til lettere alternativer. Tonen er kaek, men gaar altid paa maden
@@ -773,6 +920,33 @@ function tone(){
     + 'GRAENSER: ingen bemaerkninger om krop, vaegt, figur eller udseende. Ingen skam over hvad '
     + 'der er spist, og ingen mad kaldes synd, forbudt eller daarlig. Der drilles vaner og valg, '
     + 'aldrig hvordan nogen ser ud. Ingen loeftede pegefingre og ingen sundhedspraediken.';
+}
+
+/* De officielle danske kostraad og Sundhedsstyrelsens tilskudsanbefalinger.
+   Samlet et sted, saa baade maaltidsforslag og tilskudsvurdering hviler paa
+   samme grundlag i stedet for at improvisere. */
+function kostgrundlag(){
+  return 'GRUNDLAG — De officielle Kostraad (Foedevarestyrelsen): spis planterigt, varieret og '
+    + 'ikke for meget. 600 g frugt og groent om dagen, heraf mindst halvdelen groentsager. '
+    + '350 g fisk om ugen, gerne halvdelen fed fisk. Hoejst 350 g tilberedt oksekoed, lammekoed '
+    + 'og svinekoed om ugen. 75 g fuldkorn om dagen. Vaelg planteolier og magre mejeriprodukter. '
+    + 'Spis mindre af det soede, salte og fede. Sluk toersten i vand, hoejst en halv liter '
+    + 'sodavand eller saft om ugen.\n'
+    + 'Sundhedsstyrelsen og Foedevarestyrelsen anbefaler desuden 5-10 mikrogram D-vitamin dagligt '
+    + 'til alle voksne fra oktober til april, 10 mikrogram hele aaret til personer med moerk hud, '
+    + 'gravide og ammende samt folk der sjaeldent kommer udendoers, og 20 mikrogram plus 800-1000 mg '
+    + 'calcium hele aaret til personer over 70 aar. Den oevre sikre graense for voksne er 100 mikrogram.';
+}
+function profiltekst(){
+  var p = S.profil, d = [];
+  if (p.alder) d.push(p.alder + " aar");
+  if (p.koen) d.push(p.koen);
+  if (p.hoejde) d.push(p.hoejde + " cm");
+  var k = kropstal();
+  if (k.nu) d.push(kg(k.nu) + " kg");
+  if (k.maalvaegt) d.push("maalvaegt " + kg(k.maalvaegt) + " kg");
+  d.push(p.hensigt === "holde" ? "vil holde vaegten stabil" : "vil tabe sig");
+  return d.join(", ");
 }
 
 /* ================= Skaerme ================= */
@@ -900,6 +1074,9 @@ function tegnHoved(){
     + '<div class="hero"><div class="stortal' + (over ? " over" : "") + '">' + tal(sum.kcal) + '</div>'
     + '<div class="maallinje">kalorier i dag · <button class="txtknap" id="b-maal">mål ' + tal(S.maal) + '</button></div>'
     + '<div class="baand"><span class="' + (over ? "over" : "") + '" style="width:' + pct + '%"></span></div>'
+    + '<div class="rest"><span class="txt">'
+    + (S.maal - sum.kcal >= 0 ? 'tilbage af dagens mål' : 'over dagens mål') + '</span>'
+    + '<span class="num' + (over ? " over" : "") + '">' + tal(Math.abs(S.maal - sum.kcal)) + '</span></div>'
     + '<div class="makro"><div>protein <b>' + tal(sum.pro) + ' g</b></div>'
     + '<div>kulhydrat <b>' + tal(sum.kul) + ' g</b></div>'
     + '<div>fedt <b>' + tal(sum.fedt) + ' g</b></div>'
@@ -920,7 +1097,8 @@ function tegnHoved(){
         + '<button class="xknap" data-slet="' + esc(p.id) + '" aria-label="Slet ' + esc(p.navn) + '">&times;</button></div>';
     });
   }
-  h += '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
+  h += '<h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>'
+    + '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
     + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div>'
     + '<div class="bund"><div class="bundindhold">'
     + '<button class="knap" id="b-foto">Tag billede</button>'
@@ -931,12 +1109,69 @@ function tegnHoved(){
   $("b-maal").onclick = function(){ S.indst = true; tegn(); };
   $("b-foto").onclick = function(){ $("fil").click(); };
   $("b-skriv").onclick = function(){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); };
+  tegnSpiseforslag();
   Array.prototype.forEach.call(document.querySelectorAll("[data-slet]"), function(b){
     b.onclick = function(){
       var id = b.getAttribute("data-slet");
       gemDag(S.iDag, hentDag(S.iDag).filter(function(p){ return p.id !== id; }));
       tegn();
     };
+  });
+}
+
+/* --- Forslag til resten af dagen --- */
+function spiseSignatur(){
+  var spist = hentDag(S.iDag).reduce(function(a, x){ return a + x.kalorier; }, 0);
+  return S.iDag + ":" + spist + ":" + new Date().getHours();
+}
+function tegnSpiseforslag(){
+  var boks = $("spiseboks"); if (!boks) return;
+  if (S.spiseStatus === "tom"){
+    try {
+      var gemt = JSON.parse(laes(K_SPISE) || "null");
+      if (gemt && gemt.sign === spiseSignatur()){ S.spise = gemt.data; S.spiseStatus = "klar"; }
+    } catch(e){}
+  }
+  if (S.spiseStatus === "henter"){
+    boks.innerHTML = '<p style="color:var(--daempet)">Kigger på resten af dagen …</p>';
+    return;
+  }
+  if (S.spiseStatus === "fejl"){
+    boks.innerHTML = '<div class="note fejl">' + esc(S.spiseFejl) + '</div>'
+      + '<button class="knap sek" id="b-spise" style="margin-top:10px">Prøv igen</button>';
+    $("b-spise").onclick = startSpiseforslag;
+    return;
+  }
+  if (S.spiseStatus === "klar" && S.spise){
+    var f = S.spise, ud = f.linje ? '<p class="overskrift">' + esc(f.linje) + '</p>' : "";
+    (f.forslag || []).slice(0,4).forEach(function(x){
+      ud += '<div class="kort">'
+        + (x.kcal ? '<span class="spar" style="color:var(--blaek)">' + tal(x.kcal) + '</span>' : "")
+        + '<div class="fra">' + esc(x.ret) + '</div>'
+        + (x.hvornaar ? '<div class="til">' + esc(x.hvornaar) + '</div>' : "")
+        + (x.hvorfor ? '<div class="kom">' + esc(x.hvorfor) + '</div>' : "")
+        + '</div>';
+    });
+    ud += '<button class="knap sek" id="b-spise" style="margin-top:6px">Giv mig nogle nye</button>';
+    boks.innerHTML = ud;
+    $("b-spise").onclick = startSpiseforslag;
+    return;
+  }
+  boks.innerHTML = '<p style="color:var(--daempet);font-size:14px;margin:0 0 10px">'
+    + 'Appen kan foreslå, hvad der er plads til i resten af dagen. Det koster ét API-kald.</p>'
+    + '<button class="knap sek" id="b-spise">Hvad kan jeg spise nu</button>';
+  $("b-spise").onclick = startSpiseforslag;
+}
+function startSpiseforslag(){
+  S.spiseStatus = "henter"; tegnSpiseforslag();
+  hentSpiseforslag().then(function(r){
+    S.spise = r; S.spiseStatus = "klar";
+    skriv(K_SPISE, JSON.stringify({ sign:spiseSignatur(), data:r }));
+    tegnSpiseforslag();
+  }).catch(function(err){
+    S.spiseStatus = "fejl";
+    S.spiseFejl = (err && err.message) || "Kunne ikke hente forslag.";
+    tegnSpiseforslag();
   });
 }
 
@@ -1161,16 +1396,80 @@ function tegnTrends(){
   }
 
   /* forslag */
-  h += '<h2 class="sek">Lettere alternativer</h2><div id="forslag"></div></div>';
+  h += '<h2 class="sek">Lettere alternativer</h2><div id="forslag"></div>'
+    + '<h2 class="sek">Kost og tilskud</h2><div id="tilskudsboks"></div></div>';
   $("rod").innerHTML = h;
   bindHoved(); bindVindue();
   tegnForslag(a);
+  tegnTilskud(a);
 }
+function tilskudSignatur(a){
+  return S.vindue + ":" + a.antalDage + ":" + a.poster.length + ":"
+    + a.kategorier.map(function(k){ return k.navn + Math.round(k.kcal / 100); }).join("|");
+}
+function tegnTilskud(a){
+  var boks = $("tilskudsboks"); if (!boks) return;
+  if (S.tilskudStatus === "tom"){
+    try {
+      var gemt = JSON.parse(laes(K_TILSKUD) || "null");
+      if (gemt && gemt.sign === tilskudSignatur(a)){ S.tilskud = gemt.data; S.tilskudStatus = "klar"; }
+    } catch(e){}
+  }
+  if (S.tilskudStatus === "henter"){
+    boks.innerHTML = '<p style="color:var(--daempet)">Gennemgår kosten …</p>'; return;
+  }
+  if (S.tilskudStatus === "fejl"){
+    boks.innerHTML = '<div class="note fejl">' + esc(S.tilskudFejl) + '</div>'
+      + '<button class="knap sek" id="b-tilskud" style="margin-top:10px">Prøv igen</button>';
+    $("b-tilskud").onclick = function(){ startTilskud(a); };
+    return;
+  }
+  if (S.tilskudStatus === "klar" && S.tilskud){
+    var t = S.tilskud;
+    var mrk = { "loest indtryk":"Løst indtryk", "nogenlunde":"Nogenlunde grundlag",
+                "rimeligt billede":"Rimeligt billede" }[t.sikkerhed] || "Løst indtryk";
+    var ud = '<span class="maerke stor">' + esc(mrk) + ' · ' + a.antalDage + ' dage</span>'
+      + (t.opsummering ? '<p class="overskrift" style="margin-top:12px">' + esc(t.opsummering) + '</p>' : "");
+    (t.moenstre || []).slice(0,5).forEach(function(m){
+      ud += '<div class="kort"><div class="fra">' + esc(m.emne) + '</div>'
+        + (m.set ? '<div class="kom" style="font-style:normal">' + esc(m.set) + '</div>' : "")
+        + (m.mad ? '<div class="til">→ <b>' + esc(m.mad) + '</b></div>' : "")
+        + (m.tilskud ? '<div class="kom">Tilskud: ' + esc(m.tilskud) + '</div>' : "")
+        + '</div>';
+    });
+    ud += '<button class="knap sek" id="b-tilskud" style="margin-top:6px">Vurdér igen</button>'
+      + '<p class="fodnote">Dagbogen måler kalorier og kategorier, ikke vitaminer. Det her er mønstre '
+      + 'i det, du har registreret — ikke en konstatering af mangel. Kun en blodprøve hos lægen '
+      + 'kan afgøre det, og tal med lægen eller apoteket, før du lægger tilskud til fast medicin.</p>';
+    boks.innerHTML = ud;
+    $("b-tilskud").onclick = function(){ startTilskud(a); };
+    return;
+  }
+  boks.innerHTML = '<p style="color:var(--daempet);font-size:14px;margin:0 0 10px">'
+    + 'Appen kan se på, hvad kosten peger på over tid, og om et tilskud giver mening. '
+    + 'Vurderingen bliver skarpere, jo flere dage du registrerer. Det koster ét API-kald.</p>'
+    + '<button class="knap sek" id="b-tilskud">Vurdér min kost</button>';
+  $("b-tilskud").onclick = function(){ startTilskud(a); };
+}
+function startTilskud(a){
+  S.tilskudStatus = "henter"; tegnTilskud(a);
+  hentTilskud(a).then(function(r){
+    S.tilskud = r; S.tilskudStatus = "klar";
+    skriv(K_TILSKUD, JSON.stringify({ sign:tilskudSignatur(a), data:r }));
+    tegnTilskud(a);
+  }).catch(function(err){
+    S.tilskudStatus = "fejl";
+    S.tilskudFejl = (err && err.message) || "Kunne ikke vurdere kosten.";
+    tegnTilskud(a);
+  });
+}
+
 function bindVindue(){
   Array.prototype.forEach.call(document.querySelectorAll("[data-vin]"), function(b){
     b.onclick = function(){
       S.vindue = Number(b.getAttribute("data-vin"));
       S.forslag = null; S.forslagStatus = "tom";
+      S.tilskud = null; S.tilskudStatus = "tom";
       tegnTrends();
     };
   });
@@ -1291,7 +1590,33 @@ function tegnArk(){
       + '<input id="f-pro" type="number" inputmode="numeric" value="' + (Number(r.protein_g)||0) + '">'
       + '<input id="f-kul" type="number" inputmode="numeric" value="' + (Number(r.kulhydrat_g)||0) + '">'
       + '<input id="f-fedt" type="number" inputmode="numeric" value="' + (Number(r.fedt_g)||0) + '"></div>';
-    if (r.kommentar) h += '<p class="overskrift" style="font-size:17px;margin:16px 0 0">' + esc(r.kommentar) + '</p>';
+    var b = dagsbudget();
+    var efter = b.spist + (Number(r.kalorier) || 0);
+    var rest = S.maal - efter;
+    var maerker = { godt:["god","Godt valg"], tungt:["varm","Tungt for i dag"], fint:["","Passer ind"] };
+    var mk = maerker[r.status] || maerker.fint;
+    h += '<span class="maerke stor ' + mk[0] + '">' + mk[1] + '</span>'
+      + '<div class="budget" id="budgetboks">' + budgetTekst(b.spist, efter) + '</div>';
+    if (r.kommentar) h += '<p class="overskrift" style="font-size:17px;margin:14px 0 0">' + esc(r.kommentar) + '</p>';
+    var alt = (Array.isArray(r.alternativer) ? r.alternativer.filter(function(x){ return x && x.til; }) : []).slice(0,3);
+    var nu = alt.filter(function(x){ return x.naar !== "naeste"; });
+    var senere = alt.filter(function(x){ return x.naar === "naeste"; });
+    function kortet(x, i, medKnap){
+      return '<div class="kort">'
+        + (x.spar ? '<span class="spar">−' + tal(x.spar) + '</span>' : "")
+        + '<div class="fra">' + esc(x.til) + '</div>'
+        + (x.note ? '<div class="kom">' + esc(x.note) + '</div>' : "")
+        + (medKnap && x.spar ? '<button class="mini" data-alt="' + i + '">Det gør jeg — træk det fra</button>' : "")
+        + '</div>';
+    }
+    if (nu.length){
+      h += '<h2 class="sek" style="margin:20px 0 9px">Kan du nå at ændre nu</h2>';
+      nu.forEach(function(x){ h += kortet(x, alt.indexOf(x), true); });
+    }
+    if (senere.length){
+      h += '<h2 class="sek" style="margin:20px 0 9px">Til næste gang</h2>';
+      senere.forEach(function(x){ h += kortet(x, alt.indexOf(x), false); });
+    }
     if (r.portion || r.note || r.usikkerhed === "hoej"){
       h += '<div class="note">'
         + (r.portion ? '<div>Regnet som: ' + esc(r.portion) + '</div>' : '')
@@ -1343,6 +1668,25 @@ function tegnArk(){
     kaldAnalyse(a.stor, a.lille, a.note, svar, a.beskrivelse);
   };
   var bsp = $("b-spring"); if (bsp) bsp.onclick = function(){ visResultat(a, a.r); };
+  var altListe = (a.r && Array.isArray(a.r.alternativer))
+    ? a.r.alternativer.filter(function(x){ return x && x.til; }).slice(0,3) : [];
+  Array.prototype.forEach.call(document.querySelectorAll("[data-alt]"), function(knap){
+    knap.onclick = function(){
+      var x = altListe[Number(knap.getAttribute("data-alt"))];
+      if (!x) return;
+      var kcal = Number($("f-kcal").value) || 0;
+      var spar = Math.min(Number(x.spar) || 0, kcal);
+      if (spar <= 0) return;
+      var ny = kcal - spar, faktor = kcal > 0 ? ny / kcal : 0;
+      $("f-kcal").value = Math.round(ny);
+      ["f-pro","f-kul","f-fedt"].forEach(function(id){
+        $(id).value = Math.round((Number($(id).value) || 0) * faktor);
+      });
+      var bb = $("budgetboks");
+      if (bb) bb.innerHTML = budgetTekst(dagsbudget().spist, dagsbudget().spist + Math.round(ny));
+      knap.textContent = "Regnet med"; knap.disabled = true;
+    };
+  });
   var bg = $("b-gem"); if (bg) bg.onclick = function(){
     var poster = hentDag(S.iDag);
     poster.push(normaliser({
@@ -1361,6 +1705,8 @@ function tegnArk(){
     }, 0));
     gemDag(S.iDag, poster);
     S.forslagStatus = "tom"; S.forslag = null;
+    S.spiseStatus = "tom"; S.spise = null;
+    S.tilskudStatus = "tom"; S.tilskud = null;
     lukArk();
   };
 }
@@ -1427,6 +1773,11 @@ function tegnIndstillinger(){
     + AKTIVITET.map(function(a){
         return '<option value="' + a[0] + '"' + (String(S.profil.aktivitet) === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
       }).join("") + '</select>'
+    + '<span class="lbl">Hvad bruger du appen til</span>'
+    + '<select id="s-hensigt">'
+    + [["tabe","Tabe mig"],["holde","Holde vægten stabil"]].map(function(a){
+        return '<option value="' + a[0] + '"' + ((S.profil.hensigt || "tabe") === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
+      }).join("") + '</select>'
     + '<span class="lbl">Målvægt i kilo (valgfri)</span>'
     + '<input id="s-mvaegt" type="text" inputmode="decimal" value="' + (S.profil.maalvaegt || "") + '" placeholder="fx 78,0">'
     + '<span class="lbl">Model</span><select id="s-model">'
@@ -1471,7 +1822,8 @@ function tegnIndstillinger(){
       alder: Number($("s-alder").value) || 0,
       koen: $("s-koen").value,
       aktivitet: $("s-akt").value,
-      maalvaegt: laesKomma($("s-mvaegt").value)
+      maalvaegt: laesKomma($("s-mvaegt").value),
+      hensigt: $("s-hensigt").value
     });
     S.maal = Number($("s-maal").value) || 0;
     S.model = $("s-model").value;
