@@ -112,6 +112,14 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .detalje{font-size:13px;color:var(--daempet);padding:6px 2px 12px;border-bottom:1px solid var(--linje);}
 .detalje div{display:flex;justify-content:space-between;gap:12px;padding:3px 0;}
 .detalje span:last-child{font-variant-numeric:tabular-nums;flex:none;}
+.detalje button{width:100%;display:flex;justify-content:space-between;gap:12px;
+  background:none;border:none;border-bottom:1px solid #DFE2D9;padding:8px 2px;
+  font:inherit;font-size:13.5px;color:var(--daempet);text-align:left;cursor:pointer;}
+.detalje button:last-child{border-bottom:none;}
+.detalje button .navn{color:var(--blaek);flex:1;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.detalje button .tal{font-variant-numeric:tabular-nums;flex:none;}
+.post .txt{cursor:pointer;}
 .noegletal{display:flex;gap:26px;border-top:1px solid var(--linje);
   border-bottom:1px solid var(--linje);padding:14px 0;margin-top:6px;}
 .noegletal div{font-size:12.5px;color:var(--daempet);}
@@ -153,6 +161,12 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   text-align:center;padding:0 20px;line-height:1.35;}
 .opskrift .kilde{font-size:11px;color:var(--daempet);margin-top:5px;}
 .opskrift .kilde a{color:var(--daempet);}
+.snap{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  border-bottom:1px solid var(--linje);padding:11px 2px;font-size:13.5px;}
+.snap .n{flex:1;min-width:0;}
+.snap .u{font-size:12px;color:var(--daempet);margin-top:2px;}
+.snap button{flex:none;background:none;border:1px solid var(--linje);border-radius:8px;
+  padding:7px 11px;font:inherit;font-size:13px;color:var(--gron);cursor:pointer;}
 .opskrift .fakta{display:flex;gap:18px;font-size:12.5px;color:var(--daempet);margin-top:11px;}
 .opskrift .fakta b{color:var(--blaek);font-weight:600;}
 .opskrift h4{font-size:12.5px;color:var(--daempet);margin:15px 0 7px;font-weight:600;}
@@ -193,7 +207,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "15.0";
+var APP_VERSION = "18.0";
 var SKEMA = 4;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -207,7 +221,9 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_BRUGER = "kd:navn", K_KAEK = "kd:kaek",
     K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek",
     K_LAAS = "kd:laas", K_LAASTID = "kd:laastid", K_FEJL = "kd:fejl",
-    K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash";
+    K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash",
+    P_SNAP = "kd:snap:", K_EKSPORT = "kd:sidste-eksport",
+    K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand";
 var reserve = {};
 
 function laes(k){
@@ -267,6 +283,7 @@ function frigoerPlads(){
   return false;
 }
 function gemDag(noegle, poster){
+  if (!poster || !poster.length){ fjern(P_DAG + noegle); return; }
   var svar = skriv(P_DAG + noegle, JSON.stringify(poster)), n = 0;
   while (svar === "fuld" && n++ < 60 && frigoerPlads()) svar = skriv(P_DAG + noegle, JSON.stringify(poster));
   if (svar === "fuld"){
@@ -275,8 +292,143 @@ function gemDag(noegle, poster){
     })));
   }
 }
+/* ================= Sikkerhedskopier =================
+   Automatiske oejebliksbilleder i browserens eget lager. De redder mod fejlklik og
+   fejl i appen, men ikke mod at lageret ryddes eller telefonen gaar tabt — dertil
+   skal filen ud af telefonen. Billeder gemmes ikke med, da de fylder alt. */
+
+var MAKS_SNAP = 6;
+
+function snapNoegler(){
+  return alleNoegler().filter(function(k){ return k.indexOf(P_SNAP) === 0; })
+    .sort(function(a, b){ return Number(a.slice(P_SNAP.length)) - Number(b.slice(P_SNAP.length)); });
+}
+function snapListe(){
+  return snapNoegler().map(function(k){
+    var d = null;
+    try { d = JSON.parse(laes(k) || "null"); } catch(e){}
+    if (!d) return null;
+    var dage = Object.keys(d.dage || {});
+    var maaltider = dage.reduce(function(a, n){ return a + (d.dage[n] || []).length; }, 0);
+    return { noegle:k, tid:Number(k.slice(P_SNAP.length)), aarsag:d.aarsag || "",
+             dage:dage.length, maaltider:maaltider, vejninger:Object.keys(d.vaegte || {}).length };
+  }).filter(Boolean).reverse();
+}
+
+/* Naar der ryddes ud, fjernes den kopi der ligger taettest paa sin nabo i tid.
+   Saa beholdes automatisk baade en helt frisk og nogle aeldre. */
+function ryddSnaps(){
+  var n = snapNoegler();
+  while (n.length > MAKS_SNAP){
+    var bedst = 1, mindst = Infinity;
+    for (var i = 1; i < n.length - 1; i++){
+      var afstand = Number(n[i+1].slice(P_SNAP.length)) - Number(n[i-1].slice(P_SNAP.length));
+      if (afstand < mindst){ mindst = afstand; bedst = i; }
+    }
+    fjern(n[bedst]);
+    n.splice(bedst, 1);
+  }
+}
+function tagSnap(aarsag, tvunget){
+  var n = snapNoegler();
+  var nyeste = n.length ? Number(n[n.length-1].slice(P_SNAP.length)) : 0;
+  if (!tvunget && Date.now() - nyeste < 20 * 3600 * 1000) return false;
+
+  var dage = {}, antal = 0;
+  dagNoegler().forEach(function(k){
+    var d = k.slice(P_DAG.length);
+    dage[d] = hentDag(d).map(function(p){
+      var kopi = Object.assign({}, p);
+      delete kopi.billede;
+      return kopi;
+    });
+    antal += dage[d].length;
+  });
+  if (!antal && !tvunget) return false;
+
+  var pakke = { v:SKEMA, aarsag:aarsag || "", maal:S.maal, navn:S.navn,
+                profil:S.profil, vaegte:hentVaegte(), dage:dage };
+  var svar = skriv(P_SNAP + Date.now(), JSON.stringify(pakke));
+  if (svar === "fuld"){
+    var gamle = snapNoegler();
+    if (gamle.length){ fjern(gamle[0]); return tagSnap(aarsag, tvunget); }
+    return false;
+  }
+  ryddSnaps();
+  return true;
+}
+function gendanSnap(noegle){
+  var d;
+  try { d = JSON.parse(laes(noegle) || "null"); } catch(e){ return false; }
+  if (!d || !d.dage) return false;
+  tagSnap("før gendannelse", true);
+  dagNoegler().forEach(fjern);
+  Object.keys(d.dage).forEach(function(n){ gemDag(n, (d.dage[n] || []).map(normaliser)); });
+  if (d.vaegte) skriv(K_VAEGT, JSON.stringify(d.vaegte));
+  if (d.profil){ S.profil = d.profil; skriv(K_PROFIL, JSON.stringify(d.profil)); }
+  if (d.maal){ S.maal = d.maal; skriv(K_MAAL, String(d.maal)); }
+  if (d.navn){ S.navn = d.navn; skriv(K_BRUGER, d.navn); }
+  return true;
+}
+/* Hele dagbogen som en pakke — bruges baade til filen og til afsendelsen */
+function backuppakke(){
+  var ud = { type:"kaloriedagbog", skema:SKEMA, tid:new Date().toISOString(),
+             maal:S.maal, navn:S.navn, profil:S.profil, vaegte:hentVaegte(), dage:{} };
+  dageMedData().forEach(function(n){
+    ud.dage[n] = hentDag(n).map(function(p){
+      var k = Object.assign({}, p); delete k.billede; return k;
+    });
+  });
+  return ud;
+}
+
+/* Automatisk kopi ud af telefonen. Safari kan ikke skrive en fil af sig selv —
+   Apple understoetter ikke File System Access API — saa kopien sendes i stedet
+   til en adresse, brugeren selv opretter. */
+function sendTilSky(tvunget){
+  var url = laes(K_SKYURL);
+  if (!url) return Promise.resolve(null);
+  var sidst = Number(laes(K_SKYTID)) || 0;
+  if (!tvunget && Date.now() - sidst < 20 * 3600 * 1000) return Promise.resolve(null);
+
+  var krop = JSON.stringify(backuppakke());
+  function noter(stand){
+    skriv(K_SKYTID, String(Date.now()));
+    skriv(K_SKYSTAND, stand);
+    return stand;
+  }
+  /* Foerst et almindeligt kald, saa svaret kan laeses. Svarer modtageren uden
+     CORS-hoveder, sendes det i blinde bagefter — det naar frem, men kan ikke bekraeftes. */
+  return fetch(url, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:krop })
+    .then(function(r){ return noter(r.ok ? "bekraeftet" : "afvist"); })
+    .catch(function(){
+      return fetch(url, { method:"POST", mode:"no-cors",
+                          headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:krop })
+        .then(function(){ return noter("ubekraeftet"); })
+        .catch(function(){ return noter("fejlet"); });
+    });
+}
+function skyTekst(){
+  if (!laes(K_SKYURL)) return "";
+  var stand = laes(K_SKYSTAND), t = Number(laes(K_SKYTID)) || 0;
+  if (!t) return "Endnu ikke sendt.";
+  var d = new Date(t);
+  var naar = d.toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + " kl. "
+           + d.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"});
+  if (stand === "bekraeftet") return "Sendt og bekræftet " + naar + ".";
+  if (stand === "ubekraeftet") return "Sendt " + naar + ", men modtageren svarer ikke tilbage. Tjek mappen den første gang.";
+  if (stand === "afvist") return "Modtageren afviste kopien " + naar + ".";
+  return "Afsendelsen fejlede " + naar + ".";
+}
+
+function dageSidenEksport(){
+  var t = Number(laes(K_EKSPORT)) || 0;
+  return t ? Math.floor((Date.now() - t) / 86400000) : null;
+}
+
 function migrer(){
   var fra = Number(laes(K_SKEMA)) || 1;
+  if (fra !== SKEMA) tagSnap("før opdatering af dataformat", true);
   if (fra < 4){
     dagNoegler().forEach(function(k){
       var n = k.slice(P_DAG.length);
@@ -1192,13 +1344,14 @@ function tegnHoved(){
     poster.forEach(function(p){
       h += '<div class="post">'
         + (p.billede ? '<img src="' + p.billede + '" alt="">' : '<div class="tom-foto"></div>')
-        + '<div class="txt"><div class="navn">' + esc(p.navn) + '</div>'
+        + '<div class="txt" data-red="' + esc(S.iDag) + '|' + esc(p.id) + '"><div class="navn">' + esc(p.navn) + '</div>'
         + '<div class="meta">' + esc(p.tid) + " · " + esc(p.kategori) + '</div>'
         + (p.kommentar ? '<div class="kom">' + esc(p.kommentar) + '</div>' : "") + '</div>'
         + '<div class="kcal">' + tal(p.kalorier) + '</div>'
         + '<button class="xknap" data-slet="' + esc(p.id) + '" aria-label="Slet ' + esc(p.navn) + '">&times;</button></div>';
     });
   }
+  if (poster.length) h += '<p class="grafnote" style="margin:2px 2px 0">Tryk på et måltid for at rette det.</p>';
   h += '<h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>'
     + '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
     + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div>'
@@ -1212,10 +1365,13 @@ function tegnHoved(){
   $("b-foto").onclick = function(){ $("fil").click(); };
   $("b-skriv").onclick = function(){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); };
   tegnSpiseforslag();
+  bindRediger();
   Array.prototype.forEach.call(document.querySelectorAll("[data-slet]"), function(b){
     b.onclick = function(){
       var id = b.getAttribute("data-slet");
       gemDag(S.iDag, hentDag(S.iDag).filter(function(p){ return p.id !== id; }));
+      S.spise = null; S.spiseStatus = "tom";
+      S.forslag = null; S.forslagStatus = "tom";
       tegn();
     };
   });
@@ -1471,6 +1627,87 @@ function aabnVejning(dag){
   };
 }
 
+/* --- Ret eller slet en enkelt registrering, ogsaa fra en tidligere dag --- */
+function bindRediger(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-red]"), function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      var d = b.getAttribute("data-red").split("|");
+      aabnRediger(d[0], d.slice(1).join("|"));
+    };
+  });
+}
+function aabnRediger(dag, id){
+  var poster = hentDag(dag);
+  var m = null, i;
+  for (i = 0; i < poster.length; i++) if (poster[i].id === id) m = poster[i];
+  if (!m) return;
+
+  var h = '<div class="overlay" id="r-overlay"><div class="panel">'
+    + '<h3>Ret registrering</h3>'
+    + '<p class="grafnote" style="margin:-8px 0 0">' + kortDato(dag)
+    + (m.tid ? ' kl. ' + esc(m.tid) : "") + '</p>'
+    + (m.billede ? '<img class="foto" src="' + m.billede + '" alt="" style="margin-top:14px">' : "")
+    + '<span class="lbl">Måltid</span>'
+    + '<input id="r-navn" value="' + esc(m.navn) + '">'
+    + '<span class="lbl">Kategori</span><select id="r-kat">'
+    + KATEGORIER.map(function(k){
+        return '<option value="' + esc(k) + '"' + (m.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
+      }).join("") + '</select>'
+    + '<span class="lbl">Kalorier</span>'
+    + '<input id="r-kcal" type="number" inputmode="numeric" value="' + m.kalorier + '">'
+    + '<span class="lbl">Protein · kulhydrat · fedt (g)</span><div class="gitter">'
+    + '<input id="r-pro" type="number" inputmode="numeric" value="' + m.protein_g + '">'
+    + '<input id="r-kul" type="number" inputmode="numeric" value="' + m.kulhydrat_g + '">'
+    + '<input id="r-fedt" type="number" inputmode="numeric" value="' + m.fedt_g + '"></div>'
+    + '<span class="lbl">Genstande, hvis der var alkohol</span>'
+    + '<input id="r-gen" type="text" inputmode="decimal" value="' + (m.genstande || 0) + '">'
+    + '<span class="lbl">Tidspunkt</span>'
+    + '<input id="r-tid" type="text" inputmode="numeric" value="' + esc(m.tid) + '" placeholder="fx 18.30">'
+    + '<button class="knap" id="r-gem" style="margin-top:16px">Gem ændringer</button>'
+    + '<button class="knap fare" id="r-slet" style="margin-top:8px">Slet registreringen</button>'
+    + '<button class="knap sek" id="r-luk" style="margin-top:8px">Fortryd</button>'
+    + '</div></div>';
+  var gl = $("r-overlay"); if (gl) gl.remove();
+  document.body.insertAdjacentHTML("beforeend", h);
+
+  function luk(){ var o = $("r-overlay"); if (o) o.remove(); }
+  function opdater(){
+    S.forslag = null; S.forslagStatus = "tom";
+    S.spise = null; S.spiseStatus = "tom";
+    S.tilskud = null; S.tilskudStatus = "tom";
+    luk(); tegn();
+  }
+  $("r-overlay").onclick = function(e){ if (e.target.id === "r-overlay") luk(); };
+  $("r-luk").onclick = luk;
+  $("r-gem").onclick = function(){
+    var nye = hentDag(dag).map(function(p){
+      if (p.id !== id) return p;
+      return normaliser({
+        id: p.id,
+        tid: $("r-tid").value.trim(),
+        navn: $("r-navn").value.trim() || "Måltid",
+        kategori: $("r-kat").value,
+        portion: p.portion,
+        kommentar: p.kommentar,
+        kalorier: Number($("r-kcal").value) || 0,
+        protein_g: Number($("r-pro").value) || 0,
+        kulhydrat_g: Number($("r-kul").value) || 0,
+        fedt_g: Number($("r-fedt").value) || 0,
+        genstande: laesKomma($("r-gen").value),
+        billede: p.billede
+      }, 0);
+    });
+    gemDag(dag, nye);
+    opdater();
+  };
+  $("r-slet").onclick = function(){
+    if (!confirm("Slet “" + m.navn + "” fra " + kortDato(dag) + "?")) return;
+    gemDag(dag, hentDag(dag).filter(function(p){ return p.id !== id; }));
+    opdater();
+  };
+}
+
 /* --- Historik --- */
 function tegnHistorik(){
   var perioder = byggPerioder(S.periode);
@@ -1510,11 +1747,15 @@ function tegnHistorik(){
       h += '<div class="detalje">';
       if (S.periode === "dag"){
         hentDag(p.dage[0]).forEach(function(m){
-          h += '<div><span>' + esc(m.navn) + '</span><span>' + tal(m.kalorier) + '</span></div>';
+          h += '<button data-red="' + esc(p.dage[0]) + '|' + esc(m.id) + '">'
+            + '<span class="navn">' + esc(m.navn) + '</span>'
+            + '<span class="tal">' + tal(m.kalorier) + ' ›</span></button>';
         });
       } else {
         p.dage.slice().reverse().forEach(function(n){
-          h += '<div><span>' + kortDato(n) + '</span><span>' + tal(dagSum(n)) + '</span></div>';
+          h += '<button data-gaadag="' + n + '">'
+            + '<span class="navn">' + kortDato(n) + '</span>'
+            + '<span class="tal">' + tal(dagSum(n)) + ' ›</span></button>';
         });
       }
       h += '</div>';
@@ -1527,6 +1768,16 @@ function tegnHistorik(){
     b.onclick = function(){
       var id = b.getAttribute("data-valg");
       S.valgt = S.valgt === id ? null : id;
+      tegnHistorik();
+    };
+  });
+  bindRediger();
+  /* Fra en uge eller maaned kan man springe ned i den enkelte dag */
+  Array.prototype.forEach.call(document.querySelectorAll("[data-gaadag]"), function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      S.periode = "dag"; S.valgt = b.getAttribute("data-gaadag");
+      window.scrollTo(0, 0);
       tegnHistorik();
     };
   });
@@ -1947,6 +2198,20 @@ function lukArk(){
 }
 
 /* --- Indstillinger --- */
+function snapHtml(){
+  var liste = snapListe();
+  if (!liste.length) return '<div class="tom" style="padding:14px 16px">Der er ikke taget nogen kopi endnu.</div>';
+  return liste.map(function(x){
+    var d = new Date(x.tid);
+    return '<div class="snap"><span class="n">'
+      + d.toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + " kl. "
+      + d.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"})
+      + '<span class="u">' + x.dage + ' dage · ' + x.maaltider + ' måltider · '
+      + x.vejninger + ' vejninger' + (x.aarsag ? ' · ' + esc(x.aarsag) : "") + '</span></span>'
+      + '<button data-snap="' + esc(x.noegle) + '">Gendan</button></div>';
+  }).join("");
+}
+
 function tegnIndstillinger(){
   var h = '<div class="overlay" id="ind-overlay"><div class="panel"><h3>Indstillinger</h3>'
     + '<span class="lbl">Dit fornavn</span>'
@@ -1991,7 +2256,27 @@ function tegnIndstillinger(){
     + '<div class="note">Dagbogen ligger kun i denne browser. Nøglen bliver liggende ved opdateringer — du skal kun taste den igen, hvis appen flytter til en ny adresse.</div>'
     + '<div class="tjek"><input type="checkbox" id="s-medn"><label for="s-medn">Tag nøglen med i sikkerhedskopien, så en ny telefon er klar med det samme</label></div>'
     + '<button class="knap" id="s-gem" style="margin-top:16px">Gem</button>'
-    + '<button class="knap sek" id="s-eksport" style="margin-top:8px">Gem sikkerhedskopi</button>'
+    + '<h3 style="margin:26px 0 0">Sikkerhedskopier</h3>'
+    + '<p class="grafnote" style="margin:6px 0 10px">Appen tager selv en kopi hver dag og altid før '
+    + 'noget slettes eller dataformatet ændres. Kopierne ligger i browseren og indeholder tal, '
+    + 'ikke billeder. Ryddes browserens data, eller mistes telefonen, ryger de med — så gem en '
+    + 'fil ud af telefonen en gang imellem.</p>'
+    + snapHtml()
+    + (function(){
+        var d = dageSidenEksport();
+        if (d === null) return '<div class="note">Du har aldrig gemt en kopi ud af telefonen.</div>';
+        if (d >= 30) return '<div class="note">Seneste kopi ud af telefonen er ' + d + ' dage gammel.</div>';
+        return '<p class="grafnote">Seneste kopi ud af telefonen: for ' + d + ' dage siden.</p>';
+      })()
+    + '<span class="lbl">Adresse til automatisk kopi (valgfri)</span>'
+    + '<input id="s-skyurl" autocomplete="off" autocapitalize="off" spellcheck="false" '
+    + 'value="' + esc(laes(K_SKYURL) || "") + '" placeholder="https://script.google.com/...">'
+    + (laes(K_SKYURL)
+        ? '<p class="grafnote" style="margin-top:7px">' + esc(skyTekst()) + '</p>'
+          + '<button class="knap sek" id="s-skynu" style="margin-top:8px">Send kopi nu</button>'
+        : '<p class="grafnote" style="margin-top:7px">Sættes der en adresse ind, sender appen selv '
+          + 'en kopi én gang i døgnet. Uden adresse skal filen gemmes manuelt.</p>')
+    + '<button class="knap sek" id="s-eksport" style="margin-top:8px">Gem fil i Filer-appen</button>'
     + '<button class="knap sek" id="s-import" style="margin-top:8px">Indlæs sikkerhedskopi</button>'
     + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data</button>'
     + '<h3 style="margin:26px 0 0">Sikkerhed</h3>'
@@ -2030,6 +2315,11 @@ function tegnIndstillinger(){
     S.maal = Number($("s-maal").value) || 0;
     S.model = $("s-model").value;
     skriv(K_MAAL, String(S.maal)); skriv(K_MODEL, S.model);
+    var su = $("s-skyurl");
+    if (su){
+      var v = su.value.trim();
+      if (v) skriv(K_SKYURL, v); else fjern(K_SKYURL);
+    }
     var us = $("s-unsplash").value.trim();
     if (us) skriv(K_UNSPLASH, us);
     var n = $("s-noegle").value.trim();
@@ -2044,20 +2334,44 @@ function tegnIndstillinger(){
     luk();
   };
   $("s-eksport").onclick = function(){
-    var ud = { type:"kaloriedagbog", skema:SKEMA, maal:S.maal, navn:S.navn,
-               profil:S.profil, vaegte:hentVaegte(), dage:{} };
+    var ud = backuppakke();
     if ($("s-medn").checked){
       if (harLaas()) ud.laas = laasPakke();      /* stadig beskyttet af koden */
       else ud.noegle = aktivNoegle || laes(K_NOEGLE) || "";
     }
-    dageMedData().forEach(function(n){ ud.dage[n] = hentDag(n); });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(ud)], {type:"application/json"}));
     a.download = "kaloriedagbog-" + S.iDag + ".json";
     a.click();
+    skriv(K_EKSPORT, String(Date.now()));
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
   };
-  $("s-import").onclick = function(){ $("importfil").click(); };
+  $("s-import").onclick = function(){ tagSnap("før indlæsning af kopi", true); $("importfil").click(); };
+  var sn = $("s-skynu"); if (sn) sn.onclick = function(){
+    sn.textContent = "Sender …"; sn.disabled = true;
+    sendTilSky(true).then(function(){
+      sn.textContent = "Sendt"; 
+      setTimeout(function(){ if (S.indst) tegnIndstillinger(); }, 900);
+    });
+  };
+  Array.prototype.forEach.call(document.querySelectorAll("[data-snap]"), function(b){
+    b.onclick = function(){
+      var n = b.getAttribute("data-snap");
+      if (!confirm("Gendan denne kopi?\n\nDagbogen bliver erstattet af kopiens indhold. "
+        + "Der tages en kopi af det nuværende først, så det kan fortrydes.")) return;
+      if (gendanSnap(n)){
+        S.indst = false;
+        var o = $("ind-overlay"); if (o) o.remove();
+        S.forslag = null; S.forslagStatus = "tom";
+        S.spise = null; S.spiseStatus = "tom";
+        S.tilskud = null; S.tilskudStatus = "tom";
+        tegn();
+        alert("Kopien er gendannet.");
+      } else {
+        alert("Kopien kunne ikke læses.");
+      }
+    };
+  });
   var lt = $("s-laastil"); if (lt) lt.onclick = function(){ opsaetKode(); };
   var lf = $("s-laasfra"); if (lf) lf.onclick = function(){
     if (!confirm("Slå kodelåsen fra? API-nøglen bliver derefter liggende ukrypteret på telefonen.")) return;
@@ -2084,8 +2398,13 @@ function tegnIndstillinger(){
     });
   };
   $("s-nulstil").onclick = function(){
-    if (!confirm("Slet alle måltider og indstillinger på denne telefon? Det kan ikke fortrydes.")) return;
+    if (!confirm("Slet alle måltider og indstillinger på denne telefon?\n\n"
+      + "Der bliver taget en sikkerhedskopi først, så det kan fortrydes under Sikkerhedskopier.")) return;
+    tagSnap("før alt blev slettet", true);
+    var beholdt = {};
+    snapNoegler().forEach(function(k){ beholdt[k] = laes(k); });
     alleNoegler().filter(function(k){ return k.indexOf("kd:") === 0; }).forEach(fjern);
+    Object.keys(beholdt).forEach(function(k){ skriv(k, beholdt[k]); });
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
     aktivNoegle = null; aktivKode = null;
     S.navn = ""; S.kaek = true; S.profil = {};
@@ -2283,6 +2602,8 @@ try {
 } catch(e){}
 
 migrer();
+tagSnap("dagligt", false);
+sendTilSky(false);
 if (!harLaas()) aktivNoegle = laes(K_NOEGLE);
 tegn();
 tjekOpdatering(false);
