@@ -159,9 +159,8 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .opskrift ul,.opskrift ol{margin:0;padding-left:19px;font-size:14px;}
 .opskrift li{margin-bottom:5px;}
 .opskrift .tip{font-size:13.5px;color:var(--daempet);font-style:italic;margin-top:12px;}
-.kort button.mini,.kort a.mini{margin-top:10px;margin-right:8px;background:none;
-  border:1px solid var(--linje);border-radius:8px;padding:8px 12px;font:inherit;
-  font-size:13.5px;color:var(--gron);cursor:pointer;display:inline-block;text-decoration:none;}
+.kort button.mini{margin-top:10px;background:none;border:1px solid var(--linje);
+  border-radius:8px;padding:8px 12px;font:inherit;font-size:13.5px;color:var(--gron);cursor:pointer;}
 .kort button.mini:disabled{color:var(--daempet);border-style:dashed;cursor:default;}
 .kort .spar{float:right;font-family:Georgia,serif;font-size:15px;color:var(--gron);
   font-variant-numeric:tabular-nums;margin-left:10px;}
@@ -194,7 +193,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "14.0";
+var APP_VERSION = "15.0";
 var SKEMA = 4;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1324,13 +1323,7 @@ function opskriftHtml(i){
       + d.fremgangsmaade.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join("") + '</ol>';
   }
   if (d.tip) h += '<div class="tip">' + esc(d.tip) + '</div>';
-  h += '<div style="margin-top:14px">'
-    + '<button class="mini" id="b-tilfoej">Tilføj til dagbogen</button>'
-    + '<a class="mini" href="https://www.google.com/search?q='
-    + encodeURIComponent("site:valdemarsro.dk " + (d.titel || ""))
-    + '" target="_blank" rel="noopener">Søg på Valdemarsro</a></div>'
-    + '<p class="kilde" style="margin-top:9px">Opskriften herover er skrevet til appen. '
-    + 'Knappen søger efter noget lignende hos Valdemarsro og åbner deres egen side.</p>';
+  h += '<button class="mini" id="b-tilfoej" style="margin-top:14px">Tilføj til dagbogen</button>';
   return h + '</div>';
 }
 
