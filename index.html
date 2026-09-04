@@ -207,7 +207,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "19.0";
+var APP_VERSION = "21.1";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -594,7 +594,13 @@ var S = {
   model: laes(K_MODEL) || "claude-sonnet-5",
   navn: laes(K_BRUGER) || "",
   profil: (function(){ try { return JSON.parse(laes(K_PROFIL) || "{}") || {}; } catch(e){ return {}; } })(),
-  kaek: laes(K_KAEK) !== "0",
+  kaekhed: (function(){
+    var v = laes(K_KAEK);
+    if (v === null || v === "1") return "skarp";   /* standard, og den gamle afkrydsning slaaet til */
+    if (v === "0") return "fra";
+    return v;
+  })(),
+  get kaek(){ return this.kaekhed !== "fra"; },
   skaerm: "idag",
   periode: "dag",
   vindue: 30,
@@ -961,7 +967,11 @@ function vurderingsdel(){
     + 'Giv 1-3 forslag, men kun naar der reelt er mindst 75 kcal at spare, og maaltidet ligger i '
     + 'den tunge ende af dagens budget. Ellers en tom liste: er valget godt, staar rosen fint '
     + 'alene, og gode raad til en skaal havregryn er spild af begges tid. Hold forslagene til '
-    + 'realistisk dansk hverdagsmad, og skriv dem som noget man kan goere, ikke som noget man burde.';
+    + 'realistisk dansk hverdagsmad, og skriv dem som noget man kan goere, ikke som noget man burde.\n'
+    + 'Feltet nyt_navn skal vaere det navn, registreringen boer have, hvis forslaget bliver fulgt — '
+    + 'altsaa en beskrivelse af hvad der saa reelt blev spist. Er retten "Pasta med floedesovs" og '
+    + 'forslaget er at lade sovsen staa, er nyt_navn "Pasta uden floedesovs". Feltet ros er en kort '
+    + 'kaek bemaerkning, der kun bliver vist, hvis forslaget faktisk bliver fulgt.';
 }
 
 function byggPrompt(note, svar, beskrivelse){
@@ -1010,7 +1020,10 @@ function byggPrompt(note, svar, beskrivelse){
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
     + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort saetning om det vaesentligste forbehold", '
     + '"status": "godt"/"fint"/"tungt", '
-    + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, "note": "kort hvordan, max 12 ord"}], '
+    + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, '
+    + '"note": "kort hvordan, max 12 ord", '
+    + '"nyt_navn": "hvad maaltidet saa hedder, hvis forslaget foelges — kort og konkret", '
+    + '"ros": "kaek kvittering paa max 15 ord, hvis forslaget faktisk bliver fulgt"}], '
     + (S.kaek ? '"kommentar": "en kaek bemaerkning paa max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette maaltid", ' : '')
     + '"spoergsmaal": [{"tekst": "spoergsmaalet", "valg": ["mulighed", "mulighed"]}]}\n\n'
     + (beskrivelse
@@ -1221,13 +1234,35 @@ function hentForslag(a){
    Et vaerktoej man aabner hver dag maa gerne vaere fraekt, ikke nedgoerende. */
 function tone(){
   var n = S.navn || "brugeren";
-  return 'TONE: kaek, toer dansk hverdagshumor. Korte saetninger, gerne et billedligt sidespring. '
-    + 'Du taler til ' + n + ' og bruger navnet. Du maa gerne drille ' + n + ' personligt: '
-    + 'vaner, udflugter, optimistiske portionsvurderinger, gode intentioner der ikke holdt en uge, '
-    + 'og de forklaringer folk giver sig selv klokken 23. Vaer frisk, ikke hoeflig.\n'
-    + 'GRAENSER: ingen bemaerkninger om krop, vaegt, figur eller udseende. Ingen skam over hvad '
-    + 'der er spist, og ingen mad kaldes synd, forbudt eller daarlig. Der drilles vaner og valg, '
-    + 'aldrig hvordan nogen ser ud. Ingen loeftede pegefingre og ingen sundhedspraediken.';
+  var skarp = S.kaekhed === "skarp";
+  return 'STEMME — dansk standup-register, toert og observerende. Otte konkrete greb:\n'
+    + '1. VAER KONKRET. Aldrig "du spiser sent". Hellere "klokken 23.40, staaende op, direkte fra gryden". '
+    + 'Naevn maengder, klokkeslaet, steder og maerker. Det generelle er ikke morsomt; det genkendelige er.\n'
+    + '2. RYTME. To korte saetninger. Saa en lang, der loeber en anelse laengere end den burde og '
+    + 'tager et sidespring med. Saa en kort, der lukker den.\n'
+    + '3. ESKALATION FREM FOR POINTE. Tag en almindelig iagttagelse og foer den et skridt laengere, '
+    + 'end der er daekning for. Selve overdrivelsen er vitsen — der skal ikke vaere en pointe bagefter.\n'
+    + '4. TAL DIREKTE TIL ' + n.toUpperCase() + '. Brug navnet. Stil gerne et retorisk spoergsmaal, '
+    + 'du ikke venter svar paa.\n'
+    + '5. TAG DIG SELV MED. Appen er ogsaa til grin — den sidder i en telefon og taeller kalorier i '
+    + 'et fotografi af aftensmad. Selvudlevering foerst, drilleri bagefter.\n'
+    + '6. PUNKTER DET HOEJTIDELIGE. Sundhedssprog, gode forsaetter, livsstilssnak og dine egne raad '
+    + 'skal stikkes hul paa, ikke gentages.\n'
+    + '7. TILBAGEKALD. Er der et moenster i dagbogen, saa henvis til det. Det, der gaar igen, er '
+    + 'sjovere end det enkeltstaaende.\n'
+    + '8. INGEN FORKLARING. Vitsen forklares aldrig bagefter. Ingen emoji. Hoejst et udraabstegn. '
+    + 'Ingen ordspil for ordspillets skyld.\n'
+    + (skarp
+        ? '9. VAER KONTANT. Sig det ligeud uden at pakke det ind. Ironi frem for hoeflighed. '
+          + 'Bandeord som sgu, fandeme og for helvede maa bruges sparsomt, hvor de giver rytme — '
+          + 'ikke i hver saetning.\n'
+        : '9. HOLD DEN TOER. Skarp i iagttagelsen, mild i formen. Ingen bandeord.\n')
+    + 'Du maa drille ' + n + ' personligt: vaner, udflugter, optimistiske portionsvurderinger, '
+    + 'gode forsaetter der holdt en uge, og de forklaringer folk giver sig selv efter klokken 22.\n'
+    + 'GRAENSER: ingen bemaerkninger om krop, vaegt, figur eller udseende. Ingen skam over hvad der '
+    + 'er spist, og ingen mad kaldes synd, forbudt eller daarlig. Der drilles vaner og valg, aldrig '
+    + 'hvordan nogen ser ud. Ingen loeftede pegefingre og ingen sundhedspraediken — heller ikke '
+    + 'forklaedt som en vits.';
 }
 
 /* De officielle danske kostraad og Sundhedsstyrelsens tilskudsanbefalinger.
@@ -2120,7 +2155,8 @@ function tegnArk(){
     var mk = maerker[r.status] || maerker.fint;
     h += '<span class="maerke stor ' + mk[0] + '">' + mk[1] + '</span>'
       + '<div class="budget" id="budgetboks">' + budgetTekst(b.spist, efter) + '</div>';
-    if (r.kommentar) h += '<p class="overskrift" style="font-size:17px;margin:14px 0 0">' + esc(r.kommentar) + '</p>';
+    h += '<p class="overskrift" id="kommentarlinje" style="font-size:17px;margin:14px 0 0'
+      + (r.kommentar ? '' : ';display:none') + '">' + esc(r.kommentar || "") + '</p>';
     var alt = (Array.isArray(r.alternativer) ? r.alternativer.filter(function(x){ return x && x.til; }) : []).slice(0,3);
     var nu = alt.filter(function(x){ return x.naar !== "naeste"; });
     var senere = alt.filter(function(x){ return x.naar === "naeste"; });
@@ -2140,13 +2176,12 @@ function tegnArk(){
       h += '<h2 class="sek" style="margin:20px 0 9px">Til næste gang</h2>';
       senere.forEach(function(x){ h += kortet(x, alt.indexOf(x), false); });
     }
-    if (r.portion || r.note || r.usikkerhed === "hoej"){
-      h += '<div class="note">'
-        + (r.portion ? '<div>Regnet som: ' + esc(r.portion) + '</div>' : '')
-        + (r.note ? '<div style="margin-top:4px">' + esc(r.note) + '</div>' : '')
-        + (r.usikkerhed === "hoej" ? '<div style="margin-top:4px">Usikkert gæt — ret gerne tallet.</div>' : '')
-        + '</div>';
-    }
+    var harNote = r.portion || r.note || r.usikkerhed === "hoej";
+    h += '<div class="note" id="noteboks"' + (harNote ? '' : ' style="display:none"') + '>'
+      + (r.portion ? '<div>Regnet som: ' + esc(r.portion) + '</div>' : '')
+      + (r.note ? '<div style="margin-top:4px">' + esc(r.note) + '</div>' : '')
+      + (r.usikkerhed === "hoej" ? '<div style="margin-top:4px">Usikkert gæt — ret gerne tallet.</div>' : '')
+      + '</div>';
     h += '<button class="knap" id="b-gem" style="margin-top:16px">Gem i dagbogen</button>'
       + '<button class="knap sek" id="b-luk" style="margin-top:8px">Kassér</button>';
   }
@@ -2203,13 +2238,39 @@ function tegnArk(){
       var x = altListe[Number(knap.getAttribute("data-alt"))];
       if (!x) return;
       var kcal = Number($("f-kcal").value) || 0;
-      var spar = Math.min(Number(x.spar) || 0, kcal);
+      /* Besparelsen gaelder én portion, saa den skal ganges op, hvis der er flere */
+      var antal = laesKomma($("f-ant").value) || 1;
+      var spar = Math.min((Number(x.spar) || 0) * antal, kcal);
       if (spar <= 0) return;
       var ny = kcal - spar, faktor = kcal > 0 ? ny / kcal : 0;
       $("f-kcal").value = Math.round(ny);
-      ["f-pro","f-kul","f-fedt"].forEach(function(id){
-        $(id).value = Math.round((Number($(id).value) || 0) * faktor);
+      ["f-pro","f-kul","f-fedt","f-gen"].forEach(function(id){
+        var i = $(id); if (!i) return;
+        var v = laesKomma(i.value) * faktor;
+        i.value = id === "f-gen" ? Math.round(v * 10) / 10 : Math.round(v);
       });
+
+      /* Teksten skal foelge tallene, saa registreringen beskriver det der faktisk blev spist */
+      var nytNavn = (x.nyt_navn || "").trim();
+      if (!nytNavn){
+        var gammelt = ($("f-navn").value || "").trim();
+        nytNavn = gammelt ? gammelt + " — " + x.til : x.til;
+      }
+      $("f-navn").value = nytNavn;
+      a.r.navn = nytNavn;
+      a.r.portion = (a.r.portion ? a.r.portion + " · " : "") + "ændret: " + x.til;
+      a.r.kommentar = (x.ros || "").trim();
+      var kl = $("kommentarlinje");
+      if (kl){
+        kl.textContent = a.r.kommentar;
+        kl.style.display = a.r.kommentar ? "" : "none";
+      }
+      var nb = $("noteboks");
+      if (nb){
+        nb.innerHTML = '<div>Regnet som: ' + esc(a.r.portion) + '</div>';
+        nb.style.display = "";
+      }
+
       var bb = $("budgetboks");
       if (bb) bb.innerHTML = budgetTekst(dagsbudget().spist, dagsbudget().spist + Math.round(ny));
       knap.textContent = "Regnet med"; knap.disabled = true;
@@ -2301,8 +2362,12 @@ function tegnIndstillinger(){
   var h = '<div class="overlay" id="ind-overlay"><div class="panel"><h3>Indstillinger</h3>'
     + '<span class="lbl">Dit fornavn</span>'
     + '<input id="s-navn" value="' + esc(S.navn) + '" placeholder="Fornavn">'
-    + '<div class="tjek"><input type="checkbox" id="s-kaek"' + (S.kaek ? " checked" : "") + '>'
-    + '<label for="s-kaek">Kække kommentarer til hvert måltid</label></div>'
+    + '<span class="lbl">Kommentarer til måltiderne</span>'
+    + '<select id="s-kaek">'
+    + [["skarp","Skarp — kontant, må bande"],["kaek","Kæk — tør og venlig"],["fra","Ingen kommentarer"]]
+        .map(function(a){
+          return '<option value="' + a[0] + '"' + (S.kaekhed === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
+        }).join("") + '</select>'
     + '<span class="lbl">Dagligt mål (kalorier)</span>'
     + '<input id="s-maal" type="number" inputmode="numeric" value="' + S.maal + '">'
     + '<h3 style="margin:26px 0 0">Profil</h3>'
@@ -2387,8 +2452,8 @@ function tegnIndstillinger(){
   $("s-gem").onclick = function(){
     var nv = $("s-navn").value.trim();
     if (nv){ S.navn = nv.slice(0,30); skriv(K_BRUGER, S.navn); }
-    S.kaek = $("s-kaek").checked;
-    skriv(K_KAEK, S.kaek ? "1" : "0");
+    S.kaekhed = $("s-kaek").value;
+    skriv(K_KAEK, S.kaekhed);
     gemProfil({
       hoejde: Number($("s-hoejde").value) || 0,
       alder: Number($("s-alder").value) || 0,
@@ -2492,7 +2557,7 @@ function tegnIndstillinger(){
     Object.keys(beholdt).forEach(function(k){ skriv(k, beholdt[k]); });
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
     aktivNoegle = null; aktivKode = null;
-    S.navn = ""; S.kaek = true; S.profil = {};
+    S.navn = ""; S.kaekhed = "skarp"; S.profil = {};
     S.forslag = null; S.forslagStatus = "tom";
     var o = $("ind-overlay"); if (o) o.remove();
     tegn();
