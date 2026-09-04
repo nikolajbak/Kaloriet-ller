@@ -207,7 +207,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "21.1";
+var APP_VERSION = "22.0";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -596,7 +596,7 @@ var S = {
   profil: (function(){ try { return JSON.parse(laes(K_PROFIL) || "{}") || {}; } catch(e){ return {}; } })(),
   kaekhed: (function(){
     var v = laes(K_KAEK);
-    if (v === null || v === "1") return "skarp";   /* standard, og den gamle afkrydsning slaaet til */
+    if (v === null || v === "1") return "brutal";  /* standard, og den gamle afkrydsning slaaet til */
     if (v === "0") return "fra";
     return v;
   })(),
@@ -1234,7 +1234,8 @@ function hentForslag(a){
    Et vaerktoej man aabner hver dag maa gerne vaere fraekt, ikke nedgoerende. */
 function tone(){
   var n = S.navn || "brugeren";
-  var skarp = S.kaekhed === "skarp";
+  var brutal = S.kaekhed === "brutal";
+  var skarp = brutal || S.kaekhed === "skarp";
   return 'STEMME — dansk standup-register, toert og observerende. Otte konkrete greb:\n'
     + '1. VAER KONKRET. Aldrig "du spiser sent". Hellere "klokken 23.40, staaende op, direkte fra gryden". '
     + 'Naevn maengder, klokkeslaet, steder og maerker. Det generelle er ikke morsomt; det genkendelige er.\n'
@@ -1257,12 +1258,30 @@ function tone(){
           + 'Bandeord som sgu, fandeme og for helvede maa bruges sparsomt, hvor de giver rytme — '
           + 'ikke i hver saetning.\n'
         : '9. HOLD DEN TOER. Skarp i iagttagelsen, mild i formen. Ingen bandeord.\n')
+    + (brutal
+        ? '10. BRUTAL AERLIGHED. Ingen indpakning og ingen troestepraemie. Sig det, en ven ville '
+          + 'sige, hvis han var holdt op med at vaere hoeflig. Vaegten er ikke et oemtaaleligt '
+          + 'emne: tal ligeud om tallene, om udviklingen og om afstanden til maalet. Kald '
+          + 'selvbedraget hvad det er — "lige en enkelt" der vejer 900 kalorier, mandagen der '
+          + 'aldrig kommer, portionen der blev vurderet med et optimistisk oeje, ugen der blev '
+          + 'kaldt en undtagelse for fjerde gang. Vaer haard ved undskyldningerne. Du behoever '
+          + 'ikke afslutte med noget opmuntrende.\n'
+        : '')
     + 'Du maa drille ' + n + ' personligt: vaner, udflugter, optimistiske portionsvurderinger, '
     + 'gode forsaetter der holdt en uge, og de forklaringer folk giver sig selv efter klokken 22.\n'
-    + 'GRAENSER: ingen bemaerkninger om krop, vaegt, figur eller udseende. Ingen skam over hvad der '
-    + 'er spist, og ingen mad kaldes synd, forbudt eller daarlig. Der drilles vaner og valg, aldrig '
-    + 'hvordan nogen ser ud. Ingen loeftede pegefingre og ingen sundhedspraediken — heller ikke '
-    + 'forklaedt som en vits.';
+    + (brutal
+        ? 'GRAENSER: gaa efter vanerne, valgene, undskyldningerne og tallene — ikke efter spejlet. '
+          + 'Ingen bemaerkninger om hvordan ' + n + ' SER UD: kropsform, figur, mave, hage, toej '
+          + 'eller udseende er udenfor, og det samme er hans vaerdi som menneske. Vaegten som TAL '
+          + 'og som UDVIKLING er derimod fair game og maa siges uden filter. Mad kaldes ikke synd '
+          + 'eller forbudt — der er ikke noget moralsk paa spil, kun regnskab. Ingen '
+          + 'sundhedspraediken, heller ikke forklaedt som en vits.\n'
+          + 'Det handler ikke om hoeflighed: hakken paa kroppen virker ikke og er ikke den slags '
+          + 'haardhed der bider. Vanerne og tallene rammer skarpere.'
+        : 'GRAENSER: ingen bemaerkninger om krop, vaegt, figur eller udseende. Ingen skam over hvad '
+          + 'der er spist, og ingen mad kaldes synd, forbudt eller daarlig. Der drilles vaner og '
+          + 'valg, aldrig hvordan nogen ser ud. Ingen loeftede pegefingre og ingen '
+          + 'sundhedspraediken — heller ikke forklaedt som en vits.');
 }
 
 /* De officielle danske kostraad og Sundhedsstyrelsens tilskudsanbefalinger.
@@ -2364,10 +2383,13 @@ function tegnIndstillinger(){
     + '<input id="s-navn" value="' + esc(S.navn) + '" placeholder="Fornavn">'
     + '<span class="lbl">Kommentarer til måltiderne</span>'
     + '<select id="s-kaek">'
-    + [["skarp","Skarp — kontant, må bande"],["kaek","Kæk — tør og venlig"],["fra","Ingen kommentarer"]]
+    + [["brutal","Brutal — ingen fingre imellem"],["skarp","Skarp — kontant, må bande"],
+      ["kaek","Kæk — tør og venlig"],["fra","Ingen kommentarer"]]
         .map(function(a){
           return '<option value="' + a[0] + '"' + (S.kaekhed === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
         }).join("") + '</select>'
+    + '<p class="grafnote" style="margin-top:7px">Brutal går hårdt til vaner, undskyldninger og '
+    + 'tallene på vægten. Den kommenterer ikke, hvordan du ser ud.</p>'
     + '<span class="lbl">Dagligt mål (kalorier)</span>'
     + '<input id="s-maal" type="number" inputmode="numeric" value="' + S.maal + '">'
     + '<h3 style="margin:26px 0 0">Profil</h3>'
@@ -2557,7 +2579,7 @@ function tegnIndstillinger(){
     Object.keys(beholdt).forEach(function(k){ skriv(k, beholdt[k]); });
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
     aktivNoegle = null; aktivKode = null;
-    S.navn = ""; S.kaekhed = "skarp"; S.profil = {};
+    S.navn = ""; S.kaekhed = "brutal"; S.profil = {};
     S.forslag = null; S.forslagStatus = "tom";
     var o = $("ind-overlay"); if (o) o.remove();
     tegn();
