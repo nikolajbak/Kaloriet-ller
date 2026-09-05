@@ -173,8 +173,10 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .opskrift ul,.opskrift ol{margin:0;padding-left:19px;font-size:14px;}
 .opskrift li{margin-bottom:5px;}
 .opskrift .tip{font-size:13.5px;color:var(--daempet);font-style:italic;margin-top:12px;}
-.kort button.mini{margin-top:10px;background:none;border:1px solid var(--linje);
-  border-radius:8px;padding:8px 12px;font:inherit;font-size:13.5px;color:var(--gron);cursor:pointer;}
+.kort button.mini,.detalje button.mini,button.mini{margin-top:10px;background:none;
+  border:1px solid var(--linje);border-radius:8px;padding:8px 12px;font:inherit;
+  font-size:13.5px;color:var(--gron);cursor:pointer;width:auto;display:inline-block;}
+.detalje button.mini{border-bottom:1px solid var(--linje);}
 .kort button.mini:disabled{color:var(--daempet);border-style:dashed;cursor:default;}
 .kort .spar{float:right;font-family:Georgia,serif;font-size:15px;color:var(--gron);
   font-variant-numeric:tabular-nums;margin-left:10px;}
@@ -207,7 +209,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "22.0";
+var APP_VERSION = "23.0";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -890,10 +892,21 @@ function budgetTekst(spist, efter){
                  : tal(-rest) + ' kcal over målet')
     + '</div>';
 }
-function dagsbudget(){
-  var spist = hentDag(S.iDag).reduce(function(a,p){ return a + p.kalorier; }, 0);
+/* Alt hvad der er regnet ud fra dagbogen. Kaldes hver gang en registrering
+   tilfoejes, rettes eller slettes, saa intet analyseret bygger paa gamle tal. */
+function nulstilAfledt(){
+  S.forslag = null; S.forslagStatus = "tom";
+  S.spise = null; S.spiseStatus = "tom";
+  S.tilskud = null; S.tilskudStatus = "tom";
+  fjern(K_FORSLAG); fjern(K_SPISE); fjern(K_TILSKUD);
+}
+
+function dagsbudget(dag){
+  var spist = hentDag(dag || S.iDag).reduce(function(a,p){ return a + p.kalorier; }, 0);
   return { spist:spist, maal:S.maal, tilbage:S.maal - spist };
 }
+/* Den dag nye registreringer havner paa. Normalt i dag, men kan saettes fra historikken. */
+function maalDag(){ return S.maalDag || S.iDag; }
 
 /* ================= API ================= */
 
@@ -945,92 +958,92 @@ function vurderingsdel(){
   var b = dagsbudget();
   var hensigt = S.profil.hensigt === "holde"
     ? "holde vaegten stabil"
-    : "tabe sig ved at begraense kalorieindtaget";
-  return 'DAGENS STATUS: maalet er ' + b.maal + ' kcal. Foer dette maaltid er der spist '
-    + b.spist + ' kcal, saa der var ' + b.tilbage + ' kcal tilbage. Klokken er '
+    : "tabe sig ved at begrænse kalorieindtaget";
+  return 'DAGENS STATUS: målet er ' + b.maal + ' kcal. Før dette måltid er der spist '
+    + b.spist + ' kcal, så der var ' + b.tilbage + ' kcal tilbage. Klokken er '
     + new Date().toLocaleTimeString("da-DK", {hour:"2-digit", minute:"2-digit"}) + '. '
     + 'Brugerens hensigt med appen er at ' + hensigt + '.\n\n'
-    + 'Maaltidet er ikke spist endnu, saa vurderingen er en melding foer forste bid, ikke en dom bagefter. '
+    + 'Måltidet er ikke spist endnu, så vurderingen er en melding før forste bid, ikke en dom bagefter. '
     + 'Vurder det i forhold til dagens budget og tidspunktet — ikke i forhold til maden i sig selv. '
-    + 'Et stort maaltid midt paa dagen med rigelig plads tilbage er fint. Det samme maaltid oven i en dag, '
-    + 'der allerede er fyldt, er noget andet. Saet status til "godt", naar maaltidet passer godt ind eller '
-    + 'er et fornuftigt valg, "fint" naar det er hverken eller, og "tungt" naar det bruger en stor del af '
-    + 'det, der var tilbage. Er budgettet allerede overskredet, saa vaer saglig og fremadrettet frem for '
+    + 'Et stort måltid midt på dagen med rigelig plads tilbage er fint. Det samme måltid oven i en dag, '
+    + 'der allerede er fyldt, er noget andet. Sæt status til "godt", når måltidet passer godt ind eller '
+    + 'er et fornuftigt valg, "fint" når det er hverken eller, og "tungt" når det bruger en stor del af '
+    + 'det, der var tilbage. Er budgettet allerede overskredet, så vær saglig og fremadrettet frem for '
     + 'bebrejdende — dagen er som den er, og i morgen er en ny.\n\n'
-    + 'VIGTIGT OM TIDSPUNKTET: maaltidet staar foran brugeren og er endnu ikke spist — det er '
-    + 'derfor der kan tages et billede af det. Dine forslag skal foerst og fremmest vaere noget, '
-    + 'der kan naas lige nu med det, der staar paa bordet: lade sovsen staa, spise halvdelen af '
-    + 'risene, droppe det andet stykke broed, tage vand i stedet for den naeste oel, skrabe '
-    + 'dressingen af. Saet "naar" til "nu" paa den slags.\n'
-    + 'Kan der intet goeres ved lige dette maaltid, maa du give et forslag til naeste gang samme '
-    + 'ret staar paa bordet, og saette "naar" til "naeste".\n\n'
-    + 'Giv 1-3 forslag, men kun naar der reelt er mindst 75 kcal at spare, og maaltidet ligger i '
-    + 'den tunge ende af dagens budget. Ellers en tom liste: er valget godt, staar rosen fint '
-    + 'alene, og gode raad til en skaal havregryn er spild af begges tid. Hold forslagene til '
-    + 'realistisk dansk hverdagsmad, og skriv dem som noget man kan goere, ikke som noget man burde.\n'
-    + 'Feltet nyt_navn skal vaere det navn, registreringen boer have, hvis forslaget bliver fulgt — '
-    + 'altsaa en beskrivelse af hvad der saa reelt blev spist. Er retten "Pasta med floedesovs" og '
-    + 'forslaget er at lade sovsen staa, er nyt_navn "Pasta uden floedesovs". Feltet ros er en kort '
-    + 'kaek bemaerkning, der kun bliver vist, hvis forslaget faktisk bliver fulgt.';
+    + 'VIGTIGT OM TIDSPUNKTET: måltidet står foran brugeren og er endnu ikke spist — det er '
+    + 'derfor der kan tages et billede af det. Dine forslag skal først og fremmest være noget, '
+    + 'der kan nås lige nu med det, der står på bordet: lade sovsen stå, spise halvdelen af '
+    + 'risene, droppe det andet stykke brød, tage vand i stedet for den næste øl, skrabe '
+    + 'dressingen af. Sæt "når" til "nu" på den slags.\n'
+    + 'Kan der intet gøres ved lige dette måltid, må du give et forslag til næste gang samme '
+    + 'ret står på bordet, og sætte "når" til "naeste".\n\n'
+    + 'Giv 1-3 forslag, men kun når der reelt er mindst 75 kcal at spare, og måltidet ligger i '
+    + 'den tunge ende af dagens budget. Ellers en tom liste: er valget godt, står rosen fint '
+    + 'alene, og gode råd til en skål havregryn er spild af begges tid. Hold forslagene til '
+    + 'realistisk dansk hverdagsmad, og skriv dem som noget man kan gøre, ikke som noget man burde.\n'
+    + 'Feltet nyt_navn skal være det navn, registreringen bør have, hvis forslaget bliver fulgt — '
+    + 'altså en beskrivelse af hvad der så reelt blev spist. Er retten "Pasta med flødesovs" og '
+    + 'forslaget er at lade sovsen stå, er nyt_navn "Pasta uden flødesovs". Feltet ros er en kort '
+    + 'kæk bemærkning, der kun bliver vist, hvis forslaget faktisk bliver fulgt.';
 }
 
 function byggPrompt(note, svar, beskrivelse){
   var t = beskrivelse
-    ? 'Du er ernaeringsfaglig og vurderer et maaltid ud fra en kort beskrivelse.\n\n'
+    ? 'Du er ernæringsfaglig og vurderer et måltid ud fra en kort beskrivelse.\n\n'
       + 'Brugeren har skrevet: "' + beskrivelse + '"\n\n'
-      + 'Regn med danske normalportioner, naar maengden ikke fremgaar, og med at retten er '
-      + 'lavet paa almindelig vis med det fedtstof den plejer at have. Naevnes flere ting, '
-      + 'laegges de sammen til et maaltid. Er beskrivelsen upraecis paa noget, der flytter '
-      + 'estimatet meget, saa spoerg hellere end at gaette vildt.\n\n'
-    : 'Du er ernaeringsfaglig og vurderer et maaltid ud fra et foto.\n\n'
-      + 'Estimer portionsstoerrelsen ud fra synlige holdepunkter: tallerken, bestik, haender, emballage. '
-      + 'Er der flere retter paa billedet, laegges de sammen til et maaltid. '
+      + 'Regn med danske normalportioner, når mængden ikke fremgår, og med at retten er '
+      + 'lavet på almindelig vis med det fedtstof den plejer at have. Nævnes flere ting, '
+      + 'lægges de sammen til et måltid. Er beskrivelsen upræcis på noget, der flytter '
+      + 'estimatet meget, så spørg hellere end at gætte vildt.\n\n'
+    : 'Du er ernæringsfaglig og vurderer et måltid ud fra et foto.\n\n'
+      + 'Estimer portionsstørrelsen ud fra synlige holdepunkter: tallerken, bestik, hænder, emballage. '
+      + 'Er der flere retter på billedet, lægges de sammen til et måltid. '
       + 'Husk synligt fedtstof, dressing og sovs.\n\n';
   t += ''
-    + 'Vaelg praecis en kategori fra denne liste: ' + KATEGORIER.join(", ") + '.\n\n'
-    + (beskrivelse ? 'Det kan lige saa godt vaere drikkevarer som mad, ogsaa alkohol. '
-                   : 'Billedet kan lige saa godt vise drikkevarer som mad, ogsaa alkohol. ')
-    + 'Oel, vin, drinks og '
-    + 'spiritus er helt normale registreringer i en dansk kaloriedagbog: saet er_mad til true, '
-    + 'vurder dem som alt andet, og kommenter aldrig paa at der bliver drukket. Husk at alkohol '
-    + 'i sig selv giver 7 kcal pr. gram, saa et glas toer vin ligger hoejere end sukkerindholdet antyder. '
-    + 'Regn med danske normalstoerrelser, naar intet andet fremgaar: fadoel 40 cl, flaske eller daase '
-    + 'oel 33 cl, glas vin 12-15 cl, snaps og shot 2-4 cl, gin og tonic 25 cl.'
+    + 'Vælg præcis en kategori fra denne liste: ' + KATEGORIER.join(", ") + '.\n\n'
+    + (beskrivelse ? 'Det kan lige så godt være drikkevarer som mad, også alkohol. '
+                   : 'Billedet kan lige så godt vise drikkevarer som mad, også alkohol. ')
+    + 'Øl, vin, drinks og '
+    + 'spiritus er helt normale registreringer i en dansk kaloriedagbog: sæt er_mad til true, '
+    + 'vurder dem som alt andet, og kommenter aldrig på at der bliver drukket. Husk at alkohol '
+    + 'i sig selv giver 7 kcal pr. gram, så et glas tør vin ligger højere end sukkerindholdet antyder. '
+    + 'Regn med danske normalstørrelser, når intet andet fremgår: fadøl 40 cl, flaske eller dåse '
+    + 'øl 33 cl, glas vin 12-15 cl, snaps og shot 2-4 cl, gin og tonic 25 cl.'
     + (beskrivelse ? '\n\n' : ' Se efter glassets form og hvor fyldt det er.\n\n')
-    + 'Angiv ogsaa antal danske genstande, hvor en genstand er 12 gram ren alkohol: '
-    + 'en oel eller et glas vin er cirka en genstand. Alkoholfrit giver 0.\n\n'
-    + 'Er du i reel tvivl om noget, der flytter estimatet vaesentligt — tilberedning, fedtstof, '
+    + 'Angiv også antal danske genstande, hvor en genstand er 12 gram ren alkohol: '
+    + 'en øl eller et glas vin er cirka en genstand. Alkoholfrit giver 0.\n\n'
+    + 'Er du i reel tvivl om noget, der flytter estimatet væsentligt — tilberedning, fedtstof, '
     + 'hvad der gemmer sig i retten, om et glas indeholder vand eller noget andet, hvor meget '
-    + 'der reelt er spist — saa stil op til 3 korte spoergsmaal med 2-4 konkrete svarmuligheder hver. '
-    + (beskrivelse ? 'Er beskrivelsen praecis nok, stiller du ingen spoergsmaal. '
-                   : 'Er billedet tydeligt, stiller du ingen spoergsmaal. ')
+    + 'der reelt er spist — så stil op til 3 korte spørgsmål med 2-4 konkrete svarmuligheder hver. '
+    + (beskrivelse ? 'Er beskrivelsen præcis nok, stiller du ingen spørgsmål. '
+                   : 'Er billedet tydeligt, stiller du ingen spørgsmål. ')
     + 'Giv altid dit bedste bud alligevel.\n\n'
     + vurderingsdel();
   if (S.kaek) t += '\n\n' + tone();
-  if (note) t += '\n\nBrugerens egen note om maaltidet: "' + note + '". Vaegt den hoejere end dit eget gaet.';
+  if (note) t += '\n\nBrugerens egen note om måltidet: "' + note + '". Vægt den højere end dit eget gæt.';
   if (svar && svar.length){
-    t += '\n\nBrugeren har svaret paa dine spoergsmaal:\n'
+    t += '\n\nBrugeren har svaret på dine spørgsmål:\n'
       + svar.map(function(s){ return "- " + s.q + " " + s.a; }).join("\n")
-      + '\n\nBrug svarene, ret dit estimat til, og stil ingen flere spoergsmaal.';
+      + '\n\nBrug svarene, ret dit estimat til, og stil ingen flere spørgsmål.';
   }
   t += '\n\nSvar udelukkende med et JSON-objekt, uden markdown og uden indledning:\n'
     + '{"er_mad": true/false, "navn": "kort dansk navn", "kategori": "en af kategorierne", '
-    + '"portion": "kort beskrivelse af den maengde du har regnet med", '
+    + '"portion": "kort beskrivelse af den mængde du har regnet med", '
     + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
-    + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort saetning om det vaesentligste forbehold", '
+    + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort sætning om det væsentligste forbehold", '
     + '"status": "godt"/"fint"/"tungt", '
     + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, '
     + '"note": "kort hvordan, max 12 ord", '
-    + '"nyt_navn": "hvad maaltidet saa hedder, hvis forslaget foelges — kort og konkret", '
-    + '"ros": "kaek kvittering paa max 15 ord, hvis forslaget faktisk bliver fulgt"}], '
-    + (S.kaek ? '"kommentar": "en kaek bemaerkning paa max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette maaltid", ' : '')
-    + '"spoergsmaal": [{"tekst": "spoergsmaalet", "valg": ["mulighed", "mulighed"]}]}\n\n'
+    + '"nyt_navn": "hvad måltidet så hedder, hvis forslaget følges — kort og konkret", '
+    + '"ros": "kæk kvittering på max 15 ord, hvis forslaget faktisk bliver fulgt"}], '
+    + (S.kaek ? '"kommentar": "en kæk bemærkning på max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
+    + '"spoergsmaal": [{"tekst": "spørgsmålet", "valg": ["mulighed", "mulighed"]}]}\n\n'
     + (beskrivelse
-        ? 'Handler beskrivelsen hverken om mad eller drikkevarer, saettes er_mad til false. '
-        : 'Er der hverken mad eller drikkevarer paa billedet, saettes er_mad til false og resten til 0 eller tom tekst. ')
-    + 'Har du ingen spoergsmaal, saettes spoergsmaal til en tom liste. '
-    + 'Har du ingen alternativer at foreslaa, saettes alternativer til en tom liste.';
+        ? 'Handler beskrivelsen hverken om mad eller drikkevarer, sættes er_mad til false. '
+        : 'Er der hverken mad eller drikkevarer på billedet, sættes er_mad til false og resten til 0 eller tom tekst. ')
+    + 'Har du ingen spørgsmål, sættes spørgsmål til en tom liste. '
+    + 'Har du ingen alternativer at foreslå, sættes alternativer til en tom liste.';
   return t;
 }
 function analyser(dataUrl, note, svar, beskrivelse){
@@ -1054,26 +1067,26 @@ function hentSpiseforslag(){
     ? poster.map(function(x){ return "- " + x.tid + " " + x.navn + " (" + x.kalorier + " kcal)"; }).join("\n")
     : "- ingenting endnu";
 
-  var p = 'Du raadgiver ' + (S.navn || "brugeren") + ' om resten af dagens mad.\n\n'
+  var p = 'Du rådgiver ' + (S.navn || "brugeren") + ' om resten af dagens mad.\n\n'
     + 'Klokken er ' + t.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"})
-    + ' paa en ' + t.toLocaleDateString("da-DK",{weekday:"long"}) + '.\n'
-    + 'Dagligt maal: ' + S.maal + ' kcal. Spist indtil nu: ' + spist + ' kcal, heraf '
+    + ' på en ' + t.toLocaleDateString("da-DK",{weekday:"long"}) + '.\n'
+    + 'Dagligt mål: ' + S.maal + ' kcal. Spist indtil nu: ' + spist + ' kcal, heraf '
     + Math.round(pro) + ' g protein. Tilbage: ' + rest + ' kcal.\n'
-    + 'Dagens maaltider:\n' + liste + '\n'
+    + 'Dagens måltider:\n' + liste + '\n'
     + 'Om personen: ' + profiltekst() + '.\n\n'
     + kostgrundlag() + '\n\n'
     + 'Giv 3 konkrete forslag til hvad der kan spises og drikkes i resten af dagen. Realistisk '
-    + 'dansk hverdagsmad, ting man har eller kan naa at koebe. Hvert forslag med et anslaaet '
-    + 'kalorietal, der passer i det der er tilbage, og som daekker de maaltider der mangler '
-    + 'inden sengetid — er klokken 10, skal der baade vaere frokost og aftensmad; er klokken 20, '
-    + 'er det hoejst en aftensnack. Skæv efter det kostraadene peger paa, som personen mangler i dag: '
-    + 'groentsager, fisk, fuldkorn, baelgfrugter, vand.\n\n'
-    + 'VIGTIGT: foreslaa aldrig at springe et maaltid over, at faste resten af dagen eller at gaa '
-    + 'sulten i seng. Er der lidt eller ingenting tilbage af budgettet, saa foreslaa noget maettende '
-    + 'og let alligevel, og skriv roligt at en enkelt dag ikke afgoer noget. Ingen skraemmekampagne '
+    + 'dansk hverdagsmad, ting man har eller kan nå at købe. Hvert forslag med et anslået '
+    + 'kalorietal, der passer i det der er tilbage, og som dækker de måltider der mangler '
+    + 'inden sengetid — er klokken 10, skal der både være frokost og aftensmad; er klokken 20, '
+    + 'er det højst en aftensnack. Skæv efter det kostrådene peger på, som personen mangler i dag: '
+    + 'grøntsager, fisk, fuldkorn, bælgfrugter, vand.\n\n'
+    + 'VIGTIGT: foreslå aldrig at springe et måltid over, at faste resten af dagen eller at gå '
+    + 'sulten i seng. Er der lidt eller ingenting tilbage af budgettet, så foreslå noget mættende '
+    + 'og let alligevel, og skriv roligt at en enkelt dag ikke afgør noget. Ingen skræmmekampagne '
     + 'og ingen moralisering.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
-    + '{"linje": "en kort saetning om hvor dagen staar, max 16 ord", '
+    + '{"linje": "en kort sætning om hvor dagen står, max 16 ord", '
     + '"forslag": [{"ret": "hvad", "hvornaar": "fx frokost eller aftensmad", "kcal": heltal, '
     + '"hvorfor": "kort begrundelse, max 14 ord"}]}';
 
@@ -1085,19 +1098,19 @@ function opskriftNoegle(ret){
   return P_OPSKRIFT + ret.toLowerCase().replace(/[^a-z0-9æøå]+/g, "-").slice(0, 60);
 }
 function hentOpskrift(ret, kcal){
-  var p = 'Skriv en opskrift paa "' + ret + '" til en dansk kaloriedagbog.\n\n'
-    + 'Den skal ramme cirka ' + (kcal || 500) + ' kcal pr. portion og vaere til to personer. '
+  var p = 'Skriv en opskrift på "' + ret + '" til en dansk kaloriedagbog.\n\n'
+    + 'Den skal ramme cirka ' + (kcal || 500) + ' kcal pr. portion og være til to personer. '
     + 'Almindelige danske ingredienser fra et supermarked, ingen specialbutikker. '
-    + 'Hverdagsmad man kan naa, ikke restaurantprojekt. Maengder i gram, deciliter eller stykker.\n\n'
-    + 'Feltet billedsoeg skal vaere 2-4 ord paa engelsk, der er velegnede til at finde et foto af '
-    + 'retten i et aabent billedarkiv — brug det almindelige engelske navn paa retten eller '
-    + 'hovedingrediensen, ikke en lang beskrivelse. Er retten saerligt dansk, saa brug det danske '
-    + 'navn, hvis det er kendt, ellers hovedingrediensen paa engelsk.\n\n'
-    + 'Vaelg ogsaa en kategori fra: ' + KATEGORIER.join(", ") + '.\n\n'
+    + 'Hverdagsmad man kan nå, ikke restaurantprojekt. Mængder i gram, deciliter eller stykker.\n\n'
+    + 'Feltet billedsøg skal være 2-4 ord på engelsk, der er velegnede til at finde et foto af '
+    + 'retten i et åbent billedarkiv — brug det almindelige engelske navn på retten eller '
+    + 'hovedingrediensen, ikke en lang beskrivelse. Er retten særligt dansk, så brug det danske '
+    + 'navn, hvis det er kendt, ellers hovedingrediensen på engelsk.\n\n'
+    + 'Vælg også en kategori fra: ' + KATEGORIER.join(", ") + '.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
     + '{"titel": "rettens navn", "tid_min": heltal minutter, "portioner": heltal, '
-    + '"kcal_pr_portion": heltal, "kategori": "en af kategorierne", "billedsoeg": "engelske soegeord", '
-    + '"ingredienser": ["maengde og vare", "..."], "fremgangsmaade": ["trin", "..."], '
+    + '"kcal_pr_portion": heltal, "kategori": "en af kategorierne", "billedsoeg": "engelske søgeord", '
+    + '"ingredienser": ["mængde og vare", "..."], "fremgangsmaade": ["trin", "..."], '
     + '"tip": "et kort tip, max 18 ord"}';
   return kald({ model:S.model, max_tokens:1200, messages:[{ role:"user", content:p }] });
 }
@@ -1178,29 +1191,29 @@ function hentTilskud(a){
   }).join("\n") || "- ingen gengangere endnu";
 
   var p = 'Vurder ' + (S.navn || "brugerens") + ' kost over de seneste ' + S.vindue + ' dage.\n\n'
-    + 'Der er registreret ' + a.antalDage + ' dage med i alt ' + a.poster.length + ' maaltider. '
-    + 'Snit ' + Math.round(a.snit) + ' kcal pr. dag mod et maal paa ' + S.maal + '.\n'
+    + 'Der er registreret ' + a.antalDage + ' dage med i alt ' + a.poster.length + ' måltider. '
+    + 'Snit ' + Math.round(a.snit) + ' kcal pr. dag mod et mål på ' + S.maal + '.\n'
     + 'Om personen: ' + profiltekst() + '.\n'
     + 'Vi er i ' + maaneder[new Date().getMonth()] + '.\n\n'
-    + 'Fordeling paa kategorier:\n' + kat + '\n\nGengangere:\n' + retter + '\n\n'
+    + 'Fordeling på kategorier:\n' + kat + '\n\nGengangere:\n' + retter + '\n\n'
     + kostgrundlag() + '\n\n'
-    + 'AFGOERENDE OM DATAGRUNDLAGET: registreringen indeholder kalorier, makronaeringsstoffer og '
-    + 'en grov kategori pr. maaltid. Den indeholder INGEN maalinger af vitaminer eller mineraler. '
-    + 'Du kan derfor kun tale om moenstre — at der sjaeldent registreres fisk, eller at groent '
-    + 'fylder lidt — og aldrig konstatere en mangel. Kun en blodproeve hos laegen kan det. '
-    + 'Sig det tydeligt, og vaer mere forbeholden jo faerre dage der er registreret: '
-    + 'under 14 dage er et loest indtryk, over 60 dage er et rimeligt billede.\n\n'
-    + 'Mad foerst, tilskud bagefter: peg paa hvad der kan spises i stedet, og naevn kun tilskud '
-    + 'hvor det er relevant. Hold dig inden for de officielle danske anbefalinger og foreslaa '
-    + 'aldrig hoeje doser. D-vitamin i vinterhalvaaret gaelder alle voksne uanset hvad der staar '
-    + 'i dagbogen, saa den maa gerne med, naar vi er i oktober til april. Anbefal ikke tilskud '
-    + 'paa noget, dagbogen ikke kan sige noget om.\n\n'
+    + 'AFGØRENDE OM DATAGRUNDLAGET: registreringen indeholder kalorier, makronæringsstoffer og '
+    + 'en grov kategori pr. måltid. Den indeholder INGEN målinger af vitaminer eller mineraler. '
+    + 'Du kan derfor kun tale om mønstre — at der sjældent registreres fisk, eller at grønt '
+    + 'fylder lidt — og aldrig konstatere en mangel. Kun en blodprøve hos lægen kan det. '
+    + 'Sig det tydeligt, og vær mere forbeholden jo færre dage der er registreret: '
+    + 'under 14 dage er et løst indtryk, over 60 dage er et rimeligt billede.\n\n'
+    + 'Mad først, tilskud bagefter: peg på hvad der kan spises i stedet, og nævn kun tilskud '
+    + 'hvor det er relevant. Hold dig inden for de officielle danske anbefalinger og foreslå '
+    + 'aldrig høje doser. D-vitamin i vinterhalvåret gælder alle voksne uanset hvad der står '
+    + 'i dagbogen, så den må gerne med, når vi er i oktober til april. Anbefal ikke tilskud '
+    + 'på noget, dagbogen ikke kan sige noget om.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
     + '{"sikkerhed": "loest indtryk"/"nogenlunde"/"rimeligt billede", '
-    + '"opsummering": "hvad moenstret viser, max 25 ord", '
+    + '"opsummering": "hvad mønstret viser, max 25 ord", '
     + '"moenstre": [{"emne": "fx fisk og omega-3", "set": "hvad dagbogen viser, max 14 ord", '
     + '"mad": "hvad der kan spises i stedet, max 16 ord", '
-    + '"tilskud": "tilskudsraad hvis relevant, ellers tom tekst, max 16 ord"}]}';
+    + '"tilskud": "tilskudsråd hvis relevant, ellers tom tekst, max 16 ord"}]}';
 
   return kald({ model:S.model, max_tokens:1000, messages:[{ role:"user", content:p }] });
 }
@@ -1216,15 +1229,15 @@ function hentForslag(a){
 
   var p = 'Du skriver til ' + (S.navn || "brugeren") + 's kaloriedagbog. Her er de poster, der fylder mest '
     + 'i de seneste ' + S.vindue + ' dage:\n' + emner + '\n\n'
-    + 'Snit pr. dag: ' + Math.round(a.snit) + ' kcal. Dagligt maal: ' + S.maal + ' kcal.\n\n'
-    + 'Giv 3-4 konkrete, lettere alternativer til de tungeste poster. Alternativerne skal vaere '
-    + 'realistisk dansk hverdagsmad, ikke asketiske. Anslaa hvor mange kalorier der spares.\n\n'
+    + 'Snit pr. dag: ' + Math.round(a.snit) + ' kcal. Dagligt mål: ' + S.maal + ' kcal.\n\n'
+    + 'Giv 3-4 konkrete, lettere alternativer til de tungeste poster. Alternativerne skal være '
+    + 'realistisk dansk hverdagsmad, ikke asketiske. Anslå hvor mange kalorier der spares.\n\n'
     + tone() + '\n\n'
     + 'Alternativerne er tilbud, ikke domme.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
-    + '{"overskrift": "en kaek linje paa max 14 ord til ' + (S.navn || "brugeren") + ' om hvad der fylder", '
+    + '{"overskrift": "en kæk linje på max 14 ord til ' + (S.navn || "brugeren") + ' om hvad der fylder", '
     + '"forslag": [{"fra": "retten der er tung", "til": "det lettere alternativ", '
-    + '"spar": heltal kalorier sparet, "kommentar": "kaek bemaerkning paa max 20 ord"}]}';
+    + '"spar": heltal kalorier sparet, "kommentar": "kæk bemærkning på max 20 ord"}]}';
 
   return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
 }
@@ -1236,68 +1249,69 @@ function tone(){
   var n = S.navn || "brugeren";
   var brutal = S.kaekhed === "brutal";
   var skarp = brutal || S.kaekhed === "skarp";
-  return 'STEMME — dansk standup-register, toert og observerende. Otte konkrete greb:\n'
-    + '1. VAER KONKRET. Aldrig "du spiser sent". Hellere "klokken 23.40, staaende op, direkte fra gryden". '
-    + 'Naevn maengder, klokkeslaet, steder og maerker. Det generelle er ikke morsomt; det genkendelige er.\n'
-    + '2. RYTME. To korte saetninger. Saa en lang, der loeber en anelse laengere end den burde og '
-    + 'tager et sidespring med. Saa en kort, der lukker den.\n'
-    + '3. ESKALATION FREM FOR POINTE. Tag en almindelig iagttagelse og foer den et skridt laengere, '
-    + 'end der er daekning for. Selve overdrivelsen er vitsen — der skal ikke vaere en pointe bagefter.\n'
-    + '4. TAL DIREKTE TIL ' + n.toUpperCase() + '. Brug navnet. Stil gerne et retorisk spoergsmaal, '
-    + 'du ikke venter svar paa.\n'
-    + '5. TAG DIG SELV MED. Appen er ogsaa til grin — den sidder i en telefon og taeller kalorier i '
-    + 'et fotografi af aftensmad. Selvudlevering foerst, drilleri bagefter.\n'
-    + '6. PUNKTER DET HOEJTIDELIGE. Sundhedssprog, gode forsaetter, livsstilssnak og dine egne raad '
-    + 'skal stikkes hul paa, ikke gentages.\n'
-    + '7. TILBAGEKALD. Er der et moenster i dagbogen, saa henvis til det. Det, der gaar igen, er '
-    + 'sjovere end det enkeltstaaende.\n'
-    + '8. INGEN FORKLARING. Vitsen forklares aldrig bagefter. Ingen emoji. Hoejst et udraabstegn. '
+  return 'SPROG: skriv korrekt dansk med æ, ø og å. Aldrig aa, oe eller ae som erstatning.\n\n'
+    + 'STEMME — dansk standup-register, tørt og observerende. Otte konkrete greb:\n'
+    + '1. VÆR KONKRET. Aldrig "du spiser sent". Hellere "klokken 23.40, stående op, direkte fra gryden". '
+    + 'Nævn mængder, klokkeslæt, steder og mærker. Det generelle er ikke morsomt; det genkendelige er.\n'
+    + '2. RYTME. To korte sætninger. Så en lang, der løber en anelse længere end den burde og '
+    + 'tager et sidespring med. Så en kort, der lukker den.\n'
+    + '3. ESKALATION FREM FOR POINTE. Tag en almindelig iagttagelse og før den et skridt længere, '
+    + 'end der er dækning for. Selve overdrivelsen er vitsen — der skal ikke være en pointe bagefter.\n'
+    + '4. TAL DIREKTE TIL ' + n.toUpperCase() + '. Brug navnet. Stil gerne et retorisk spørgsmål, '
+    + 'du ikke venter svar på.\n'
+    + '5. TAG DIG SELV MED. Appen er også til grin — den sidder i en telefon og tæller kalorier i '
+    + 'et fotografi af aftensmad. Selvudlevering først, drilleri bagefter.\n'
+    + '6. PUNKTER DET HØJTIDELIGE. Sundhedssprog, gode forsætter, livsstilssnak og dine egne råd '
+    + 'skal stikkes hul på, ikke gentages.\n'
+    + '7. TILBAGEKALD. Er der et mønster i dagbogen, så henvis til det. Det, der går igen, er '
+    + 'sjovere end det enkeltstående.\n'
+    + '8. INGEN FORKLARING. Vitsen forklares aldrig bagefter. Ingen emoji. Højst et udråbstegn. '
     + 'Ingen ordspil for ordspillets skyld.\n'
     + (skarp
-        ? '9. VAER KONTANT. Sig det ligeud uden at pakke det ind. Ironi frem for hoeflighed. '
-          + 'Bandeord som sgu, fandeme og for helvede maa bruges sparsomt, hvor de giver rytme — '
-          + 'ikke i hver saetning.\n'
-        : '9. HOLD DEN TOER. Skarp i iagttagelsen, mild i formen. Ingen bandeord.\n')
+        ? '9. VÆR KONTANT. Sig det ligeud uden at pakke det ind. Ironi frem for høflighed. '
+          + 'Bandeord som sgu, fandeme og for helvede må bruges sparsomt, hvor de giver rytme — '
+          + 'ikke i hver sætning.\n'
+        : '9. HOLD DEN TØR. Skarp i iagttagelsen, mild i formen. Ingen bandeord.\n')
     + (brutal
-        ? '10. BRUTAL AERLIGHED. Ingen indpakning og ingen troestepraemie. Sig det, en ven ville '
-          + 'sige, hvis han var holdt op med at vaere hoeflig. Vaegten er ikke et oemtaaleligt '
-          + 'emne: tal ligeud om tallene, om udviklingen og om afstanden til maalet. Kald '
+        ? '10. BRUTAL ÆRLIGHED. Ingen indpakning og ingen trøstepræmie. Sig det, en ven ville '
+          + 'sige, hvis han var holdt op med at være høflig. Vægten er ikke et ømtåleligt '
+          + 'emne: tal ligeud om tallene, om udviklingen og om afstanden til målet. Kald '
           + 'selvbedraget hvad det er — "lige en enkelt" der vejer 900 kalorier, mandagen der '
-          + 'aldrig kommer, portionen der blev vurderet med et optimistisk oeje, ugen der blev '
-          + 'kaldt en undtagelse for fjerde gang. Vaer haard ved undskyldningerne. Du behoever '
+          + 'aldrig kommer, portionen der blev vurderet med et optimistisk øje, ugen der blev '
+          + 'kaldt en undtagelse for fjerde gang. Vær hård ved undskyldningerne. Du behøver '
           + 'ikke afslutte med noget opmuntrende.\n'
         : '')
-    + 'Du maa drille ' + n + ' personligt: vaner, udflugter, optimistiske portionsvurderinger, '
-    + 'gode forsaetter der holdt en uge, og de forklaringer folk giver sig selv efter klokken 22.\n'
+    + 'Du må drille ' + n + ' personligt: vaner, udflugter, optimistiske portionsvurderinger, '
+    + 'gode forsætter der holdt en uge, og de forklaringer folk giver sig selv efter klokken 22.\n'
     + (brutal
-        ? 'GRAENSER: gaa efter vanerne, valgene, undskyldningerne og tallene — ikke efter spejlet. '
-          + 'Ingen bemaerkninger om hvordan ' + n + ' SER UD: kropsform, figur, mave, hage, toej '
-          + 'eller udseende er udenfor, og det samme er hans vaerdi som menneske. Vaegten som TAL '
-          + 'og som UDVIKLING er derimod fair game og maa siges uden filter. Mad kaldes ikke synd '
-          + 'eller forbudt — der er ikke noget moralsk paa spil, kun regnskab. Ingen '
-          + 'sundhedspraediken, heller ikke forklaedt som en vits.\n'
-          + 'Det handler ikke om hoeflighed: hakken paa kroppen virker ikke og er ikke den slags '
-          + 'haardhed der bider. Vanerne og tallene rammer skarpere.'
-        : 'GRAENSER: ingen bemaerkninger om krop, vaegt, figur eller udseende. Ingen skam over hvad '
-          + 'der er spist, og ingen mad kaldes synd, forbudt eller daarlig. Der drilles vaner og '
-          + 'valg, aldrig hvordan nogen ser ud. Ingen loeftede pegefingre og ingen '
-          + 'sundhedspraediken — heller ikke forklaedt som en vits.');
+        ? 'GRÆNSER: gå efter vanerne, valgene, undskyldningerne og tallene — ikke efter spejlet. '
+          + 'Ingen bemærkninger om hvordan ' + n + ' SER UD: kropsform, figur, mave, hage, tøj '
+          + 'eller udseende er udenfor, og det samme er hans værdi som menneske. Vægten som TAL '
+          + 'og som UDVIKLING er derimod fair game og må siges uden filter. Mad kaldes ikke synd '
+          + 'eller forbudt — der er ikke noget moralsk på spil, kun regnskab. Ingen '
+          + 'sundhedsprædiken, heller ikke forklædt som en vits.\n'
+          + 'Det handler ikke om høflighed: hakken på kroppen virker ikke og er ikke den slags '
+          + 'hårdhed der bider. Vanerne og tallene rammer skarpere.'
+        : 'GRÆNSER: ingen bemærkninger om krop, vægt, figur eller udseende. Ingen skam over hvad '
+          + 'der er spist, og ingen mad kaldes synd, forbudt eller dårlig. Der drilles vaner og '
+          + 'valg, aldrig hvordan nogen ser ud. Ingen løftede pegefingre og ingen '
+          + 'sundhedsprædiken — heller ikke forklædt som en vits.');
 }
 
 /* De officielle danske kostraad og Sundhedsstyrelsens tilskudsanbefalinger.
    Samlet et sted, saa baade maaltidsforslag og tilskudsvurdering hviler paa
    samme grundlag i stedet for at improvisere. */
 function kostgrundlag(){
-  return 'GRUNDLAG — De officielle Kostraad (Foedevarestyrelsen): spis planterigt, varieret og '
-    + 'ikke for meget. 600 g frugt og groent om dagen, heraf mindst halvdelen groentsager. '
-    + '350 g fisk om ugen, gerne halvdelen fed fisk. Hoejst 350 g tilberedt oksekoed, lammekoed '
-    + 'og svinekoed om ugen. 75 g fuldkorn om dagen. Vaelg planteolier og magre mejeriprodukter. '
-    + 'Spis mindre af det soede, salte og fede. Sluk toersten i vand, hoejst en halv liter '
+  return 'GRUNDLAG — De officielle Kostråd (Fødevarestyrelsen): spis planterigt, varieret og '
+    + 'ikke for meget. 600 g frugt og grønt om dagen, heraf mindst halvdelen grøntsager. '
+    + '350 g fisk om ugen, gerne halvdelen fed fisk. Højst 350 g tilberedt oksekød, lammekød '
+    + 'og svinekød om ugen. 75 g fuldkorn om dagen. Vælg planteolier og magre mejeriprodukter. '
+    + 'Spis mindre af det søde, salte og fede. Sluk tørsten i vand, højst en halv liter '
     + 'sodavand eller saft om ugen.\n'
-    + 'Sundhedsstyrelsen og Foedevarestyrelsen anbefaler desuden 5-10 mikrogram D-vitamin dagligt '
-    + 'til alle voksne fra oktober til april, 10 mikrogram hele aaret til personer med moerk hud, '
-    + 'gravide og ammende samt folk der sjaeldent kommer udendoers, og 20 mikrogram plus 800-1000 mg '
-    + 'calcium hele aaret til personer over 70 aar. Den oevre sikre graense for voksne er 100 mikrogram.';
+    + 'Sundhedsstyrelsen og Fødevarestyrelsen anbefaler desuden 5-10 mikrogram D-vitamin dagligt '
+    + 'til alle voksne fra oktober til april, 10 mikrogram hele året til personer med mørk hud, '
+    + 'gravide og ammende samt folk der sjældent kommer udendørs, og 20 mikrogram plus 800-1000 mg '
+    + 'calcium hele året til personer over 70 år. Den øvre sikre grænse for voksne er 100 mikrogram.';
 }
 function profiltekst(){
   var p = S.profil, d = [];
@@ -1479,8 +1493,7 @@ function tegnHoved(){
     b.onclick = function(){
       var id = b.getAttribute("data-slet");
       gemDag(S.iDag, hentDag(S.iDag).filter(function(p){ return p.id !== id; }));
-      S.spise = null; S.spiseStatus = "tom";
-      S.forslag = null; S.forslagStatus = "tom";
+      nulstilAfledt();
       tegn();
     };
   });
@@ -1549,8 +1562,7 @@ function tegnSpiseforslag(){
       }, 0));
       gemDag(S.iDag, poster);
       S.aabenRet = null;
-      S.spiseStatus = "tom"; S.spise = null;
-      S.forslagStatus = "tom"; S.forslag = null;
+      nulstilAfledt();
       tegn();
     };
     return;
@@ -1785,9 +1797,7 @@ function aabnRediger(dag, id){
   bindPortioner("r-ant", ["r-kcal","r-pro","r-kul","r-fedt","r-gen"]);
   function luk(){ var o = $("r-overlay"); if (o) o.remove(); }
   function opdater(){
-    S.forslag = null; S.forslagStatus = "tom";
-    S.spise = null; S.spiseStatus = "tom";
-    S.tilskud = null; S.tilskudStatus = "tom";
+    nulstilAfledt();
     luk(); tegn();
   }
   $("r-overlay").onclick = function(e){ if (e.target.id === "r-overlay") luk(); };
@@ -1859,12 +1869,18 @@ function tegnHistorik(){
 
   perioder.slice().reverse().forEach(function(p){
     if (!p.antal && S.periode !== "dag") return;
+    var kanAabnes = p.antal || S.periode === "dag";
     h += '<button class="raekke" data-valg="' + esc(p.id) + '">'
       + '<span class="h"><span style="display:block">' + esc(p.titel) + '</span>'
       + (p.under || p.antal > 1 ? '<span class="u">' + esc(p.under)
           + (p.under && p.antal > 1 ? " · " : "")
           + (p.antal > 1 ? p.antal + " dage · snit " + tal(p.snit) : "") + '</span>' : "")
       + '</span><span class="s">' + (p.antal ? tal(p.total) : "–") + '</span></button>';
+    if (S.valgt === p.id && !p.antal && S.periode === "dag"){
+      h += '<div class="detalje">Ingen registreringer denne dag. '
+        + '<button class="mini" data-tilfoej="' + esc(p.id) + '" style="margin-top:8px">'
+        + 'Tilføj måltid</button></div>';
+    }
     if (S.valgt === p.id && p.antal){
       h += '<div class="detalje">';
       if (S.periode === "dag"){
@@ -1873,6 +1889,8 @@ function tegnHistorik(){
             + '<span class="navn">' + esc(m.navn) + '</span>'
             + '<span class="tal">' + tal(m.kalorier) + ' ›</span></button>';
         });
+        h += '<button class="mini" data-tilfoej="' + esc(p.id) + '" style="margin-top:10px">'
+          + 'Tilføj måltid til denne dag</button>';
       } else {
         p.dage.slice().reverse().forEach(function(n){
           h += '<button data-gaadag="' + n + '">'
@@ -1895,6 +1913,14 @@ function tegnHistorik(){
   });
   bindRediger();
   /* Fra en uge eller maaned kan man springe ned i den enkelte dag */
+  Array.prototype.forEach.call(document.querySelectorAll("[data-tilfoej]"), function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      S.maalDag = b.getAttribute("data-tilfoej");
+      S.ark = { status:"skriv", tekst:"" };
+      tegnArk();
+    };
+  });
   Array.prototype.forEach.call(document.querySelectorAll("[data-gaadag]"), function(b){
     b.onclick = function(e){
       e.stopPropagation();
@@ -2157,6 +2183,8 @@ function tegnArk(){
       + KATEGORIER.map(function(k){
           return '<option value="' + esc(k) + '"' + (r.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
         }).join("") + '</select>'
+      + '<span class="lbl">Dato</span>'
+      + '<input id="f-dato" type="date" value="' + esc(maalDag()) + '" max="' + esc(S.iDag) + '">'
       + '<span class="lbl">Antal portioner — tallene herunder følger med</span>'
       + '<input id="f-ant" type="text" inputmode="decimal" value="1">'
       + '<span class="lbl">Kalorier i alt</span>'
@@ -2167,7 +2195,7 @@ function tegnArk(){
       + '<input id="f-fedt" type="number" inputmode="numeric" value="' + (Number(r.fedt_g)||0) + '"></div>'
       + '<span class="lbl">Genstande, hvis der var alkohol</span>'
       + '<input id="f-gen" type="text" inputmode="decimal" value="' + (Number(r.genstande)||0) + '">';
-    var b = dagsbudget();
+    var b = dagsbudget(maalDag());
     var efter = b.spist + (Number(r.kalorier) || 0);
     var rest = S.maal - efter;
     var maerker = { godt:["god","Godt valg"], tungt:["varm","Tungt for i dag"], fint:["","Passer ind"] };
@@ -2245,11 +2273,16 @@ function tegnArk(){
     kaldAnalyse(a.stor, a.lille, a.note, svar, a.beskrivelse);
   };
   var bsp = $("b-spring"); if (bsp) bsp.onclick = function(){ visResultat(a, a.r); };
-  bindPortioner("f-ant", ["f-kcal","f-pro","f-kul","f-fedt","f-gen"], function(){
+  function opdaterBudget(){
     var bb = $("budgetboks");
-    if (bb) bb.innerHTML = budgetTekst(dagsbudget().spist,
-      dagsbudget().spist + (Number($("f-kcal").value) || 0));
-  });
+    if (!bb) return;
+    var d = $("f-dato") ? $("f-dato").value : maalDag();
+    var b = dagsbudget(d);
+    bb.innerHTML = budgetTekst(b.spist, b.spist + (Number($("f-kcal").value) || 0))
+      + (d !== S.iDag ? '<div class="rest">Registreres på ' + esc(kortDato(d)) + '</div>' : "");
+  }
+  bindPortioner("f-ant", ["f-kcal","f-pro","f-kul","f-fedt","f-gen"], opdaterBudget);
+  var fd = $("f-dato"); if (fd) fd.onchange = opdaterBudget;
   var altListe = (a.r && Array.isArray(a.r.alternativer))
     ? a.r.alternativer.filter(function(x){ return x && x.til; }).slice(0,3) : [];
   Array.prototype.forEach.call(document.querySelectorAll("[data-alt]"), function(knap){
@@ -2290,13 +2323,14 @@ function tegnArk(){
         nb.style.display = "";
       }
 
-      var bb = $("budgetboks");
-      if (bb) bb.innerHTML = budgetTekst(dagsbudget().spist, dagsbudget().spist + Math.round(ny));
+      opdaterBudget();
       knap.textContent = "Regnet med"; knap.disabled = true;
     };
   });
   var bg = $("b-gem"); if (bg) bg.onclick = function(){
-    var poster = hentDag(S.iDag);
+    var dag = ($("f-dato") && $("f-dato").value) || maalDag();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dag)) dag = S.iDag;
+    var poster = hentDag(dag);
     poster.push(normaliser({
       id: String(Date.now()),
       tid: new Date().toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"}),
@@ -2319,10 +2353,9 @@ function tegnArk(){
       fedt_g: Number($("f-fedt").value) || 0,
       billede: a.lille || null
     }, 0));
-    gemDag(S.iDag, poster);
-    S.forslagStatus = "tom"; S.forslag = null;
-    S.spiseStatus = "tom"; S.spise = null;
-    S.tilskudStatus = "tom"; S.tilskud = null;
+    gemDag(dag, poster);
+    S.maalDag = null;
+    nulstilAfledt();
     lukArk();
   };
 }
@@ -2358,6 +2391,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse){
 }
 function lukArk(){
   S.ark = null;
+  S.maalDag = null;
   var o = $("overlay"); if (o) o.remove();
   tegn();
 }
@@ -2534,9 +2568,7 @@ function tegnIndstillinger(){
       if (gendanSnap(n)){
         S.indst = false;
         var o = $("ind-overlay"); if (o) o.remove();
-        S.forslag = null; S.forslagStatus = "tom";
-        S.spise = null; S.spiseStatus = "tom";
-        S.tilskud = null; S.tilskudStatus = "tom";
+        nulstilAfledt();
         tegn();
         alert("Kopien er gendannet.");
       } else {
