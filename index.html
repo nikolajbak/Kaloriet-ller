@@ -209,7 +209,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 <script>
 "use strict";
 
-var APP_VERSION = "23.0";
+var APP_VERSION = "24.0";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -907,6 +907,23 @@ function dagsbudget(dag){
 }
 /* Den dag nye registreringer havner paa. Normalt i dag, men kan saettes fra historikken. */
 function maalDag(){ return S.maalDag || S.iDag; }
+function nuKlokken(){
+  return new Date().toLocaleTimeString("da-DK", { hour:"2-digit", minute:"2-digit" });
+}
+/* Til en tidligere dag giver "nu" ingen mening — der foreslaas et neutralt tidspunkt */
+function standardTid(dag){ return dag === S.iDag ? nuKlokken() : "12.00"; }
+/* To felter side om side: hvornaar blev det spist */
+function naarFelter(idDato, idTid, dag, tid){
+  return '<span class="lbl">Hvornår blev det spist</span>'
+    + '<div style="display:flex;gap:8px">'
+    + '<input id="' + idDato + '" type="date" style="flex:1.4" value="' + esc(dag) + '" max="' + esc(S.iDag) + '">'
+    + '<input id="' + idTid + '" type="time" style="flex:1" value="' + esc(String(tid).replace(".", ":")) + '">'
+    + '</div>';
+}
+function laesTid(id){
+  var el = $(id);
+  return el && el.value ? el.value.replace(":", ".") : "";
+}
 
 /* ================= API ================= */
 
@@ -954,29 +971,42 @@ function kald(krop){
 
 /* Vurderingen maales mod dagens budget, ikke mod maden i sig selv. Det samme
    maaltid kan vaere rigeligt plads klokken tolv og trangt klokken ni om aftenen. */
-function vurderingsdel(){
-  var b = dagsbudget();
+function vurderingsdel(dag, tid){
+  dag = dag || S.iDag;
+  var efter = dag !== S.iDag;
+  var b = dagsbudget(dag);
   var hensigt = S.profil.hensigt === "holde"
-    ? "holde vaegten stabil"
+    ? "holde vægten stabil"
     : "tabe sig ved at begrænse kalorieindtaget";
-  return 'DAGENS STATUS: målet er ' + b.maal + ' kcal. Før dette måltid er der spist '
-    + b.spist + ' kcal, så der var ' + b.tilbage + ' kcal tilbage. Klokken er '
-    + new Date().toLocaleTimeString("da-DK", {hour:"2-digit", minute:"2-digit"}) + '. '
+  return (efter ? 'STATUS FOR ' + kortDato(dag) : 'DAGENS STATUS')
+    + ': målet er ' + b.maal + ' kcal. Før dette måltid er der spist '
+    + b.spist + ' kcal, så der var ' + b.tilbage + ' kcal tilbage. '
+    + (efter
+        ? 'Måltidet blev spist ' + kortDato(dag) + (tid ? ' klokken ' + tid : "") + '. '
+        : 'Klokken er ' + (tid || new Date().toLocaleTimeString("da-DK", {hour:"2-digit", minute:"2-digit"})) + '. ')
     + 'Brugerens hensigt med appen er at ' + hensigt + '.\n\n'
-    + 'Måltidet er ikke spist endnu, så vurderingen er en melding før forste bid, ikke en dom bagefter. '
+    + (efter
+        ? 'EFTERREGISTRERING: måltidet er spist for længst og bliver først skrevet ind nu. Se tilbage '
+          + 'på dagen, som den var. Kommenter aldrig på hvornår registreringen sker, og skriv aldrig '
+          + 'noget der forudsætter, at maden står foran brugeren — ingen bemærkninger om at det er '
+          + 'sent, om hvad der kan nås i dag, eller om aftensmaden der venter. '
+        : 'Måltidet er ikke spist endnu, så vurderingen er en melding før første bid, ikke en dom bagefter. ')
     + 'Vurder det i forhold til dagens budget og tidspunktet — ikke i forhold til maden i sig selv. '
     + 'Et stort måltid midt på dagen med rigelig plads tilbage er fint. Det samme måltid oven i en dag, '
     + 'der allerede er fyldt, er noget andet. Sæt status til "godt", når måltidet passer godt ind eller '
     + 'er et fornuftigt valg, "fint" når det er hverken eller, og "tungt" når det bruger en stor del af '
     + 'det, der var tilbage. Er budgettet allerede overskredet, så vær saglig og fremadrettet frem for '
     + 'bebrejdende — dagen er som den er, og i morgen er en ny.\n\n'
-    + 'VIGTIGT OM TIDSPUNKTET: måltidet står foran brugeren og er endnu ikke spist — det er '
-    + 'derfor der kan tages et billede af det. Dine forslag skal først og fremmest være noget, '
-    + 'der kan nås lige nu med det, der står på bordet: lade sovsen stå, spise halvdelen af '
-    + 'risene, droppe det andet stykke brød, tage vand i stedet for den næste øl, skrabe '
-    + 'dressingen af. Sæt "når" til "nu" på den slags.\n'
-    + 'Kan der intet gøres ved lige dette måltid, må du give et forslag til næste gang samme '
-    + 'ret står på bordet, og sætte "når" til "naeste".\n\n'
+    + (efter
+        ? 'VIGTIGT OM TIDSPUNKTET: måltidet er allerede spist, og der er intet at ændre ved det. '
+          + 'Alle forslag gælder næste gang retten står på bordet. Sæt "naar" til "naeste" på dem alle.\n\n'
+        : 'VIGTIGT OM TIDSPUNKTET: måltidet står foran brugeren og er endnu ikke spist — det er '
+          + 'derfor der kan tages et billede af det. Dine forslag skal først og fremmest være noget, '
+          + 'der kan nås lige nu med det, der står på bordet: lade sovsen stå, spise halvdelen af '
+          + 'risene, droppe det andet stykke brød, tage vand i stedet for den næste øl, skrabe '
+          + 'dressingen af. Sæt "naar" til "nu" på den slags.\n'
+          + 'Kan der intet gøres ved lige dette måltid, må du give et forslag til næste gang samme '
+          + 'ret står på bordet, og sætte "naar" til "naeste".\n\n')
     + 'Giv 1-3 forslag, men kun når der reelt er mindst 75 kcal at spare, og måltidet ligger i '
     + 'den tunge ende af dagens budget. Ellers en tom liste: er valget godt, står rosen fint '
     + 'alene, og gode råd til en skål havregryn er spild af begges tid. Hold forslagene til '
@@ -987,7 +1017,7 @@ function vurderingsdel(){
     + 'kæk bemærkning, der kun bliver vist, hvis forslaget faktisk bliver fulgt.';
 }
 
-function byggPrompt(note, svar, beskrivelse){
+function byggPrompt(note, svar, beskrivelse, dag, tid){
   var t = beskrivelse
     ? 'Du er ernæringsfaglig og vurderer et måltid ud fra en kort beskrivelse.\n\n'
       + 'Brugeren har skrevet: "' + beskrivelse + '"\n\n'
@@ -1018,7 +1048,7 @@ function byggPrompt(note, svar, beskrivelse){
     + (beskrivelse ? 'Er beskrivelsen præcis nok, stiller du ingen spørgsmål. '
                    : 'Er billedet tydeligt, stiller du ingen spørgsmål. ')
     + 'Giv altid dit bedste bud alligevel.\n\n'
-    + vurderingsdel();
+    + vurderingsdel(dag, tid);
   if (S.kaek) t += '\n\n' + tone();
   if (note) t += '\n\nBrugerens egen note om måltidet: "' + note + '". Vægt den højere end dit eget gæt.';
   if (svar && svar.length){
@@ -1046,12 +1076,12 @@ function byggPrompt(note, svar, beskrivelse){
     + 'Har du ingen alternativer at foreslå, sættes alternativer til en tom liste.';
   return t;
 }
-function analyser(dataUrl, note, svar, beskrivelse){
+function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
   var indhold = [];
   if (dataUrl){
     indhold.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } });
   }
-  indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse) });
+  indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse, dag, tid) });
   return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:indhold }] });
 }
 
@@ -2074,15 +2104,32 @@ function bindVindue(){
   });
 }
 /* Forslagene koster et API-kald, saa de gemmes og hentes kun paa opfordring */
+/* Et gemt forslag maa kun vises, hvis alle de retter det naevner stadig
+   findes i dagbogen. Ellers kan en slettet registrering leve videre i teksten. */
+function forslagStadigGyldigt(data, a){
+  if (!data || !Array.isArray(data.forslag)) return false;
+  var kendte = {};
+  a.toppe.forEach(function(t){ kendte[t.navn.toLowerCase().trim()] = 1; });
+  a.gengangere.forEach(function(g){ kendte[g.navn.toLowerCase().trim()] = 1; });
+  return data.forslag.every(function(x){
+    return !x.fra || kendte[String(x.fra).toLowerCase().trim()];
+  });
+}
 function tegnForslag(a){
   var boks = $("forslag"); if (!boks) return;
   if (S.forslagStatus === "tom"){
     try {
       var gemt = JSON.parse(laes(K_FORSLAG) || "null");
-      if (gemt && gemt.vindue === S.vindue && gemt.sign === signatur(a)){
+      if (gemt && gemt.vindue === S.vindue && gemt.sign === signatur(a)
+          && forslagStadigGyldigt(gemt.data, a)){
         S.forslag = gemt.data; S.forslagStatus = "klar";
+      } else if (gemt){
+        fjern(K_FORSLAG);
       }
     } catch(e){}
+  }
+  if (S.forslagStatus === "klar" && !forslagStadigGyldigt(S.forslag, a)){
+    S.forslag = null; S.forslagStatus = "tom"; fjern(K_FORSLAG);
   }
   if (S.forslagStatus === "henter"){
     boks.innerHTML = '<p style="color:var(--daempet)">Kigger dagbogen igennem …</p>';
@@ -2140,7 +2187,8 @@ function tegnArk(){
   if (a.stor && a.status !== "spoergsmaal") h += '<img class="foto' + (a.status === "analyserer" ? " venter" : "") + '" src="' + a.stor + '" alt="Det valgte måltid">';
 
   if (a.status === "valgt"){
-    h += '<span class="lbl">Note (valgfri) — fx “stor portion” eller “stegt i smør”</span>'
+    h += naarFelter("in-dato", "in-tid", a.dag || maalDag(), a.tid || standardTid(a.dag || maalDag()))
+      + '<span class="lbl">Note (valgfri) — fx “stor portion” eller “stegt i smør”</span>'
       + '<input id="in-note" placeholder="Skriv det, billedet ikke viser" value="' + esc(a.note || "") + '">'
       + '<button class="knap" id="b-analyser" style="margin-top:14px">Analysér måltidet</button>'
       + '<button class="knap sek" id="b-manuel" style="margin-top:8px">Skriv ind selv</button>';
@@ -2150,6 +2198,7 @@ function tegnArk(){
       + '<textarea id="s-tekst" rows="2" placeholder="fx to fadøl og en hotdog med det hele">' + esc(a.tekst || "") + '</textarea>'
       + '<p class="grafnote" style="margin:8px 0 0">Appen regner på beskrivelsen ligesom på et billede — '
       + 'og spørger, hvis noget er uklart. Skriv mængden med, hvis du kender den.</p>'
+      + naarFelter("in-dato", "in-tid", a.dag || maalDag(), a.tid || standardTid(a.dag || maalDag()))
       + '<button class="knap" id="b-beregn" style="margin-top:14px">Beregn kalorier</button>'
       + '<button class="knap sek" id="b-manuel" style="margin-top:8px">Indtast tallene selv</button>'
       + '<button class="knap sek" id="b-luk" style="margin-top:8px">Fortryd</button>';
@@ -2183,8 +2232,7 @@ function tegnArk(){
       + KATEGORIER.map(function(k){
           return '<option value="' + esc(k) + '"' + (r.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
         }).join("") + '</select>'
-      + '<span class="lbl">Dato</span>'
-      + '<input id="f-dato" type="date" value="' + esc(maalDag()) + '" max="' + esc(S.iDag) + '">'
+      + naarFelter("f-dato", "f-tid", a.dag || maalDag(), a.tid || standardTid(a.dag || maalDag()))
       + '<span class="lbl">Antal portioner — tallene herunder følger med</span>'
       + '<input id="f-ant" type="text" inputmode="decimal" value="1">'
       + '<span class="lbl">Kalorier i alt</span>'
@@ -2243,6 +2291,8 @@ function tegnArk(){
   var bm = $("b-manuel"); if (bm) bm.onclick = function(){
     var st = $("s-tekst");
     S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note || "",
+      dag: ($("in-dato") && $("in-dato").value) || a.dag || maalDag(),
+      tid: laesTid("in-tid") || a.tid || standardTid(a.dag || maalDag()),
       beskrivelse: st ? st.value.trim() : a.beskrivelse,
       r:{ navn: st ? st.value.trim().slice(0,60) : "", kategori:"Andet", portion:"",
           kalorier:0, protein_g:0, kulhydrat_g:0, fedt_g:0, genstande:0,
@@ -2252,10 +2302,11 @@ function tegnArk(){
   var bb = $("b-beregn"); if (bb) bb.onclick = function(){
     var t = $("s-tekst").value.trim();
     if (t.length < 2){ $("s-tekst").focus(); return; }
-    kaldAnalyse(null, null, "", null, t);
+    kaldAnalyse(null, null, "", null, t, $("in-dato").value || maalDag(), laesTid("in-tid"));
   };
   var ba = $("b-analyser"); if (ba) ba.onclick = function(){
-    kaldAnalyse(a.stor, a.lille, $("in-note").value.trim(), null, null);
+    kaldAnalyse(a.stor, a.lille, $("in-note").value.trim(), null, null,
+                $("in-dato").value || maalDag(), laesTid("in-tid"));
   };
   Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function(b){
     b.onclick = function(){
@@ -2270,7 +2321,7 @@ function tegnArk(){
       if (a.svar[i] && a.svar[i] !== "Ved ikke") svar.push({ q: sp.tekst, a: a.svar[i] });
     });
     if (!svar.length){ visResultat(a, a.r); return; }
-    kaldAnalyse(a.stor, a.lille, a.note, svar, a.beskrivelse);
+    kaldAnalyse(a.stor, a.lille, a.note, svar, a.beskrivelse, a.dag, a.tid);
   };
   var bsp = $("b-spring"); if (bsp) bsp.onclick = function(){ visResultat(a, a.r); };
   function opdaterBudget(){
@@ -2333,7 +2384,7 @@ function tegnArk(){
     var poster = hentDag(dag);
     poster.push(normaliser({
       id: String(Date.now()),
-      tid: new Date().toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"}),
+      tid: laesTid("f-tid") || standardTid(dag),
       navn: $("f-navn").value.trim() || "Måltid",
       kategori: $("f-kat").value,
       portion: (a.r && a.r.portion) || "",
@@ -2361,14 +2412,17 @@ function tegnArk(){
 }
 function visResultat(a, r){
   S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note,
-            beskrivelse:a.beskrivelse, r:r };
+            beskrivelse:a.beskrivelse, dag:a.dag, tid:a.tid, r:r };
   tegnArk();
 }
-function kaldAnalyse(stor, lille, note, svar, beskrivelse){
-  S.ark = { status:"analyserer", stor:stor, lille:lille, note:note, beskrivelse:beskrivelse };
+function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid){
+  dag = dag || maalDag();
+  tid = tid || standardTid(dag);
+  S.ark = { status:"analyserer", stor:stor, lille:lille, note:note,
+            beskrivelse:beskrivelse, dag:dag, tid:tid };
   tegnArk();
-  analyser(stor, note, svar, beskrivelse).then(function(r){
-    var basis = { stor:stor, lille:lille, note:note, beskrivelse:beskrivelse };
+  analyser(stor, note, svar, beskrivelse, dag, tid).then(function(r){
+    var basis = { stor:stor, lille:lille, note:note, beskrivelse:beskrivelse, dag:dag, tid:tid };
     if (!r.er_mad){
       S.ark = Object.assign({ status:"fejl", besked: beskrivelse
         ? "Det lyder ikke som mad eller drikke. Prøv en anden formulering, eller indtast tallene selv."
@@ -2385,6 +2439,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse){
     visResultat(basis, r);
   }).catch(function(err){
     S.ark = { status:"fejl", stor:stor, lille:lille, note:note, beskrivelse:beskrivelse,
+      dag:dag, tid:tid,
       besked:(err && err.message) || "Analysen gik i stå. Prøv igen, eller indtast tallene selv." };
     tegnArk();
   });
