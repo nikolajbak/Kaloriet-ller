@@ -262,7 +262,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "26.1";
+var APP_VERSION = "26.2";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1030,7 +1030,60 @@ function forbrugDenneMaaned(){
   catch(e){ return 0; }
 }
 
-function kald(krop){
+/* Trækker JSON ud af et svar, også når modellen har pakket det ind i tekst
+   eller er blevet afbrudt midt i. Et afbrudt svar lukkes forsigtigt, så et
+   brugbart estimat ikke går tabt, blot fordi den sidste parentes mangler. */
+function udtraekJson(tekst){
+  if (!tekst) return null;
+  var t = tekst.replace(/```json/gi, "```").split("```").join("\n");
+  var start = t.indexOf("{");
+  if (start < 0) return null;
+  t = t.slice(start);
+
+  var slut = t.lastIndexOf("}");
+  if (slut > 0){
+    try { return JSON.parse(t.slice(0, slut + 1)); } catch(e){}
+  }
+  /* Afbrudt svar: luk de parenteser og anførselstegn der mangler */
+  var iStreng = false, undvig = false, stak = [], sidsteHele = -1;
+  for (var i = 0; i < t.length; i++){
+    var c = t[i];
+    if (undvig){ undvig = false; continue; }
+    if (c === "\\"){ undvig = true; continue; }
+    if (c === '"'){ iStreng = !iStreng; continue; }
+    if (iStreng) continue;
+    if (c === "{" || c === "[") stak.push(c === "{" ? "}" : "]");
+    else if (c === "}" || c === "]"){
+      stak.pop();
+      if (!stak.length) sidsteHele = i;
+    }
+    else if (c === "," && stak.length === 1) sidsteHele = i;
+  }
+  var hale = "";
+  if (iStreng) hale += '"';
+  for (var j = stak.length - 1; j >= 0; j--) hale += stak[j];
+  try { return JSON.parse(t + hale); } catch(e){}
+  /* Sidste udvej: skær tilbage til sidste hele felt */
+  if (sidsteHele > 0){
+    var kort = t.slice(0, sidsteHele);
+    var stak2 = [], s2 = false, u2 = false;
+    for (var k = 0; k < kort.length; k++){
+      var d = kort[k];
+      if (u2){ u2 = false; continue; }
+      if (d === "\\"){ u2 = true; continue; }
+      if (d === '"'){ s2 = !s2; continue; }
+      if (s2) continue;
+      if (d === "{" || d === "[") stak2.push(d === "{" ? "}" : "]");
+      else if (d === "}" || d === "]") stak2.pop();
+    }
+    var hale2 = "";
+    for (var m = stak2.length - 1; m >= 0; m--) hale2 += stak2[m];
+    try { return JSON.parse(kort + hale2); } catch(e){}
+  }
+  return null;
+}
+
+function kald(krop, andetForsoeg){
   tael();
   return fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -1052,9 +1105,27 @@ function kald(krop){
         throw new Error(m || ("Fejl " + r.status));
       }
       var tekst = (data.content || []).map(function(b){ return b.type === "text" ? b.text : ""; }).join("");
-      var a = tekst.indexOf("{"), b = tekst.lastIndexOf("}");
-      if (a < 0 || b < 0) throw new Error("Svaret kunne ikke læses. Prøv igen.");
-      return JSON.parse(tekst.slice(a, b + 1));
+      var pakke = udtraekJson(tekst);
+      if (pakke) return pakke;
+
+      var afkortet = data.stop_reason === "max_tokens";
+      if (!andetForsoeg){
+        /* Ét nyt forsøg med mere plads og en skarpere besked om formatet */
+        var igen = JSON.parse(JSON.stringify(krop));
+        igen.max_tokens = Math.max(Number(krop.max_tokens) || 900, 2000);
+        var sidste = igen.messages[igen.messages.length - 1];
+        if (Array.isArray(sidste.content)){
+          sidste.content.push({ type:"text",
+            text:"Svar udelukkende med selve JSON-objektet. Ingen indledning, ingen markdown, "
+               + "ingen forklaring. Hold noter og kommentarer korte." });
+        } else {
+          sidste.content += "\n\nSvar udelukkende med selve JSON-objektet. Ingen indledning, "
+            + "ingen markdown, ingen forklaring. Hold noter og kommentarer korte.";
+        }
+        return kald(igen, true);
+      }
+      if (afkortet) throw new Error("Svaret blev for langt og nåede ikke at blive færdigt. Prøv igen, eller indtast tallene selv.");
+      throw new Error("Svaret kunne ikke læses. Modellen skrev: " + tekst.slice(0, 90).replace(/\s+/g, " "));
     });
   });
 }
@@ -1172,7 +1243,7 @@ function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
     indhold.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } });
   }
   indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse, dag, tid) });
-  return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:indhold }] });
+  return kald({ model:S.model, max_tokens:1800, messages:[{ role:"user", content:indhold }] });
 }
 
 /* Hvad kan der spises for resten af dagen. Kender dagens maaltider, klokkeslaet,
