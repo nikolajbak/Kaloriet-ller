@@ -262,7 +262,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "26.2";
+var APP_VERSION = "26.3";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -328,6 +328,7 @@ function normaliser(p, i){
     kommentar: typeof p.kommentar === "string" ? p.kommentar : "",
     kategori: KATEGORIER.indexOf(p.kategori) >= 0 ? p.kategori : "Andet",
     portioner: ant,
+    gram: Math.max(0, Math.round(Number(p.gram) || 0)),
     pr_portion: {
       kalorier: Number(pr.kalorier) || 0,
       protein_g: Number(pr.protein_g) || 0,
@@ -370,8 +371,11 @@ function prPortion(totaler, antal){
   return ud;
 }
 function portionsTekst(p){
-  if (!p.portioner || p.portioner === 1) return "";
-  return kg(p.portioner).replace(",0", "") + " portioner";
+  var ant = p.portioner || 1;
+  var stk = ant === 1 ? "" : kg(ant).replace(",0", "") + " portioner";
+  if (!p.gram) return stk;
+  var vaegt = ant === 1 ? p.gram + " g" : ant + " × " + p.gram + " g";
+  return stk ? vaegt : vaegt;
 }
 function hentDag(noegle){
   var r;
@@ -1192,6 +1196,11 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
       + 'Husk synligt fedtstof, dressing og sovs.\n\n';
   t += ''
     + 'Vælg præcis en kategori fra denne liste: ' + KATEGORIER.join(", ") + '.\n\n'
+    + 'Anslå også vægten af én portion i gram. Det er den samlede vægt af det, der spises — '
+    + 'kød, tilbehør, sovs og fedtstof lagt sammen, ikke kun hovedingrediensen. Drikkevarer '
+    + 'angives i gram svarende til deciliter, så en fadøl på 40 cl er 400 g. Regn med danske '
+    + 'normalportioner, når intet andet fremgår: en middagstallerken 400-500 g, en skål havregryn '
+    + 'med mælk 350 g, et stykke rugbrød med pålæg 100-130 g.\n\n'
     + (beskrivelse ? 'Det kan lige så godt være drikkevarer som mad, også alkohol. '
                    : 'Billedet kan lige så godt vise drikkevarer som mad, også alkohol. ')
     + 'Øl, vin, drinks og '
@@ -1220,6 +1229,7 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
   t += '\n\nSvar udelukkende med et JSON-objekt, uden markdown og uden indledning:\n'
     + '{"er_mad": true/false, "navn": "kort dansk navn", "kategori": "en af kategorierne", '
     + '"portion": "kort beskrivelse af den mængde du har regnet med", '
+    + '"gram": heltal — anslået vægt af ÉN portion i gram, alt medregnet, 0 hvis det slet ikke kan vurderes, '
     + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
     + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort sætning om det væsentligste forbehold", '
@@ -1985,8 +1995,14 @@ function aabnRediger(dag, id){
     + KATEGORIER.map(function(k){
         return '<option value="' + esc(k) + '"' + (m.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
       }).join("") + '</select>'
-    + '<span class="lbl">Antal portioner — tallene herunder følger med</span>'
-    + '<input id="r-ant" type="text" inputmode="decimal" value="' + kg(m.portioner).replace(",0","") + '">'
+    + '<span class="lbl">Portioner og vægt — tallene herunder følger med</span>'
+    + '<div style="display:flex;gap:8px;align-items:center">'
+    + '<input id="r-ant" type="text" inputmode="decimal" style="flex:1" aria-label="Antal portioner" '
+    + 'value="' + kg(m.portioner).replace(",0","") + '">'
+    + '<span style="flex:none;color:var(--daempet);font-size:14px">×</span>'
+    + '<input id="r-gram" type="number" inputmode="numeric" style="flex:1.2" aria-label="Gram pr. portion" '
+    + 'placeholder="gram" value="' + (m.gram || "") + '">'
+    + '<span style="flex:none;color:var(--daempet);font-size:14px">g</span></div>'
     + '<span class="lbl">Kalorier i alt</span>'
     + '<input id="r-kcal" type="number" inputmode="numeric" value="' + m.kalorier + '">'
     + '<span class="lbl">Protein · kulhydrat · fedt (g)</span><div class="gitter">'
@@ -2008,6 +2024,7 @@ function aabnRediger(dag, id){
   document.body.insertAdjacentHTML("beforeend", h);
 
   bindPortioner("r-ant", ["r-kcal","r-pro","r-kul","r-fedt","r-gen"]);
+  bindPortioner("r-gram", ["r-kcal","r-pro","r-kul","r-fedt","r-gen"]);
   function luk(){ lukBlodt("r-overlay"); }
   function opdater(){
     nulstilAfledt();
@@ -2037,6 +2054,7 @@ function aabnRediger(dag, id){
         portion: p.portion,
         kommentar: p.kommentar,
         portioner: ant,
+        gram: Number($("r-gram").value) || 0,
         pr_portion: prPortion(totaler, ant),
         kalorier: totaler.kalorier,
         protein_g: totaler.protein_g,
@@ -2434,9 +2452,14 @@ function tegnArk(){
           return '<option value="' + esc(k) + '"' + (r.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
         }).join("") + '</select>'
       + naarFelter("f-dato", "f-tid", a.dag || maalDag(), a.tid || standardTid(a.dag || maalDag()))
-      + '<span class="lbl">Antal portioner — tallene herunder følger med</span>'
-      + '<input id="f-ant" type="text" inputmode="decimal" value="'
+      + '<span class="lbl">Portioner og vægt — tallene herunder følger med</span>'
+      + '<div style="display:flex;gap:8px;align-items:center">'
+      + '<input id="f-ant" type="text" inputmode="decimal" style="flex:1" aria-label="Antal portioner" value="'
       + (a.antal ? kg(a.antal).replace(",0","") : "1") + '">'
+      + '<span style="flex:none;color:var(--daempet);font-size:14px">×</span>'
+      + '<input id="f-gram" type="number" inputmode="numeric" style="flex:1.2" aria-label="Gram pr. portion" '
+      + 'placeholder="gram" value="' + (Number(r.gram) || "") + '">'
+      + '<span style="flex:none;color:var(--daempet);font-size:14px">g</span></div>'
       + '<span class="lbl">Kalorier i alt</span>'
       + '<input id="f-kcal" type="number" inputmode="numeric" value="' + (Number(r.kalorier)||0) + '">'
       + '<span class="lbl">Protein · kulhydrat · fedt (g)</span><div class="gitter">'
@@ -2535,6 +2558,8 @@ function tegnArk(){
       + (d !== S.iDag ? '<div class="rest">Registreres på ' + esc(kortDato(d)) + '</div>' : "");
   }
   bindPortioner("f-ant", ["f-kcal","f-pro","f-kul","f-fedt","f-gen"], opdaterBudget);
+  /* Vægten skalerer på samme måde: dobbelt så mange gram er dobbelt så meget mad */
+  bindPortioner("f-gram", ["f-kcal","f-pro","f-kul","f-fedt","f-gen"], opdaterBudget);
   var fd = $("f-dato"); if (fd) fd.onchange = opdaterBudget;
   var altListe = (a.r && Array.isArray(a.r.alternativer))
     ? a.r.alternativer.filter(function(x){ return x && x.til; }).slice(0,3) : [];
@@ -2592,6 +2617,7 @@ function tegnArk(){
       portion: (a.r && a.r.portion) || "",
       kommentar: (a.r && a.r.kommentar) || "",
       portioner: laesKomma($("f-ant").value) || 1,
+      gram: Number($("f-gram").value) || 0,
       pr_portion: prPortion({
         kalorier: Number($("f-kcal").value) || 0,
         protein_g: Number($("f-pro").value) || 0,
