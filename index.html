@@ -242,6 +242,12 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 @keyframes glid{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .skelet.linje{height:13px;margin-top:10px;}
 .bundfelt{border-top:1px solid var(--linje);margin-top:6px;padding-top:16px;}
+@keyframes ind_fra_hoejre{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes ind_fra_venstre{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+.indhold.frem{animation:ind_fra_hoejre .26s cubic-bezier(.22,.7,.3,1);}
+.indhold.tilbage{animation:ind_fra_venstre .26s cubic-bezier(.22,.7,.3,1);}
+.bund.skift{animation:doer .3s ease-out;}
+.valg button{transition:background-color .18s ease-out, color .18s ease-out;}
 .skjul{display:none;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -256,7 +262,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "26.0";
+var APP_VERSION = "26.1";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -651,6 +657,7 @@ var S = {
   })(),
   get kaek(){ return this.kaekhed !== "fra"; },
   skaerm: "idag",
+  skiftRetning: null,
   periode: "dag",
   vindue: 30,
   valgt: null,
@@ -1448,6 +1455,7 @@ function tegn(){
   else if (S.skaerm === "trends") tegnTrends();
   else if (S.skaerm === "vaegt") tegnVaegt();
   else tegnHoved();
+  animerSkift();
   if (S.ark) tegnArk();
   if (S.indst) tegnIndstillinger();
 }
@@ -1540,14 +1548,32 @@ function hoved(venstre){
       }).join("")
     + '</div>';
 }
+var FANER = ["idag","vaegt","historik","trends"];
 function bindHoved(){
   $("b-indst").onclick = function(){ S.indst = true; tegn(); };
   Array.prototype.forEach.call(document.querySelectorAll("[data-skaerm]"), function(b){
     b.onclick = function(){
-      S.skaerm = b.getAttribute("data-skaerm");
+      var ny = b.getAttribute("data-skaerm");
+      if (ny === S.skaerm) return;
+      /* Retningen foelger fanernes raekkefoelge, saa bevaegelsen svarer til
+         den vej man ville skubbe siden med fingeren. */
+      S.skiftRetning = FANER.indexOf(ny) > FANER.indexOf(S.skaerm) ? "frem" : "tilbage";
+      S.skaerm = ny;
       S.valgt = null; skjulFortryd(); window.scrollTo(0,0); tegn();
     };
   });
+}
+
+/* Indgangen spilles kun ved et rigtigt faneskift — ikke hver gang skaermen
+   tegnes om efter et gemt maaltid eller en sletning. */
+function animerSkift(){
+  if (!S.skiftRetning) return;
+  var retning = S.skiftRetning;
+  S.skiftRetning = null;
+  var indhold = document.querySelector(".indhold");
+  if (indhold) indhold.classList.add(retning);
+  var bund = document.querySelector(".bund");
+  if (bund) bund.classList.add("skift");
 }
 
 /* --- I dag --- */
