@@ -81,10 +81,16 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .lbl{display:block;font-size:13px;color:var(--daempet);margin:14px 0 5px;}
 .gitter{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
 .overlay{position:fixed;inset:0;background:rgba(23,33,29,.42);z-index:30;
-  display:flex;align-items:flex-end;justify-content:center;}
+  display:flex;align-items:flex-end;justify-content:center;
+  animation:doer .22s ease-out;}
 .panel{background:var(--papir);width:100%;max-width:520px;max-height:92vh;overflow-y:auto;
   border-radius:18px 18px 0 0;padding:18px 18px calc(26px + env(safe-area-inset-bottom));
-  -webkit-overflow-scrolling:touch;}
+  -webkit-overflow-scrolling:touch;
+  animation:glidop .3s cubic-bezier(.22,.7,.3,1);}
+@keyframes doer{from{opacity:0}to{opacity:1}}
+@keyframes glidop{from{transform:translateY(28px)}to{transform:none}}
+@keyframes fold{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+@keyframes traedfrem{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .panel h3{margin:0 0 14px;font-size:17px;}
 .foto{width:100%;border-radius:12px;display:block;background:#DDE0D8;}
 .foto.venter{animation:aande 1.5s ease-in-out infinite;}
@@ -195,6 +201,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .fortryd{position:fixed;left:0;right:0;z-index:45;
   bottom:calc(90px + env(safe-area-inset-bottom));padding:0 18px;
   display:flex;justify-content:center;pointer-events:none;}
+.fortryd{animation:traedfrem .24s ease-out;}
 .fortryd .indre{background:var(--blaek);color:#F1F3EE;border-radius:12px;
   padding:12px 14px;display:flex;align-items:center;gap:14px;max-width:520px;width:100%;
   font-size:14px;pointer-events:auto;box-shadow:0 6px 18px rgba(23,33,29,.22);}
@@ -202,6 +209,8 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .fortryd button{flex:none;background:none;border:none;color:#9FD3BE;font:inherit;
   font-size:14px;font-weight:600;padding:4px 2px;cursor:pointer;
   text-decoration:underline;text-underline-offset:3px;}
+.opdater{animation:falddown .26s ease-out;}
+@keyframes falddown{from{opacity:0;transform:translateY(-100%)}to{opacity:1;transform:none}}
 .opdater{position:fixed;left:0;right:0;top:0;z-index:40;background:var(--gron);color:#F4F6F2;
   padding:calc(10px + env(safe-area-inset-top)) 14px 11px;display:flex;gap:12px;
   align-items:center;justify-content:space-between;font-size:14px;line-height:1.3;}
@@ -211,13 +220,17 @@ details.afsnit{border-top:1px solid var(--linje);margin-top:2px;}
 details.afsnit > summary{list-style:none;cursor:pointer;padding:15px 2px;
   font-size:15px;font-weight:600;display:flex;justify-content:space-between;align-items:center;}
 details.afsnit > summary::-webkit-details-marker{display:none;}
-details.afsnit > summary::after{content:"+";color:var(--daempet);font-weight:400;font-size:17px;}
-details.afsnit[open] > summary::after{content:"–";}
+details.afsnit > summary::after{content:"+";color:var(--daempet);font-weight:400;font-size:20px;
+  line-height:1;display:inline-block;}
 details.afsnit > div{padding-bottom:16px;}
+details.afsnit[open] > div{animation:fold .24s ease-out;}
+details.afsnit > summary::after{transition:transform .22s cubic-bezier(.22,.7,.3,1);}
+details.afsnit[open] > summary::after{transform:rotate(45deg);}
 .skelet{background:linear-gradient(90deg,#DDE0D8 25%,#E6E8E1 50%,#DDE0D8 75%);
   background-size:200% 100%;animation:glid 1.4s ease-in-out infinite;border-radius:8px;}
 @keyframes glid{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .skelet.linje{height:13px;margin-top:10px;}
+.bundfelt{border-top:1px solid var(--linje);margin-top:6px;padding-top:16px;}
 .skjul{display:none;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -232,7 +245,7 @@ details.afsnit > div{padding-bottom:16px;}
 <script>
 "use strict";
 
-var APP_VERSION = "25.0";
+var APP_VERSION = "25.1";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2627,7 +2640,6 @@ function tegnIndstillinger(){
     + '<button class="knap sek" id="s-import" style="margin-top:8px">Indlæs sikkerhedskopi</button>'
     + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data</button>'
     + '</div></details>'
-    + '</div></details>'
     + '<details class="afsnit"><summary>Sikkerhed</summary><div>'
     + '<p class="grafnote" style="margin:6px 0 0">Koden krypterer din API-nøgle. Uden den ligger '
     + 'nøglen ikke læsbart på telefonen, og ingen kan bruge din konto. Måltider og vægt gemmes '
@@ -2640,9 +2652,12 @@ function tegnIndstillinger(){
           + '<button class="knap sek" id="s-laasnu" style="margin-top:12px">Lås appen nu</button>'
           + '<button class="knap fare" id="s-laasfra" style="margin-top:8px">Slå kodelås fra</button>'
         : '<button class="knap sek" id="s-laastil" style="margin-top:12px">Slå kodelås til</button>')
-    + '<button class="knap sek" id="s-opdater" style="margin-top:8px">Søg efter opdatering</button>'
-    + '<p class="fodnote" style="text-align:center">Version ' + APP_VERSION
-    + ' · ' + forbrugDenneMaaned() + ' analyser denne måned</p></div></div>';
+    + '</div></details>'
+    + '<div class="bundfelt">'
+    + '<button class="knap sek" id="s-opdater">Søg efter opdatering</button>'
+    + '<p class="fodnote" style="text-align:center;margin-top:12px">Version ' + APP_VERSION
+    + ' · ' + forbrugDenneMaaned() + ' analyser denne måned</p>'
+    + '</div></div></div>';
   var gl = $("ind-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
 
