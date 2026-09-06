@@ -83,6 +83,10 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .overlay{position:fixed;inset:0;background:rgba(23,33,29,.42);z-index:30;
   display:flex;align-items:flex-end;justify-content:center;
   animation:doer .22s ease-out;}
+.overlay.lukker{animation:doerud .2s ease-in forwards;}
+.overlay.lukker > .panel{animation:glidned .2s ease-in forwards;}
+@keyframes doerud{to{opacity:0}}
+@keyframes glidned{to{transform:translateY(30px)}}
 .panel{background:var(--papir);width:100%;max-width:520px;max-height:92vh;overflow-y:auto;
   border-radius:18px 18px 0 0;padding:18px 18px calc(26px + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling:touch;
@@ -223,7 +227,7 @@ details.afsnit > summary::-webkit-details-marker{display:none;}
 details.afsnit > summary::after{content:"+";color:var(--daempet);font-weight:400;font-size:20px;
   line-height:1;display:inline-block;}
 details.afsnit > div{padding-bottom:16px;}
-details.afsnit[open] > div{animation:fold .24s ease-out;}
+
 details.afsnit > summary::after{transition:transform .22s cubic-bezier(.22,.7,.3,1);}
 details.afsnit[open] > summary::after{transform:rotate(45deg);}
 .skelet{background:linear-gradient(90deg,#DDE0D8 25%,#E6E8E1 50%,#DDE0D8 75%);
@@ -245,7 +249,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "25.1";
+var APP_VERSION = "25.2";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1832,7 +1836,7 @@ function aabnVejning(dag){
     + '<button class="knap sek" id="v-luk" style="margin-top:8px">Fortryd</button></div></div>';
   var gl = $("v-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
-  function luk(){ var o = $("v-overlay"); if (o) o.remove(); }
+  function luk(){ lukBlodt("v-overlay"); }
   $("v-overlay").onclick = function(e){ if (e.target.id === "v-overlay") luk(); };
   $("v-luk").onclick = luk;
   $("v-gem").onclick = function(){
@@ -1900,7 +1904,7 @@ function aabnRediger(dag, id){
   document.body.insertAdjacentHTML("beforeend", h);
 
   bindPortioner("r-ant", ["r-kcal","r-pro","r-kul","r-fedt","r-gen"]);
-  function luk(){ var o = $("r-overlay"); if (o) o.remove(); }
+  function luk(){ lukBlodt("r-overlay"); }
   function opdater(){
     nulstilAfledt();
     luk(); tegn();
@@ -2543,8 +2547,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal){
 function lukArk(){
   S.ark = null;
   S.maalDag = null;
-  var o = $("overlay"); if (o) o.remove();
-  tegn();
+  lukBlodt("overlay", tegn);
 }
 
 /* --- Indstillinger --- */
@@ -2560,6 +2563,65 @@ function snapHtml(){
       + x.vejninger + ' vejninger' + (x.aarsag ? ' · ' + esc(x.aarsag) : "") + '</span></span>'
       + '<button data-snap="' + esc(x.noegle) + '">Gendan</button></div>';
   }).join("");
+}
+
+/* <details> lukker uden animation af sig selv — browseren river indholdet ud med det
+   samme. Derfor styres hoejden herfra, saa den folder lige saa blodt sammen som ud. */
+function bindFoldning(rod){
+  var afsnit = (rod || document).querySelectorAll("details.afsnit");
+  Array.prototype.forEach.call(afsnit, function(d){
+    var sum = d.children[0], krop = d.children[1];
+    if (!sum || !krop) return;
+    sum.onclick = function(e){
+      e.preventDefault();
+      if (d.getAttribute("data-arbejder")) return;
+      d.setAttribute("data-arbejder", "1");
+      krop.style.overflow = "hidden";
+
+      if (!d.open){
+        d.open = true;
+        krop.style.height = "0px";
+        krop.style.opacity = "0";
+        var maal = krop.scrollHeight;
+        requestAnimationFrame(function(){
+          krop.style.transition = "height .26s cubic-bezier(.22,.7,.3,1), opacity .2s ease-out";
+          krop.style.height = maal + "px";
+          krop.style.opacity = "1";
+        });
+        setTimeout(function(){
+          krop.style.transition = ""; krop.style.height = "";
+          krop.style.opacity = ""; krop.style.overflow = "";
+          d.removeAttribute("data-arbejder");
+        }, 280);
+      } else {
+        krop.style.height = krop.scrollHeight + "px";
+        requestAnimationFrame(function(){
+          krop.style.transition = "height .22s cubic-bezier(.4,0,.7,1), opacity .16s ease-in";
+          krop.style.height = "0px";
+          krop.style.opacity = "0";
+        });
+        setTimeout(function(){
+          d.open = false;
+          krop.style.transition = ""; krop.style.height = "";
+          krop.style.opacity = ""; krop.style.overflow = "";
+          d.removeAttribute("data-arbejder");
+        }, 240);
+      }
+    };
+  });
+}
+
+/* Ark skal ogsaa glide ud igen. Id-et fjernes med det samme, saa arket ikke
+   kan findes to gange, mens udgangen spiller. */
+function lukBlodt(id, naar){
+  var o = $(id);
+  if (!o){ if (naar) naar(); return; }
+  o.removeAttribute("id");
+  o.classList.add("lukker");
+  setTimeout(function(){
+    if (o.parentNode) o.parentNode.removeChild(o);
+    if (naar) naar();
+  }, 200);
 }
 
 function tegnIndstillinger(){
@@ -2661,7 +2723,7 @@ function tegnIndstillinger(){
   var gl = $("ind-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
 
-  function luk(){ S.indst = false; var o = $("ind-overlay"); if (o) o.remove(); tegn(); }
+  function luk(){ S.indst = false; lukBlodt("ind-overlay", tegn); }
   $("ind-overlay").onclick = function(e){ if (e.target.id === "ind-overlay") luk(); };
   $("s-gem").onclick = function(){
     var nv = $("s-navn").value.trim();
@@ -2734,6 +2796,7 @@ function tegnIndstillinger(){
       }
     };
   });
+  bindFoldning($("ind-overlay"));
   var lt = $("s-laastil"); if (lt) lt.onclick = function(){ opsaetKode(); };
   var lf = $("s-laasfra"); if (lf) lf.onclick = function(){
     if (!confirm("Slå kodelåsen fra? API-nøglen bliver derefter liggende ukrypteret på telefonen.")) return;
@@ -2842,7 +2905,7 @@ function opsaetKode(){
     + '<button class="knap sek" id="k-luk" style="margin-top:8px">Fortryd</button></div></div>';
   var gl = $("k-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
-  function luk(){ var o = $("k-overlay"); if (o) o.remove(); }
+  function luk(){ lukBlodt("k-overlay"); }
   $("k-luk").onclick = luk;
   $("k-overlay").onclick = function(e){ if (e.target.id === "k-overlay") luk(); };
   $("k-gem").onclick = function(){
