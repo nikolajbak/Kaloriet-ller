@@ -11,7 +11,7 @@
  * denne fil, så der aldrig gemmes svar med dine måltider i en cache.
  */
 
-var CACHE = "kaloriedagbog-skal-1";
+var CACHE = "kaloriedagbog-skal-2";
 
 var SKAL = [
   "./",
@@ -55,8 +55,14 @@ self.addEventListener("fetch", function (e) {
   try { url = new URL(req.url); } catch (fejl) { return; }
   if (url.origin !== self.location.origin) return;
 
-  // Selve siden: netværk først, cache som nødløsning
-  if (req.mode === "navigate" || (req.headers.get("accept") || "").indexOf("text/html") >= 0) {
+  // Selve siden: netværk først, cache som nødløsning.
+  // Afgørelsen træffes på ADRESSEN, ikke på hvordan kaldet er stillet. Appens eget
+  // versionstjek henter index.html med en almindelig fetch — den er hverken en
+  // navigation eller mærket text/html, og den ramte derfor tidligere cachen og så
+  // aldrig en ny version.
+  var sti = url.pathname;
+  var erSiden = sti.slice(-1) === "/" || sti.slice(-5) === ".html";
+  if (erSiden || req.mode === "navigate") {
     e.respondWith(
       fetch(req).then(function (svar) {
         if (svar && svar.ok) {
@@ -72,6 +78,10 @@ self.addEventListener("fetch", function (e) {
     );
     return;
   }
+
+  // Alt med en forespørgselsstreng går uden om cachen — den slags er altid
+  // et bevidst forsøg på at hente noget friskt
+  if (url.search) return;
 
   // Ikoner og manifest: cache først, men hentes stille i baggrunden
   e.respondWith(

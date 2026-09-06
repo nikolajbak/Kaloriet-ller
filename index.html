@@ -250,6 +250,19 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 .indhold.tilbage{animation:ind_fra_venstre .26s cubic-bezier(.22,.7,.3,1);}
 .bund.skift{animation:doer .3s ease-out;}
 .valg button{transition:background-color .18s ease-out, color .18s ease-out;}
+.fejring{position:fixed;inset:0;z-index:60;background:#101A16;color:#F4F6F2;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:32px 26px calc(32px + env(safe-area-inset-bottom));
+  animation:doer .35s ease-out;}
+.fejring canvas{position:absolute;inset:0;width:100%;height:100%;}
+.fejring .indre{position:relative;z-index:1;max-width:420px;}
+.fejring .top{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#9FD3BE;}
+.fejring .tal{font-family:Georgia,serif;font-size:64px;line-height:1;margin:14px 0 6px;
+  font-variant-numeric:tabular-nums;}
+.fejring .under{font-size:15px;color:#B9C6BE;}
+.fejring .linje{font-family:Georgia,serif;font-size:20px;line-height:1.35;margin:26px 0 0;}
+.fejring button{margin-top:32px;background:#F4F6F2;color:#17211D;border:none;border-radius:12px;
+  padding:14px 30px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;}
 .skjul{display:none;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -264,7 +277,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "27.1";
+var APP_VERSION = "27.2";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -281,7 +294,7 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash",
     P_SNAP = "kd:snap:", K_EKSPORT = "kd:sidste-eksport",
     K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand",
-    K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel";
+    K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret";
 var reserve = {};
 
 function laes(k){
@@ -3205,6 +3218,109 @@ function tegnIndstillinger(){
   };
 }
 
+/* ================= Lykønskning =================
+   Vises én gang, første gang appen åbnes efter en dag der endte under målet.
+   Der stilles krav til datagrundlaget: en dag med én registrering er ikke en
+   sejr, den er en dag hvor der blev glemt at registrere. */
+
+function fejringsdag(){
+  if (!S.maal) return null;
+  var i_gaar = new Date(tilDato(S.iDag).getTime() - 86400000);
+  var noegle = dagKey(i_gaar);
+  if (laes(K_FEJRET) === noegle) return null;
+
+  var poster = hentDag(noegle);
+  if (poster.length < 2) return null;                    /* for tyndt registreret */
+  var sum = poster.reduce(function(a, p){ return a + p.kalorier; }, 0);
+  if (sum > S.maal) return null;                         /* ikke under målet */
+  if (sum < S.maal * 0.5) return null;                   /* ser ud som en halvt udfyldt dag */
+  return { dag: noegle, sum: sum, under: S.maal - sum, antal: poster.length };
+}
+
+function visFejring(f){
+  var linjer = [
+    "Der stod " + tal(f.under) + " kalorier tilbage, da dagen var slut. Det er ikke tilfældigt.",
+    "En dag under målet. Det er sådan, kurven kommer til at pege den rigtige vej.",
+    "Dagen holdt. " + f.antal + " registreringer og stadig plads til overs.",
+    "Under målet. Ingen fanfare nødvendig — men den fik du alligevel."
+  ];
+  var linje = linjer[Math.floor(Math.random() * linjer.length)];
+
+  document.body.insertAdjacentHTML("beforeend",
+    '<div class="fejring" id="fejring" role="dialog" aria-live="polite">'
+    + '<canvas id="fejring-laerred" aria-hidden="true"></canvas>'
+    + '<div class="indre">'
+    + '<div class="top">' + esc(kortDato(f.dag)) + ' holdt</div>'
+    + '<div class="tal">' + tal(f.sum) + '</div>'
+    + '<div class="under">af ' + tal(S.maal) + ' kalorier · ' + tal(f.under) + ' til overs</div>'
+    + '<p class="linje">' + esc(linje) + '</p>'
+    + '<button id="fejring-luk">Videre</button>'
+    + '</div></div>');
+
+  skriv(K_FEJRET, f.dag);
+  $("fejring-luk").onclick = function(){
+    stopFyrvaerkeri();
+    var o = $("fejring");
+    if (o){ o.classList.add("lukker"); setTimeout(function(){ if (o.parentNode) o.remove(); }, 200); }
+  };
+  fyrvaerkeri();
+}
+
+/* Fyrværkeri. Respekterer systemets ønske om mindre bevægelse — så står der
+   blot en rolig skærm i stedet. */
+var fyrvaerkUr = null;
+function stopFyrvaerkeri(){
+  if (fyrvaerkUr){ cancelAnimationFrame(fyrvaerkUr); fyrvaerkUr = null; }
+}
+function fyrvaerkeri(){
+  var l = $("fejring-laerred");
+  if (!l || !l.getContext) return;
+  try {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  } catch(e){}
+
+  var k = l.getContext("2d");
+  var b = l.width = l.offsetWidth, h = l.height = l.offsetHeight;
+  var farver = ["#E0A85E","#8FAE72","#E8B93F","#9FD3BE","#F6E7C8","#C98A5E"];
+  var gnister = [], sidsteSkud = 0, start = Date.now();
+
+  function skyd(){
+    var x = b * (0.2 + Math.random() * 0.6), y = h * (0.2 + Math.random() * 0.35);
+    var farve = farver[Math.floor(Math.random() * farver.length)];
+    var antal = 34 + Math.floor(Math.random() * 20);
+    for (var i = 0; i < antal; i++){
+      var v = (Math.PI * 2 * i) / antal + Math.random() * 0.2;
+      var fart = 1.6 + Math.random() * 3.2;
+      gnister.push({ x:x, y:y, vx:Math.cos(v)*fart, vy:Math.sin(v)*fart,
+                     liv:1, farve:farve, r:1.4 + Math.random()*1.6 });
+    }
+  }
+
+  function tegnRamme(){
+    var naa = Date.now();
+    k.clearRect(0, 0, b, h);
+    if (naa - sidsteSkud > 620 && naa - start < 6200){ skyd(); sidsteSkud = naa; }
+    for (var i = gnister.length - 1; i >= 0; i--){
+      var g = gnister[i];
+      g.x += g.vx; g.y += g.vy;
+      g.vy += 0.045;          /* tyngde */
+      g.vx *= 0.985; g.vy *= 0.985;
+      g.liv -= 0.011;
+      if (g.liv <= 0){ gnister.splice(i, 1); continue; }
+      k.globalAlpha = Math.max(0, g.liv);
+      k.fillStyle = g.farve;
+      k.beginPath();
+      k.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+      k.fill();
+    }
+    k.globalAlpha = 1;
+    if (gnister.length || naa - start < 6400) fyrvaerkUr = requestAnimationFrame(tegnRamme);
+    else fyrvaerkUr = null;
+  }
+  skyd();
+  tegnRamme();
+}
+
 /* ================= Opdatering =================
    iOS kan holde fast i en gammel udgave af en hjemmeskaerms-app i lang tid.
    Appen henter derfor sin egen index.html udenom cachen, laeser versionsnummeret
@@ -3419,6 +3535,7 @@ visForbindelse();
 if (!harLaas()) aktivNoegle = laes(K_NOEGLE);
 tegn();
 haandterGenvej();
+(function(){ var f = fejringsdag(); if (f) setTimeout(function(){ visFejring(f); }, 420); })();
 tjekOpdatering(false);
 </script>
 </body>
