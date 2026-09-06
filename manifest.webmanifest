@@ -1,0 +1,50 @@
+{
+  "name": "Kaloriedagbog",
+  "short_name": "Kalorier",
+  "description": "Kalorie- og vægtdagbog med billedanalyse",
+  "lang": "da-DK",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "id": "kaloriedagbog",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#E8E9E3",
+  "theme_color": "#E8E9E3",
+  "categories": ["health", "lifestyle", "food"],
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Registrer måltid",
+      "short_name": "Måltid",
+      "url": "./?handling=maaltid",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Registrer vægt",
+      "short_name": "Vægt",
+      "url": "./?handling=vaegt",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
