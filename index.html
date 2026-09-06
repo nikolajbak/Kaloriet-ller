@@ -59,6 +59,8 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
   border:1px solid var(--linje);border-radius:12px;padding:10px;margin-bottom:8px;}
 .post img,.post .tom-foto{width:52px;height:52px;border-radius:8px;flex:none;
   object-fit:cover;background:#DDE0D8;}
+.post .tom-foto{display:flex;align-items:center;justify-content:center;color:#5A655F;}
+.post .tom-foto svg{width:26px;height:26px;}
 .post .txt{flex:1;min-width:0;}
 .post .navn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .post .meta{font-size:13px;color:var(--daempet);margin-top:2px;
@@ -262,7 +264,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "26.3";
+var APP_VERSION = "27.0";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -365,11 +367,93 @@ function bindPortioner(idAntal, felter, efter){
     if (efter) efter();
   };
 }
+/* Rettes beskrivelsen, regnes måltidet om ud fra den nye tekst. Det sker på
+   tekstvejen, så det er et billigt kald uden foto. De gamle tal gemmes, så
+   genberegningen kan fortrydes — den må ikke kunne overskrive noget uopretteligt. */
+function bindGenberegning(praefiks, dag, tid){
+  var navnFelt = $(praefiks + "-navn");
+  var status = $(praefiks + "-genstatus");
+  if (!navnFelt || !status) return;
+  var sidsteTekst = navnFelt.value.trim();
+  var koerer = false;
+
+  navnFelt.onchange = function(){
+    var nyt = navnFelt.value.trim();
+    if (koerer || nyt.length < 2 || nyt === sidsteTekst) return;
+    sidsteTekst = nyt;
+    koerer = true;
+
+    var felter = ["kcal","pro","kul","fedt","gen","gram","ant"];
+    var foer = {};
+    felter.forEach(function(k){ var el = $(praefiks + "-" + k); if (el) foer[k] = el.value; });
+    var katFelt = $(praefiks + "-kat");
+    if (katFelt) foer.kat = katFelt.value;
+
+    status.innerHTML = '<p class="grafnote" style="margin:7px 0 0" role="status" aria-live="polite">'
+      + 'Regner “' + esc(nyt) + '” om …</p>';
+
+    analyser(null, "", null, nyt, dag, tid).then(function(r){
+      koerer = false;
+      if (!r || r.er_mad === false){
+        status.innerHTML = '<p class="grafnote" style="margin:7px 0 0">'
+          + 'Den beskrivelse kunne ikke regnes om. Tallene står uændret.</p>';
+        return;
+      }
+      var antal = laesKomma($(praefiks + "-ant").value) || 1;
+      function saet(id, vaerdi){ var el = $(praefiks + "-" + id); if (el) el.value = vaerdi; }
+      saet("kcal", Math.round((Number(r.kalorier) || 0) * antal));
+      saet("pro",  Math.round((Number(r.protein_g) || 0) * antal));
+      saet("kul",  Math.round((Number(r.kulhydrat_g) || 0) * antal));
+      saet("fedt", Math.round((Number(r.fedt_g) || 0) * antal));
+      saet("gen",  Math.round((Number(r.genstande) || 0) * antal * 10) / 10);
+      if (Number(r.gram)) saet("gram", Math.round(Number(r.gram)));
+      if (katFelt && KATEGORIER.indexOf(r.kategori) >= 0) katFelt.value = r.kategori;
+
+      status.innerHTML = '<p class="grafnote" style="margin:7px 0 0">Tallene er regnet om'
+        + (r.portion ? ' — regnet som ' + esc(r.portion) : "") + '. '
+        + '<button class="txtknap" id="' + praefiks + '-fortrydgen">Fortryd</button></p>';
+      var fk = $(praefiks + "-fortrydgen");
+      if (fk) fk.onclick = function(){
+        felter.forEach(function(k){ var el = $(praefiks + "-" + k); if (el && k in foer) el.value = foer[k]; });
+        if (katFelt && foer.kat) katFelt.value = foer.kat;
+        status.innerHTML = '';
+      };
+      if (praefiks === "f" && typeof opdaterBudgetGlobal === "function") opdaterBudgetGlobal();
+    }).catch(function(err){
+      koerer = false;
+      status.innerHTML = '<div class="note fejl" style="margin-top:8px">'
+        + esc((err && err.message) || "Genberegningen mislykkedes.") + '</div>';
+    });
+  };
+}
+
 function prPortion(totaler, antal){
   var ud = {};
   Object.keys(totaler).forEach(function(k){ ud[k] = (Number(totaler[k]) || 0) / (antal || 1); });
   return ud;
 }
+/* Ikon pr. kategori. Bruges hvor der ikke er noget foto — altsaa naar maaltidet
+   er skrevet ind i haanden — saa listen ikke staar med tomme grå felter. */
+var IKONER = {
+  "Kød & fisk":            'M3 12c3-4 6.5-5.5 10-5.5 3.6 0 5.8 2.4 7 5.5-1.2 3.1-3.4 5.5-7 5.5-3.5 0-7-1.5-10-5.5z M20 8.5l-3 3.5 3 3.5',
+  "Grønt & salat":         'M5 19c0-7.5 4.8-12.5 14-13.5C20 14 14.6 20 5 19z M5 19c4-4.2 7.2-6.4 11-8.4',
+  "Brød & korn":           'M12 3v18 M12 6c0-1.5 1.4-2.5 3-2.5 0 1.8-1.4 3-3 3z M12 6c0-1.5-1.4-2.5-3-2.5 0 1.8 1.4 3 3 3z M12 11c0-1.5 1.4-2.5 3-2.5 0 1.8-1.4 3-3 3z M12 11c0-1.5-1.4-2.5-3-2.5 0 1.8 1.4 3 3 3z M12 16c0-1.5 1.4-2.5 3-2.5 0 1.8-1.4 3-3 3z M12 16c0-1.5-1.4-2.5-3-2.5 0 1.8 1.4 3 3 3z',
+  "Kartofler, ris & pasta":'M3.5 11.5h17a8.5 8.5 0 0 1-17 0z M9 7.5c0-1 1-1.4 1-2.5 M13 7.5c0-1 1-1.4 1-2.5',
+  "Mejeri & æg":           'M9 3h6v3l2.5 4v11h-11V10L9 6z M9 6h6',
+  "Snacks & slik":         'M9.5 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0z M9.5 12L5 8.5v7L9.5 12z M14.5 12L19 8.5v7L14.5 12z',
+  "Kage & bagværk":        'M7 12c0-3 2.2-5 5-5s5 2 5 5z M5.5 12h13l-1.5 8h-10z M12 4.5v2',
+  "Fastfood & takeaway":   'M4.5 9.5c0-3 3.4-5 7.5-5s7.5 2 7.5 5z M4 12.5h16 M5 16h14l-1 4H6z',
+  "Drikkevarer":           'M7 4h10l-1.5 16h-7z M7.7 10h8.6',
+  "Alkohol":               'M7 4h10c0 5-2.2 7.5-5 7.5S7 9 7 4z M12 11.5V19 M9 19h6',
+  "Andet":                 'M4 12a8 8 0 1 0 16 0 8 8 0 1 0-16 0z M7.5 12a4.5 4.5 0 1 0 9 0 4.5 4.5 0 1 0-9 0z'
+};
+function kategoriIkon(kat){
+  var d = IKONER[kat] || IKONER["Andet"];
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" '
+    + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="' + d + '"/></svg>';
+}
+
 function portionsTekst(p){
   var ant = p.portioner || 1;
   var stk = ant === 1 ? "" : kg(ant).replace(",0", "") + " portioner";
@@ -955,6 +1039,7 @@ function budgetTekst(spist, efter){
 /* Fortryd. Alt der sletter en registrering eller en vejning gaar gennem her,
    saa der altid er en vej tilbage — ogsaa ved et fejltryk paa krydset. */
 var fortrydUr = null;
+var opdaterBudgetGlobal = null;
 function visFortryd(tekst, tilbage){
   skjulFortryd();
   document.body.insertAdjacentHTML("beforeend",
@@ -1136,7 +1221,7 @@ function kald(krop, andetForsoeg){
 
 /* Vurderingen maales mod dagens budget, ikke mod maden i sig selv. Det samme
    maaltid kan vaere rigeligt plads klokken tolv og trangt klokken ni om aftenen. */
-function vurderingsdel(dag, tid){
+function dagskontekst(dag, tid){
   dag = dag || S.iDag;
   var efter = dag !== S.iDag;
   var b = dagsbudget(dag);
@@ -1162,16 +1247,21 @@ function vurderingsdel(dag, tid){
     + 'er et fornuftigt valg, "fint" når det er hverken eller, og "tungt" når det bruger en stor del af '
     + 'det, der var tilbage. Er budgettet allerede overskredet, så vær saglig og fremadrettet frem for '
     + 'bebrejdende — dagen er som den er, og i morgen er en ny.\n\n'
-    + (efter
-        ? 'VIGTIGT OM TIDSPUNKTET: måltidet er allerede spist, og der er intet at ændre ved det. '
-          + 'Alle forslag gælder næste gang retten står på bordet. Sæt "naar" til "naeste" på dem alle.\n\n'
-        : 'VIGTIGT OM TIDSPUNKTET: måltidet står foran brugeren og er endnu ikke spist — det er '
-          + 'derfor der kan tages et billede af det. Dine forslag skal først og fremmest være noget, '
-          + 'der kan nås lige nu med det, der står på bordet: lade sovsen stå, spise halvdelen af '
-          + 'risene, droppe det andet stykke brød, tage vand i stedet for den næste øl, skrabe '
-          + 'dressingen af. Sæt "naar" til "nu" på den slags.\n'
-          + 'Kan der intet gøres ved lige dette måltid, må du give et forslag til næste gang samme '
-          + 'ret står på bordet, og sætte "naar" til "naeste".\n\n')
+    ;
+}
+
+/* Reglerne for forslagene bruges kun i anden fase, hvor teksten skrives */
+function forslagsregler(dag){
+  var efter = (dag || S.iDag) !== S.iDag;
+  return (efter
+      ? 'TIDSPUNKT: måltidet er allerede spist, og der er intet at ændre ved det. Alle forslag '
+        + 'gælder næste gang retten står på bordet. Sæt "naar" til "naeste" på dem alle.\n\n'
+      : 'TIDSPUNKT: måltidet står foran brugeren og er endnu ikke spist. Dine forslag skal først '
+        + 'og fremmest være noget, der kan nås lige nu med det, der står på bordet: lade sovsen '
+        + 'stå, spise halvdelen af risene, droppe det andet stykke brød, tage vand i stedet for '
+        + 'den næste øl, skrabe dressingen af. Sæt "naar" til "nu" på den slags.\n'
+        + 'Kan der intet gøres ved lige dette måltid, gives et forslag til næste gang, og "naar" '
+        + 'sættes til "naeste".\n\n')
     + 'Giv 1-3 forslag, men kun når der reelt er mindst 75 kcal at spare, og måltidet ligger i '
     + 'den tunge ende af dagens budget. Ellers en tom liste: er valget godt, står rosen fint '
     + 'alene, og gode råd til en skål havregryn er spild af begges tid. Hold forslagene til '
@@ -1180,6 +1270,39 @@ function vurderingsdel(dag, tid){
     + 'altså en beskrivelse af hvad der så reelt blev spist. Er retten "Pasta med flødesovs" og '
     + 'forslaget er at lade sovsen stå, er nyt_navn "Pasta uden flødesovs". Feltet ros er en kort '
     + 'kæk bemærkning, der kun bliver vist, hvis forslaget faktisk bliver fulgt.';
+}
+
+/* Status regnes lokalt. Det er ren aritmetik mod dagens budget, så det er både
+   øjeblikkeligt og altid konsekvent — modellen skal ikke bruge tid på det. */
+function beregnStatus(kcal, tilbageFoer){
+  if (tilbageFoer <= 0) return "tungt";
+  var andel = kcal / tilbageFoer;
+  if (andel <= 0.30) return "godt";
+  if (andel <= 0.60) return "fint";
+  return "tungt";
+}
+
+/* Anden fase: kommentar og forslag. Rent tekstkald uden foto, og det sættes i gang
+   i det øjeblik tallene er på skærmen, så brugeren ikke venter på det. */
+function hentPersonlighed(r, dag, tid, antal){
+  var b = dagsbudget(dag || S.iDag);
+  var kcal = Math.round((Number(r.kalorier) || 0) * (antal || 1));
+  var p = 'Måltidet er allerede vurderet. Du skal kun skrive kommentaren og forslagene.\n\n'
+    + 'RETTEN: ' + (r.navn || "et måltid") + ', kategori ' + (r.kategori || "Andet")
+    + (r.portion ? ', regnet som ' + r.portion : "")
+    + '. ' + kcal + ' kcal i alt'
+    + (r.gram ? ', cirka ' + r.gram + ' g pr. portion' : "")
+    + (antal > 1 ? ', ' + antal + ' portioner' : "") + '.\n\n'
+    + dagskontekst(dag, tid) + '\n\n'
+    + forslagsregler(dag) + '\n\n'
+    + (S.kaek ? tone() + '\n\n' : '')
+    + 'Svar udelukkende med JSON, uden markdown:\n{'
+    + (S.kaek ? '"kommentar": "en kæk bemærkning på max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
+    + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, '
+    + '"note": "kort hvordan, max 12 ord", "nyt_navn": "hvad måltidet så hedder", '
+    + '"ros": "kæk kvittering på max 15 ord"}]}\n'
+    + 'Har du ingen forslag, sættes alternativer til en tom liste.';
+  return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
 }
 
 function byggPrompt(note, svar, beskrivelse, dag, tid){
@@ -1218,8 +1341,8 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + (beskrivelse ? 'Er beskrivelsen præcis nok, stiller du ingen spørgsmål. '
                    : 'Er billedet tydeligt, stiller du ingen spørgsmål. ')
     + 'Giv altid dit bedste bud alligevel.\n\n'
-    + vurderingsdel(dag, tid);
-  if (S.kaek) t += '\n\n' + tone();
+    + dagskontekst(dag, tid);
+
   if (note) t += '\n\nBrugerens egen note om måltidet: "' + note + '". Vægt den højere end dit eget gæt.';
   if (svar && svar.length){
     t += '\n\nBrugeren har svaret på dine spørgsmål:\n'
@@ -1233,18 +1356,11 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
     + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort sætning om det væsentligste forbehold", '
-    + '"status": "godt"/"fint"/"tungt", '
-    + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, '
-    + '"note": "kort hvordan, max 12 ord", '
-    + '"nyt_navn": "hvad måltidet så hedder, hvis forslaget følges — kort og konkret", '
-    + '"ros": "kæk kvittering på max 15 ord, hvis forslaget faktisk bliver fulgt"}], '
-    + (S.kaek ? '"kommentar": "en kæk bemærkning på max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
     + '"spoergsmaal": [{"tekst": "spørgsmålet", "valg": ["mulighed", "mulighed"]}]}\n\n'
     + (beskrivelse
         ? 'Handler beskrivelsen hverken om mad eller drikkevarer, sættes er_mad til false. '
         : 'Er der hverken mad eller drikkevarer på billedet, sættes er_mad til false og resten til 0 eller tom tekst. ')
-    + 'Har du ingen spørgsmål, sættes spørgsmål til en tom liste. '
-    + 'Har du ingen alternativer at foreslå, sættes alternativer til en tom liste.';
+    + 'Har du ingen spørgsmål, sættes spoergsmaal til en tom liste.';
   return t;
 }
 function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
@@ -1686,7 +1802,8 @@ function tegnHoved(){
   } else {
     poster.forEach(function(p){
       h += '<div class="post">'
-        + (p.billede ? '<img src="' + p.billede + '" alt="">' : '<div class="tom-foto"></div>')
+        + (p.billede ? '<img src="' + p.billede + '" alt="">'
+                     : '<div class="tom-foto" title="' + esc(p.kategori) + '">' + kategoriIkon(p.kategori) + '</div>')
         + '<div class="txt" role="button" tabindex="0" aria-label="Ret ' + esc(p.navn) + '" data-red="' + esc(S.iDag) + '|' + esc(p.id) + '"><div class="navn">' + esc(p.navn) + '</div>'
         + '<div class="meta">' + esc(p.tid) + " · " + esc(p.kategori)
         + (portionsTekst(p) ? " · " + portionsTekst(p) : "") + '</div>'
@@ -1991,6 +2108,7 @@ function aabnRediger(dag, id){
     + (m.billede ? '<img class="foto" src="' + m.billede + '" alt="" style="margin-top:14px">' : "")
     + '<span class="lbl">Måltid</span>'
     + '<input id="r-navn" value="' + esc(m.navn) + '">'
+    + '<div id="r-genstatus"></div>'
     + '<span class="lbl">Kategori</span><select id="r-kat">'
     + KATEGORIER.map(function(k){
         return '<option value="' + esc(k) + '"' + (m.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
@@ -2025,6 +2143,7 @@ function aabnRediger(dag, id){
 
   bindPortioner("r-ant", ["r-kcal","r-pro","r-kul","r-fedt","r-gen"]);
   bindPortioner("r-gram", ["r-kcal","r-pro","r-kul","r-fedt","r-gen"]);
+  bindGenberegning("r", dag, m.tid);
   function luk(){ lukBlodt("r-overlay"); }
   function opdater(){
     nulstilAfledt();
@@ -2447,6 +2566,7 @@ function tegnArk(){
     var r = a.r;
     h += '<span class="lbl">Måltid</span>'
       + '<input id="f-navn" placeholder="Navn på måltidet" value="' + esc(r.navn || "") + '">'
+      + '<div id="f-genstatus"></div>'
       + '<span class="lbl">Kategori</span><select id="f-kat">'
       + KATEGORIER.map(function(k){
           return '<option value="' + esc(k) + '"' + (r.kategori === k ? " selected" : "") + '>' + esc(k) + '</option>';
@@ -2472,30 +2592,10 @@ function tegnArk(){
     var efter = b.spist + (Number(r.kalorier) || 0);
     var rest = S.maal - efter;
     var maerker = { godt:["god","Godt valg"], tungt:["varm","Tungt for i dag"], fint:["","Passer ind"] };
-    var mk = maerker[r.status] || maerker.fint;
+    var mk = maerker[beregnStatus(efter - b.spist, b.tilbage)] || maerker.fint;
     h += '<span class="maerke stor ' + mk[0] + '">' + mk[1] + '</span>'
       + '<div class="budget" id="budgetboks">' + budgetTekst(b.spist, efter) + '</div>';
-    h += '<p class="overskrift" id="kommentarlinje" style="font-size:17px;margin:14px 0 0'
-      + (r.kommentar ? '' : ';display:none') + '">' + esc(r.kommentar || "") + '</p>';
-    var alt = (Array.isArray(r.alternativer) ? r.alternativer.filter(function(x){ return x && x.til; }) : []).slice(0,3);
-    var nu = alt.filter(function(x){ return x.naar !== "naeste"; });
-    var senere = alt.filter(function(x){ return x.naar === "naeste"; });
-    function kortet(x, i, medKnap){
-      return '<div class="kort">'
-        + (x.spar ? '<span class="spar">−' + tal(x.spar) + '</span>' : "")
-        + '<div class="fra">' + esc(x.til) + '</div>'
-        + (x.note ? '<div class="kom">' + esc(x.note) + '</div>' : "")
-        + (medKnap && x.spar ? '<button class="mini" data-alt="' + i + '">Det gør jeg — træk det fra</button>' : "")
-        + '</div>';
-    }
-    if (nu.length){
-      h += '<h2 class="sek" style="margin:20px 0 9px">Kan du nå at ændre nu</h2>';
-      nu.forEach(function(x){ h += kortet(x, alt.indexOf(x), true); });
-    }
-    if (senere.length){
-      h += '<h2 class="sek" style="margin:20px 0 9px">Til næste gang</h2>';
-      senere.forEach(function(x){ h += kortet(x, alt.indexOf(x), false); });
-    }
+    h += '<div id="personlighed">' + personlighedHtml(a) + '</div>';
     var harNote = r.portion || r.note || r.usikkerhed === "hoej";
     h += '<div class="note" id="noteboks"' + (harNote ? '' : ' style="display:none"') + '>'
       + (r.portion ? '<div>Regnet som: ' + esc(r.portion) + '</div>' : '')
@@ -2560,51 +2660,11 @@ function tegnArk(){
   bindPortioner("f-ant", ["f-kcal","f-pro","f-kul","f-fedt","f-gen"], opdaterBudget);
   /* Vægten skalerer på samme måde: dobbelt så mange gram er dobbelt så meget mad */
   bindPortioner("f-gram", ["f-kcal","f-pro","f-kul","f-fedt","f-gen"], opdaterBudget);
+  opdaterBudgetGlobal = opdaterBudget;
+  bindGenberegning("f", a.dag || maalDag(), a.tid || standardTid(a.dag || maalDag()));
   var fd = $("f-dato"); if (fd) fd.onchange = opdaterBudget;
-  var altListe = (a.r && Array.isArray(a.r.alternativer))
-    ? a.r.alternativer.filter(function(x){ return x && x.til; }).slice(0,3) : [];
-  Array.prototype.forEach.call(document.querySelectorAll("[data-alt]"), function(knap){
-    knap.onclick = function(){
-      var x = altListe[Number(knap.getAttribute("data-alt"))];
-      if (!x) return;
-      var kcal = Number($("f-kcal").value) || 0;
-      /* Besparelsen gaelder én portion, saa den skal ganges op, hvis der er flere */
-      var antal = laesKomma($("f-ant").value) || 1;
-      var spar = Math.min((Number(x.spar) || 0) * antal, kcal);
-      if (spar <= 0) return;
-      var ny = kcal - spar, faktor = kcal > 0 ? ny / kcal : 0;
-      $("f-kcal").value = Math.round(ny);
-      ["f-pro","f-kul","f-fedt","f-gen"].forEach(function(id){
-        var i = $(id); if (!i) return;
-        var v = laesKomma(i.value) * faktor;
-        i.value = id === "f-gen" ? Math.round(v * 10) / 10 : Math.round(v);
-      });
-
-      /* Teksten skal foelge tallene, saa registreringen beskriver det der faktisk blev spist */
-      var nytNavn = (x.nyt_navn || "").trim();
-      if (!nytNavn){
-        var gammelt = ($("f-navn").value || "").trim();
-        nytNavn = gammelt ? gammelt + " — " + x.til : x.til;
-      }
-      $("f-navn").value = nytNavn;
-      a.r.navn = nytNavn;
-      a.r.portion = (a.r.portion ? a.r.portion + " · " : "") + "ændret: " + x.til;
-      a.r.kommentar = (x.ros || "").trim();
-      var kl = $("kommentarlinje");
-      if (kl){
-        kl.textContent = a.r.kommentar;
-        kl.style.display = a.r.kommentar ? "" : "none";
-      }
-      var nb = $("noteboks");
-      if (nb){
-        nb.innerHTML = '<div>Regnet som: ' + esc(a.r.portion) + '</div>';
-        nb.style.display = "";
-      }
-
-      opdaterBudget();
-      knap.textContent = "Regnet med"; knap.disabled = true;
-    };
-  });
+  bindAlternativer(a);
+  startPersonlighed();
   var bg = $("b-gem"); if (bg) bg.onclick = function(){
     var dag = ($("f-dato") && $("f-dato").value) || maalDag();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dag)) dag = S.iDag;
@@ -2638,6 +2698,111 @@ function tegnArk(){
     lukArk();
   };
 }
+
+/* Knapperne paa forslagene. Bindes baade ved foerste tegning og igen, naar
+   anden fase har leveret teksten. */
+function bindAlternativer(a){
+  var altListe = (a.r && Array.isArray(a.r.alternativer))
+    ? a.r.alternativer.filter(function(x){ return x && x.til; }).slice(0,3) : [];
+  Array.prototype.forEach.call(document.querySelectorAll("[data-alt]"), function(knap){
+    knap.onclick = function(){
+      var x = altListe[Number(knap.getAttribute("data-alt"))];
+      if (!x) return;
+      var kcal = Number($("f-kcal").value) || 0;
+      /* Besparelsen gælder én portion, så den ganges op ved flere */
+      var antal = laesKomma($("f-ant").value) || 1;
+      var spar = Math.min((Number(x.spar) || 0) * antal, kcal);
+      if (spar <= 0) return;
+      var ny = kcal - spar, faktor = kcal > 0 ? ny / kcal : 0;
+      $("f-kcal").value = Math.round(ny);
+      ["f-pro","f-kul","f-fedt","f-gen"].forEach(function(id){
+        var i = $(id); if (!i) return;
+        var v = laesKomma(i.value) * faktor;
+        i.value = id === "f-gen" ? Math.round(v * 10) / 10 : Math.round(v);
+      });
+
+      /* Teksten følger tallene, så registreringen beskriver det der faktisk blev spist */
+      var nytNavn = (x.nyt_navn || "").trim();
+      if (!nytNavn){
+        var gammelt = ($("f-navn").value || "").trim();
+        nytNavn = gammelt ? gammelt + " — " + x.til : x.til;
+      }
+      $("f-navn").value = nytNavn;
+      a.r.navn = nytNavn;
+      a.r.portion = (a.r.portion ? a.r.portion + " · " : "") + "ændret: " + x.til;
+      a.r.kommentar = (x.ros || "").trim();
+      var boks = $("personlighed");
+      if (boks){ boks.innerHTML = personlighedHtml(a); bindAlternativer(a); }
+      var nb = $("noteboks");
+      if (nb){
+        nb.innerHTML = '<div>Regnet som: ' + esc(a.r.portion) + '</div>';
+        nb.style.display = "";
+      }
+      if (opdaterBudgetGlobal) opdaterBudgetGlobal();
+    };
+  });
+}
+
+/* Kommentar og forslag hentes bagefter og skydes ind her, når de er klar.
+   Tallene venter ikke på teksten. */
+function personlighedHtml(a){
+  var r = a.r || {};
+  if (a.tekstStatus === "henter"){
+    return '<div class="skelet linje" style="width:75%;margin-top:16px"></div>'
+         + '<div class="skelet linje" style="width:45%"></div>';
+  }
+  var h = "";
+  if (r.kommentar){
+    h += '<p class="overskrift" style="font-size:17px;margin:14px 0 0">' + esc(r.kommentar) + '</p>';
+  }
+  var alt = (Array.isArray(r.alternativer) ? r.alternativer.filter(function(x){ return x && x.til; }) : []).slice(0,3);
+  var nu = alt.filter(function(x){ return x.naar !== "naeste"; });
+  var senere = alt.filter(function(x){ return x.naar === "naeste"; });
+  function kortet(x, i, medKnap){
+    return '<div class="kort">'
+      + (x.spar ? '<span class="spar">−' + tal(x.spar) + '</span>' : "")
+      + '<div class="fra">' + esc(x.til) + '</div>'
+      + (x.note ? '<div class="kom">' + esc(x.note) + '</div>' : "")
+      + (medKnap && x.spar ? '<button class="mini" data-alt="' + i + '">Det gør jeg — træk det fra</button>' : "")
+      + '</div>';
+  }
+  if (nu.length){
+    h += '<h2 class="sek" style="margin:20px 0 9px">Kan du nå at ændre nu</h2>';
+    nu.forEach(function(x){ h += kortet(x, alt.indexOf(x), true); });
+  }
+  if (senere.length){
+    h += '<h2 class="sek" style="margin:20px 0 9px">Til næste gang</h2>';
+    senere.forEach(function(x){ h += kortet(x, alt.indexOf(x), false); });
+  }
+  return h;
+}
+
+/* Anden fase startes, så snart tallene står på skærmen */
+function startPersonlighed(){
+  var a = S.ark;
+  if (!a || a.status !== "resultat" || a.tekstStatus) return;
+  if (!S.kaek && a.r && a.r.er_mad === false) return;
+  a.tekstStatus = "henter";
+  var boks = $("personlighed");
+  if (boks) boks.innerHTML = personlighedHtml(a);
+
+  hentPersonlighed(a.r, a.dag, a.tid, laesKomma($("f-ant") ? $("f-ant").value : "1") || 1)
+    .then(function(t){
+      if (S.ark !== a || a.status !== "resultat") return;
+      a.tekstStatus = "klar";
+      if (t.kommentar) a.r.kommentar = t.kommentar;
+      if (Array.isArray(t.alternativer)) a.r.alternativer = t.alternativer;
+      var b2 = $("personlighed");
+      if (b2){ b2.innerHTML = personlighedHtml(a); bindAlternativer(a); }
+    })
+    .catch(function(){
+      if (S.ark !== a) return;
+      a.tekstStatus = "klar";
+      var b3 = $("personlighed");
+      if (b3) b3.innerHTML = personlighedHtml(a);
+    });
+}
+
 function visResultat(a, r){
   S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note,
             beskrivelse:a.beskrivelse, dag:a.dag, tid:a.tid, antal:a.antal, r:r };
