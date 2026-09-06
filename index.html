@@ -59,8 +59,8 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
   border:1px solid var(--linje);border-radius:12px;padding:10px;margin-bottom:8px;}
 .post img,.post .tom-foto{width:52px;height:52px;border-radius:8px;flex:none;
   object-fit:cover;background:#DDE0D8;}
-.post .tom-foto{display:flex;align-items:center;justify-content:center;color:#5A655F;}
-.post .tom-foto svg{width:26px;height:26px;}
+.post .tom-foto{display:flex;align-items:center;justify-content:center;color:#4A554F;}
+.post .tom-foto svg{width:36px;height:36px;}
 .post .txt{flex:1;min-width:0;}
 .post .navn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .post .meta{font-size:13px;color:var(--daempet);margin-top:2px;
@@ -264,7 +264,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "27.0";
+var APP_VERSION = "27.1";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -280,7 +280,8 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_LAAS = "kd:laas", K_LAASTID = "kd:laastid", K_FEJL = "kd:fejl",
     K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash",
     P_SNAP = "kd:snap:", K_EKSPORT = "kd:sidste-eksport",
-    K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand";
+    K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand",
+    K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel";
 var reserve = {};
 
 function laes(k){
@@ -449,7 +450,7 @@ var IKONER = {
 };
 function kategoriIkon(kat){
   var d = IKONER[kat] || IKONER["Andet"];
-  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" '
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" '
     + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
     + '<path d="' + d + '"/></svg>';
 }
@@ -1372,6 +1373,37 @@ function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
   return kald({ model:S.model, max_tokens:1800, messages:[{ role:"user", content:indhold }] });
 }
 
+/* Retter appen allerede har foreslaaet. Uden den her liste kommer de samme
+   fire forslag igen og igen, fordi grundlaget jo er det samme hver gang. */
+function seteRetter(){
+  try { var v = JSON.parse(laes(K_SETE) || "[]"); return Array.isArray(v) ? v : []; }
+  catch(e){ return []; }
+}
+function notérRetter(navne){
+  var liste = navne.concat(seteRetter());
+  var set = {}, ud = [];
+  liste.forEach(function(n){
+    var k = String(n || "").toLowerCase().trim();
+    if (!k || set[k]) return;
+    set[k] = 1; ud.push(n);
+  });
+  skriv(K_SETE, JSON.stringify(ud.slice(0, 24)));
+}
+/* En roterende vinkel, saa to kald i traek ikke griber det samme an */
+var VINKLER = [
+  "Læg vægt på noget, der kan stå klar på under 20 minutter.",
+  "Læg vægt på grøntsager og bælgfrugter — kostrådenes 600 g om dagen.",
+  "Læg vægt på fisk, som de fleste danskere spiser for lidt af.",
+  "Læg vægt på noget mættende med meget protein pr. kalorie.",
+  "Læg vægt på almindelige rester og rodfrugter fra køleskabet.",
+  "Læg vægt på fuldkorn — rugbrød, gryn, bulgur, fuldkornspasta."
+];
+function naesteVinkel(){
+  var n = (Number(laes(K_VINKEL)) || 0) % VINKLER.length;
+  skriv(K_VINKEL, String((n + 1) % VINKLER.length));
+  return VINKLER[n];
+}
+
 /* Hvad kan der spises for resten af dagen. Kender dagens maaltider, klokkeslaet,
    resten af budgettet og profilen. */
 function hentSpiseforslag(){
@@ -1391,13 +1423,34 @@ function hentSpiseforslag(){
     + Math.round(pro) + ' g protein. Tilbage: ' + rest + ' kcal.\n'
     + 'Dagens måltider:\n' + liste + '\n'
     + 'Om personen: ' + profiltekst() + '.\n\n'
+    + (function(){
+        var maaneder = ["januar","februar","marts","april","maj","juni","juli",
+                        "august","september","oktober","november","december"];
+        var ude = seteRetter();
+        var vane = {};
+        dageMedData().slice(-14).forEach(function(n){
+          hentDag(n).forEach(function(x){ vane[x.navn.toLowerCase().trim()] = x.navn; });
+        });
+        var spist = Object.keys(vane).map(function(k){ return vane[k]; }).slice(0, 12);
+        return 'Vi er i ' + maaneder[t.getMonth()] + ', så hold dig til råvarer der er gode nu.\n\n'
+          + (ude.length
+              ? 'DISSE RETTER ER ALLEREDE FORESLÅET FØR — find på noget andet:\n- '
+                + ude.slice(0, 16).join('\n- ') + '\n\n' : '')
+          + (spist.length
+              ? 'DETTE SPISER ' + (S.navn || "brugeren").toUpperCase() + ' I FORVEJEN — undgå at gentage det:\n- '
+                + spist.join('\n- ') + '\n\n' : '');
+      })()
     + kostgrundlag() + '\n\n'
     + 'Giv 3 konkrete forslag til hvad der kan spises og drikkes i resten af dagen. Realistisk '
     + 'dansk hverdagsmad, ting man har eller kan nå at købe. Hvert forslag med et anslået '
     + 'kalorietal, der passer i det der er tilbage, og som dækker de måltider der mangler '
     + 'inden sengetid — er klokken 10, skal der både være frokost og aftensmad; er klokken 20, '
-    + 'er det højst en aftensnack. Skæv efter det kostrådene peger på, som personen mangler i dag: '
-    + 'grøntsager, fisk, fuldkorn, bælgfrugter, vand.\n\n'
+    + 'er det højst en aftensnack.\n\n'
+    + 'DE TRE FORSLAG SKAL VÆRE FORSKELLIGE FRA HINANDEN: ét hurtigt, ét der kræver lidt '
+    + 'tilberedning, og ét let alternativ hvis der ikke er meget budget tilbage. Nævn '
+    + 'hovedingredienserne i navnet, så det er til at forstå uden at åbne opskriften. '
+    + 'Ingen retter der bare er "salat" eller "en sandwich" — vær konkret om hvad der er i.\n'
+    + naesteVinkel() + '\n\n'
     + 'VIGTIGT: foreslå aldrig at springe et måltid over, at faste resten af dagen eller at gå '
     + 'sulten i seng. Er der lidt eller ingenting tilbage af budgettet, så foreslå noget mættende '
     + 'og let alligevel, og skriv roligt at en enkelt dag ikke afgør noget. Ingen skræmmekampagne '
@@ -1418,7 +1471,20 @@ function hentOpskrift(ret, kcal){
   var p = 'Skriv en opskrift på "' + ret + '" til en dansk kaloriedagbog.\n\n'
     + 'Den skal ramme cirka ' + (kcal || 500) + ' kcal pr. portion og være til to personer. '
     + 'Almindelige danske ingredienser fra et supermarked, ingen specialbutikker. '
-    + 'Hverdagsmad man kan nå, ikke restaurantprojekt. Mængder i gram, deciliter eller stykker.\n\n'
+    + 'Hverdagsmad man kan nå på en tirsdag, ikke et restaurantprojekt.\n\n'
+    + 'KRAV TIL INGREDIENSERNE: alt med mængde i gram, deciliter, spiseskeer eller stykker — '
+    + 'aldrig "lidt" eller "efter smag" alene. Fedtstof, olie og dressing SKAL stå med mængde, '
+    + 'for det er dem der afgør kalorietallet. Skriv fedtprocent på mejeriprodukter og kød, '
+    + 'fx "400 g hakket oksekød 4-7 %". Sortér ingredienserne i den rækkefølge de bruges.\n\n'
+    + 'KRAV TIL FREMGANGSMÅDEN: 4-7 trin. Hvert trin skal indeholde noget håndgribeligt — '
+    + 'varmegrad, ovntemperatur, tid OG et kendetegn man kan se eller mærke, fx "til løgene er '
+    + 'klare, cirka 5 minutter" eller "til kernetemperaturen er 65 grader". Nævn pandestørrelse '
+    + 'eller fadstørrelse hvor det betyder noget. Ingen trin der bare siger "tilbered".\n\n'
+    + 'HVORDAN KALORIETALLET RAMMES: skriv i tip-feltet det ene greb der holder retten nede på '
+    + 'måltallet — hvad man skal passe på, eller hvad der kan skrues op for uden at det koster.\n\n'
+    + 'Feltet variation skal være én konkret udskiftning, der ændrer retten mærkbart. '
+    + 'Feltet rester skal sige, hvad man gør med det der bliver tilovers, eller om retten kan '
+    + 'fryses. Kan ingen af delene lade sig gøre meningsfuldt, sættes de til tom tekst.\n\n'
     + 'Feltet billedsøg skal være 2-4 ord på engelsk, der er velegnede til at finde et foto af '
     + 'retten i et åbent billedarkiv — brug det almindelige engelske navn på retten eller '
     + 'hovedingrediensen, ikke en lang beskrivelse. Er retten særligt dansk, så brug det danske '
@@ -1428,8 +1494,10 @@ function hentOpskrift(ret, kcal){
     + '{"titel": "rettens navn", "tid_min": heltal minutter, "portioner": heltal, '
     + '"kcal_pr_portion": heltal, "kategori": "en af kategorierne", "billedsoeg": "engelske søgeord", '
     + '"ingredienser": ["mængde og vare", "..."], "fremgangsmaade": ["trin", "..."], '
-    + '"tip": "et kort tip, max 18 ord"}';
-  return kald({ model:S.model, max_tokens:1200, messages:[{ role:"user", content:p }] });
+    + '"tip": "grebet der holder kalorietallet, max 22 ord", '
+    + '"variation": "én konkret udskiftning, max 18 ord", '
+    + '"rester": "hvad der gøres med resterne, max 18 ord"}';
+  return kald({ model:S.model, max_tokens:1600, messages:[{ role:"user", content:p }] });
 }
 
 /* Billeder. Unsplash foerst, Wikimedia Commons som reserve, ellers en pæn tom plads.
@@ -1935,6 +2003,8 @@ function opskriftHtml(i){
       + d.fremgangsmaade.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join("") + '</ol>';
   }
   if (d.tip) h += '<div class="tip">' + esc(d.tip) + '</div>';
+  if (d.variation) h += '<div class="tip"><b style="font-style:normal">Variation:</b> ' + esc(d.variation) + '</div>';
+  if (d.rester) h += '<div class="tip"><b style="font-style:normal">Rester:</b> ' + esc(d.rester) + '</div>';
   h += '<button class="mini" id="b-tilfoej" style="margin-top:14px">Tilføj til dagbogen</button>';
   return h + '</div>';
 }
@@ -1978,6 +2048,7 @@ function startSpiseforslag(){
   tegnSpiseforslag();
   hentSpiseforslag().then(function(r){
     S.spise = r; S.spiseStatus = "klar";
+    if (Array.isArray(r.forslag)) notérRetter(r.forslag.map(function(x){ return x.ret; }).filter(Boolean));
     skriv(K_SPISE, JSON.stringify({ sign:spiseSignatur(), data:r }));
     tegnSpiseforslag();
   }).catch(function(err){
