@@ -277,7 +277,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "27.2";
+var APP_VERSION = "29.0";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -294,7 +294,8 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash",
     P_SNAP = "kd:snap:", K_EKSPORT = "kd:sidste-eksport",
     K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand",
-    K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret";
+    K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret",
+    K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail";
 var reserve = {};
 
 function laes(k){
@@ -760,6 +761,7 @@ var S = {
   get kaek(){ return this.kaekhed !== "fra"; },
   skaerm: "idag",
   skiftRetning: null,
+  bruger: null,
   periode: "dag",
   vindue: 30,
   valgt: null,
@@ -1088,6 +1090,7 @@ function sletPost(dag, id){
 }
 
 function nulstilAfledt(){
+  if (S.bruger) delDage();
   S.forslag = null; S.forslagStatus = "tom";
   S.spise = null; S.spiseStatus = "tom";
   S.tilskud = null; S.tilskudStatus = "tom";
@@ -2441,11 +2444,14 @@ function tegnTrends(){
 
   /* forslag */
   h += '<h2 class="sek">Lettere alternativer</h2><div id="forslag"></div>'
-    + '<h2 class="sek">Kost og tilskud</h2><div id="tilskudsboks"></div></div>';
+    + '<h2 class="sek">Kost og tilskud</h2><div id="tilskudsboks"></div>'
+    + '<h2 class="sek">Dysten</h2><div id="holdboks"></div>'
+    + '</div>';
   $("rod").innerHTML = h;
   bindHoved(); bindVindue();
   tegnForslag(a);
   tegnTilskud(a);
+  tegnHold();
 }
 function tilskudSignatur(a){
   return S.vindue + ":" + a.antalDage + ":" + a.poster.length + ":"
@@ -2506,6 +2512,249 @@ function startTilskud(a){
     S.tilskudStatus = "fejl";
     S.tilskudFejl = (err && err.message) || "Kunne ikke vurdere kosten.";
     tegnTilskud(a);
+  });
+}
+
+/* --- Kontoafsnittet i indstillinger --- */
+function tegnKonto(){
+  var boks = $("kontoboks");
+  if (!boks) return;
+
+  function skriv_besked(t, fejl){
+    var b = $("konto-besked");
+    if (b) b.innerHTML = '<div class="note' + (fejl ? " fejl" : "") + '">' + esc(t) + '</div>';
+  }
+
+  /* Ikke logget ind: e-mail og engangskode */
+  if (!S.bruger){
+    boks.innerHTML =
+      '<p class="grafnote" style="margin:6px 0 0">Log ind for at dyste med andre. Du får en '
+      + 'sekscifret kode på mail — ingen adgangskode at huske.</p>'
+      + '<span class="lbl">E-mail</span>'
+      + '<input id="konto-mail" type="email" inputmode="email" autocomplete="email" '
+      + 'autocapitalize="off" spellcheck="false" value="' + esc(laes(K_MAIL) || "") + '">'
+      + '<button class="knap sek" id="konto-send" style="margin-top:12px">Send mig en kode</button>'
+      + '<div id="konto-kodefelt"></div><div id="konto-besked"></div>';
+
+    $("konto-send").onclick = function(){
+      var mail = ($("konto-mail").value || "").trim();
+      if (mail.indexOf("@") < 1){ skriv_besked("Skriv en gyldig e-mail.", true); return; }
+      skriv(K_MAIL, mail);
+      var k = $("konto-send");
+      k.textContent = "Sender …"; k.disabled = true;
+      sbAuth("otp", { email: mail, create_user: true }).then(function(){
+        $("konto-kodefelt").innerHTML =
+          '<span class="lbl">Koden fra mailen</span>'
+          + '<input id="konto-kode" type="text" inputmode="numeric" autocomplete="one-time-code" '
+          + 'maxlength="6" placeholder="6 cifre">'
+          + '<button class="knap" id="konto-login" style="margin-top:12px">Log ind</button>';
+        k.textContent = "Send en ny kode"; k.disabled = false;
+        skriv_besked("Koden er sendt. Den gælder i en time.");
+        $("konto-login").onclick = function(){
+          var kode = ($("konto-kode").value || "").trim();
+          var lk = $("konto-login");
+          lk.textContent = "Logger ind …"; lk.disabled = true;
+          sbAuth("verify", { email: mail, token: kode, type: "email" }).then(function(d){
+            if (!gemSession(d)) throw new Error("Der kom ingen session retur.");
+            skriv(K_PROFIL_ID, d.user && d.user.id);
+            return hentMinProfil();
+          }).then(function(profil){
+            S.bruger = profil;
+            tegnKonto();
+            if (profil) delDage();
+          }).catch(function(e){
+            skriv_besked(e.message, true);
+            lk.textContent = "Log ind"; lk.disabled = false;
+          });
+        };
+      }).catch(function(e){
+        skriv_besked(e.message, true);
+        k.textContent = "Send mig en kode"; k.disabled = false;
+      });
+    };
+    return;
+  }
+
+  /* Logget ind, men mangler brugernavn */
+  if (!S.bruger.brugernavn){
+    boks.innerHTML =
+      '<p class="grafnote" style="margin:6px 0 0">Vælg et brugernavn. Det er det, andre '
+      + 'tilføjer dig med, og det kan ikke laves om bagefter.</p>'
+      + '<span class="lbl">Brugernavn — 3-20 tegn, små bogstaver, tal og understreg</span>'
+      + '<input id="konto-navn" autocapitalize="off" spellcheck="false" placeholder="fx nikolajbak">'
+      + '<button class="knap" id="konto-gemnavn" style="margin-top:12px">Tag brugernavnet</button>'
+      + '<button class="knap sek" id="konto-ud" style="margin-top:8px">Log ud</button>'
+      + '<div id="konto-besked"></div>';
+    $("konto-gemnavn").onclick = function(){
+      var n = ($("konto-navn").value || "").toLowerCase().trim();
+      if (!/^[a-z0-9_]{3,20}$/.test(n)){
+        skriv_besked("Brugernavnet må kun indeholde små bogstaver, tal og understreg, og være 3-20 tegn.", true);
+        return;
+      }
+      var g = $("konto-gemnavn"); g.textContent = "Opretter …"; g.disabled = true;
+      opretProfil(n, S.navn || "").then(function(profil){
+        S.bruger = profil;
+        tegnKonto();
+        delDage();
+      }).catch(function(e){
+        skriv_besked(/duplicate|unique/i.test(e.message) ? "Det brugernavn er taget." : e.message, true);
+        g.textContent = "Tag brugernavnet"; g.disabled = false;
+      });
+    };
+    $("konto-ud").onclick = function(){ logUd(); tegnKonto(); };
+    return;
+  }
+
+  /* Logget ind med brugernavn */
+  boks.innerHTML =
+    '<p class="grafnote" style="margin:6px 0 0">Logget ind som <b>' + esc(S.bruger.brugernavn) + '</b>. '
+    + 'Del dit brugernavn med dem, du vil dyste mod.</p>'
+    + (laes(K_PUSH)
+        ? '<button class="knap sek" id="konto-pushfra" style="margin-top:12px">Slå notifikationer fra</button>'
+        : '<button class="knap sek" id="konto-pushtil" style="margin-top:12px">Slå notifikationer til</button>')
+    + '<button class="knap sek" id="konto-ud" style="margin-top:8px">Log ud</button>'
+    + '<div id="konto-besked"></div>';
+
+  var pt = $("konto-pushtil");
+  if (pt) pt.onclick = function(){
+    pt.textContent = "Beder om lov …"; pt.disabled = true;
+    slaaPushTil().then(function(){ tegnKonto(); skriv_besked("Notifikationer er slået til på denne telefon."); })
+      .catch(function(e){ skriv_besked(e.message, true); pt.textContent = "Slå notifikationer til"; pt.disabled = false; });
+  };
+  var pf = $("konto-pushfra");
+  if (pf) pf.onclick = function(){
+    pf.disabled = true;
+    slaaPushFra().then(function(){ tegnKonto(); skriv_besked("Notifikationer er slået fra."); });
+  };
+  $("konto-ud").onclick = function(){ logUd(); tegnKonto(); };
+}
+
+/* Dysten. Der sammenlignes på procent af hver sit EGET mål — jeres kroppe har
+   forskellige behov, så absolutte kalorier kan ikke stilles op mod hinanden. */
+function tegnHold(){
+  var boks = $("holdboks");
+  if (!boks) return;
+
+  if (!S.bruger || !S.bruger.brugernavn){
+    boks.innerHTML = '<div class="tom">Log ind under Indstillinger for at dyste med andre. '
+      + 'Kun dit brugernavn, datoen og hvor stor en del af dit eget mål du brugte bliver delt.</div>';
+    return;
+  }
+
+  boks.innerHTML = '<p style="color:var(--daempet)">Henter …</p>';
+  Promise.all([hentHold(S.vindue), hentVenskaber()]).then(function(svar){
+    var raekker = svar[0] || [], venskaber = svar[1] || [];
+    var mig = laes(K_PROFIL_ID);
+
+    /* Stilling */
+    var pr = {};
+    raekker.forEach(function(r){
+      if (!r.bruger_id) return;
+      var n = r.visningsnavn || r.brugernavn;
+      pr[r.bruger_id] = pr[r.bruger_id] || { navn:n, brugernavn:r.brugernavn, dage:0, holdt:0, sum:0, raekker:[] };
+      if (!r.dag) return;
+      var x = pr[r.bruger_id];
+      x.dage++; x.sum += Number(r.pct);
+      if (r.indenfor) x.holdt++;
+      x.raekker.push({ dag:r.dag, indenfor:r.indenfor });
+    });
+    var folk = Object.keys(pr).map(function(k){
+      var x = pr[k];
+      x.erMig = k === mig;
+      x.andel = x.dage ? x.holdt / x.dage * 100 : 0;
+      x.snit = x.dage ? x.sum / x.dage : 0;
+      x.stime = stimeFor(x.raekker);
+      return x;
+    }).sort(function(a,b){ return b.andel - a.andel || a.snit - b.snit; });
+
+    var ud = "";
+    if (folk.length < 2){
+      ud += '<div class="tom" style="margin-bottom:14px">Du dyster ikke mod nogen endnu. '
+        + 'Tilføj en med deres brugernavn nedenfor.</div>';
+    } else {
+      ud += '<p class="grafnote" style="margin:0 0 10px">Målt på hvor mange dage hver især holdt '
+        + 'sig under sit eget mål. Kalorier kan ikke sammenlignes — procenter kan.</p>';
+    }
+    folk.forEach(function(x, i){
+      ud += '<div class="katraekke' + (i === 0 && folk.length > 1 ? " top" : "") + '">'
+        + '<div class="kattop"><span class="katnavn">' + esc(x.navn || x.brugernavn)
+        + (x.erMig ? ' <em>dig</em>' : "")
+        + (i === 0 && folk.length > 1 ? '<span class="maerke god">fører</span>' : "")
+        + ' <em>' + x.holdt + ' af ' + x.dage + ' dage'
+        + (x.stime > 1 ? ' · ' + x.stime + ' i træk' : "") + '</em></span>'
+        + '<span class="kattal">' + Math.round(x.andel) + ' %</span></div>'
+        + '<div class="katbar"><span style="width:' + x.andel.toFixed(1) + '%"></span></div>'
+        + (x.dage ? '<div class="grafnote" style="margin-top:5px">snit ' + Math.round(x.snit) + ' % af eget mål</div>' : "")
+        + '</div>';
+    });
+
+    /* Indkomne anmodninger */
+    var indkomne = venskaber.filter(function(v){ return v.status === "anmodet" && v.anmoder_id !== mig; });
+    if (indkomne.length){
+      ud += '<h2 class="sek">Anmodninger</h2>';
+      indkomne.forEach(function(v){
+        var anden = v.lav_id === mig ? v.hoej_id : v.lav_id;
+        ud += '<div class="kort"><div class="fra" id="anmod-navn-' + esc(anden) + '">…</div>'
+          + '<button class="mini" data-accepter="' + esc(v.lav_id) + '|' + esc(v.hoej_id) + '">Accepter</button>'
+          + '<button class="mini" data-afvis="' + esc(v.lav_id) + '|' + esc(v.hoej_id) + '">Afvis</button></div>';
+      });
+    }
+    var afsendte = venskaber.filter(function(v){ return v.status === "anmodet" && v.anmoder_id === mig; });
+    if (afsendte.length){
+      ud += '<p class="grafnote" style="margin-top:12px">' + afsendte.length
+        + ' anmodning' + (afsendte.length > 1 ? "er" : "") + ' afventer svar.</p>';
+    }
+
+    /* Tilføj en */
+    ud += '<h2 class="sek">Tilføj en at dyste mod</h2>'
+      + '<div style="display:flex;gap:8px">'
+      + '<input id="ven-soeg" style="flex:1" autocapitalize="off" spellcheck="false" placeholder="brugernavn">'
+      + '<button class="knap sek" id="ven-tilfoej" style="width:auto;flex:none;padding:11px 16px">Tilføj</button>'
+      + '</div><div id="ven-besked"></div>';
+
+    boks.innerHTML = ud;
+
+    /* Navne på dem der har anmodet hentes enkeltvis */
+    indkomne.forEach(function(v){
+      var anden = v.lav_id === mig ? v.hoej_id : v.lav_id;
+      sbRest("profiler?select=brugernavn,visningsnavn&id=eq." + anden).then(function(r){
+        var el = $("anmod-navn-" + anden);
+        if (el && r && r[0]) el.textContent = (r[0].visningsnavn || "") + " @" + r[0].brugernavn;
+      }).catch(function(){});
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-accepter]"), function(b){
+      b.onclick = function(){
+        var d = b.getAttribute("data-accepter").split("|");
+        b.disabled = true;
+        accepterVen(d[0], d[1]).then(tegnHold).catch(function(e){ alert(e.message); });
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-afvis]"), function(b){
+      b.onclick = function(){
+        var d = b.getAttribute("data-afvis").split("|");
+        b.disabled = true;
+        fjernVen(d[0], d[1]).then(tegnHold).catch(function(e){ alert(e.message); });
+      };
+    });
+    $("ven-tilfoej").onclick = function(){
+      var navn = ($("ven-soeg").value || "").toLowerCase().trim();
+      var b = $("ven-besked");
+      function sig(t, fejl){ b.innerHTML = '<div class="note' + (fejl ? " fejl" : "") + '">' + esc(t) + '</div>'; }
+      if (navn.length < 3){ sig("Skriv mindst tre tegn.", true); return; }
+      if (navn === S.bruger.brugernavn){ sig("Det er dig selv.", true); return; }
+      findBruger(navn).then(function(f){
+        if (!f) throw new Error("Der findes ingen med brugernavnet " + navn + ".");
+        return anmodVen(f.id).then(function(){
+          sig("Anmodning sendt til " + navn + ". Dysten begynder, når den accepteres.");
+          $("ven-soeg").value = "";
+        });
+      }).catch(function(e){ sig(e.message, true); });
+    };
+
+    aabnRealtid(function(){ if (S.skaerm === "trends") tegnHold(); });
+  }).catch(function(err){
+    boks.innerHTML = '<div class="note fejl">' + esc(err.message) + '</div>';
   });
 }
 
@@ -3094,6 +3343,9 @@ function tegnIndstillinger(){
           + '<button class="knap fare" id="s-laasfra" style="margin-top:8px">Slå kodelås fra</button>'
         : '<button class="knap sek" id="s-laastil" style="margin-top:12px">Slå kodelås til</button>')
     + '</div></details>'
+    + '<details class="afsnit"><summary>Konto og notifikationer</summary><div>'
+    + '<div id="kontoboks"></div>'
+    + '</div></details>'
     + '<div class="bundfelt">'
     + '<button class="knap sek" id="s-opdater">Søg efter opdatering</button>'
     + '<p class="fodnote" style="text-align:center;margin-top:12px">Version ' + APP_VERSION
@@ -3176,6 +3428,7 @@ function tegnIndstillinger(){
     };
   });
   bindFoldning($("ind-overlay"));
+  tegnKonto();
   var lt = $("s-laastil"); if (lt) lt.onclick = function(){ opsaetKode(); };
   var lf = $("s-laasfra"); if (lf) lf.onclick = function(){
     if (!confirm("Slå kodelåsen fra? API-nøglen bliver derefter liggende ukrypteret på telefonen.")) return;
@@ -3216,6 +3469,260 @@ function tegnIndstillinger(){
     var o = $("ind-overlay"); if (o) o.remove();
     tegn();
   };
+}
+
+/* ================= Konto, venner og dyst =================
+   Alt her taler med et Supabase-projekt, der er sat op på forhånd. Adresse og
+   offentlig nøgle ligger i koden — nøglen er beregnet til at være offentlig, og
+   al beskyttelse sker med rækkeadgang i databasen, ikke ved at skjule den. */
+
+var SB_URL = "https://vhkglrrmkdqrjdhbkgbn.supabase.co";
+var SB_KEY = "sb_publishable_b5CarUTEnWsVLxe6qTzJYA_vr2iLE3-";
+var VAPID_OFFENTLIG = "BADft67M2Ho_BU5ktmE_K4kH36dTew5DkrVqS4j939coXlhYdfUY5VaOBgsEZRIAAgqvgimLHQs8b0DV3lzHNDs";
+
+/* --- Sessionen --- */
+function gemSession(d){
+  if (!d || !d.access_token) return false;
+  skriv(K_SESSION, JSON.stringify({
+    adgang: d.access_token,
+    forny: d.refresh_token,
+    udloeber: Date.now() + (Number(d.expires_in) || 3600) * 1000 - 60000
+  }));
+  return true;
+}
+function session(){
+  try { return JSON.parse(laes(K_SESSION) || "null"); } catch(e){ return null; }
+}
+function logUd(){
+  fjern(K_SESSION); fjern(K_PROFIL_ID);
+  S.bruger = null; S.hold = null; luklRealtid();
+}
+/* Henter et gyldigt adgangstegn, og fornyer det hvis det er udløbet */
+function adgangstegn(){
+  var s = session();
+  if (!s) return Promise.resolve(null);
+  if (s.udloeber > Date.now()) return Promise.resolve(s.adgang);
+  return fetch(SB_URL + "/auth/v1/token?grant_type=refresh_token", {
+    method:"POST",
+    headers:{ "apikey":SB_KEY, "Content-Type":"application/json" },
+    body: JSON.stringify({ refresh_token: s.forny })
+  }).then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){ return gemSession(d) ? d.access_token : (logUd(), null); })
+    .catch(function(){ return null; });
+}
+
+/* --- Kald --- */
+function sbAuth(sti, krop){
+  return fetch(SB_URL + "/auth/v1/" + sti, {
+    method:"POST",
+    headers:{ "apikey":SB_KEY, "Content-Type":"application/json" },
+    body: JSON.stringify(krop)
+  }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(d){
+      if (!r.ok) throw new Error(d.msg || d.error_description || d.message || ("Fejl " + r.status));
+      return d;
+    });
+  });
+}
+function sbRest(sti, o){
+  return adgangstegn().then(function(tegn){
+    if (!tegn) throw new Error("Du er ikke logget ind.");
+    o = o || {};
+    o.headers = Object.assign({
+      "apikey": SB_KEY,
+      "Authorization": "Bearer " + tegn,
+      "Content-Type": "application/json"
+    }, o.headers || {});
+    return fetch(SB_URL + "/rest/v1/" + sti, o);
+  }).then(function(r){
+    if (!r.ok) return r.text().then(function(t){ throw new Error("Serveren svarede " + r.status + ": " + t.slice(0,110)); });
+    return r.status === 204 ? null : r.json();
+  });
+}
+
+/* --- Profil --- */
+function hentMinProfil(){
+  return sbRest("profiler?select=id,brugernavn,visningsnavn&id=eq." + encodeURIComponent(laes(K_PROFIL_ID) || "")).then(function(r){
+    return (r && r[0]) || null;
+  });
+}
+function opretProfil(brugernavn, visningsnavn){
+  return sbRest("profiler", {
+    method:"POST",
+    headers:{ "Prefer":"return=representation" },
+    body: JSON.stringify([{ id: laes(K_PROFIL_ID), brugernavn: brugernavn.toLowerCase(), visningsnavn: visningsnavn || "" }])
+  }).then(function(r){ return (r && r[0]) || null; });
+}
+
+/* --- Venner --- */
+function findBruger(navn){
+  return sbRest("rpc/find_bruger", { method:"POST", body: JSON.stringify({ soeg: navn.toLowerCase().trim() }) })
+    .then(function(r){ return (r && r[0]) || null; });
+}
+function anmodVen(andenId){
+  var mig = laes(K_PROFIL_ID);
+  var lav = mig < andenId ? mig : andenId;
+  var hoej = mig < andenId ? andenId : mig;
+  return sbRest("venskaber", {
+    method:"POST",
+    headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{ lav_id:lav, hoej_id:hoej, anmoder_id:mig, status:"anmodet" }])
+  });
+}
+function hentVenskaber(){
+  return sbRest("venskaber?select=lav_id,hoej_id,anmoder_id,status");
+}
+function accepterVen(lav, hoej){
+  return sbRest("venskaber?lav_id=eq." + lav + "&hoej_id=eq." + hoej, {
+    method:"PATCH", headers:{ "Prefer":"return=minimal" },
+    body: JSON.stringify({ status:"accepteret" })
+  });
+}
+function fjernVen(lav, hoej){
+  return sbRest("venskaber?lav_id=eq." + lav + "&hoej_id=eq." + hoej, { method:"DELETE" });
+}
+
+/* --- Resultater --- */
+function dagsresultat(noegle){
+  var poster = hentDag(noegle);
+  if (!poster.length || !S.maal) return null;
+  var sum = poster.reduce(function(a,p){ return a + p.kalorier; }, 0);
+  return {
+    bruger_id: laes(K_PROFIL_ID),
+    dag: noegle,
+    pct: Math.round(sum / S.maal * 1000) / 10,
+    indenfor: sum <= S.maal,
+    antal: poster.length
+  };
+}
+function delDage(){
+  if (!S.bruger) return Promise.resolve(null);
+  var raekker = [];
+  for (var i = 0; i < 3; i++){
+    var r = dagsresultat(dagKey(new Date(tilDato(S.iDag).getTime() - i * 86400000)));
+    if (r) raekker.push(r);
+  }
+  if (!raekker.length) return Promise.resolve(null);
+  return sbRest("resultater?on_conflict=bruger_id,dag", {
+    method:"POST",
+    headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(raekker)
+  }).then(function(){ return true; }).catch(function(){ return false; });
+}
+function hentHold(dage){
+  return sbRest("rpc/mit_hold", { method:"POST", body: JSON.stringify({ dage: dage }) });
+}
+
+/* --- Realtid ---
+   Der tales direkte med Supabases websocket. iOS sætter appen på pause, så snart
+   den ryger i baggrunden, så forbindelsen lever kun mens skærmen er fremme —
+   derfor lukkes og genåbnes den efter appens synlighed. */
+var rtSok = null, rtPuls = null, rtRef = 0;
+function luklRealtid(){
+  if (rtPuls){ clearInterval(rtPuls); rtPuls = null; }
+  if (rtSok){ try { rtSok.close(); } catch(e){} rtSok = null; }
+}
+function aabnRealtid(naarAendret){
+  if (!S.bruger || rtSok) return;
+  adgangstegn().then(function(tegn){
+    if (!tegn) return;
+    try {
+      rtSok = new WebSocket(SB_URL.replace("https://", "wss://")
+        + "/realtime/v1/websocket?apikey=" + encodeURIComponent(SB_KEY) + "&vsn=1.0.0");
+    } catch(e){ return; }
+
+    rtSok.onopen = function(){
+      rtSok.send(JSON.stringify({
+        topic:"realtime:dyst", event:"phx_join", ref:String(++rtRef),
+        payload:{ config:{ postgres_changes:[{ event:"*", schema:"public", table:"resultater" }] },
+                  access_token: tegn }
+      }));
+      rtPuls = setInterval(function(){
+        if (rtSok && rtSok.readyState === 1){
+          rtSok.send(JSON.stringify({ topic:"phoenix", event:"heartbeat", payload:{}, ref:String(++rtRef) }));
+        }
+      }, 25000);
+    };
+    rtSok.onmessage = function(b){
+      try {
+        var m = JSON.parse(b.data);
+        if (m.event === "postgres_changes" && naarAendret) naarAendret();
+      } catch(e){}
+    };
+    rtSok.onclose = function(){ luklRealtid(); };
+    rtSok.onerror = function(){ luklRealtid(); };
+  });
+}
+
+/* --- Push --- */
+function base64TilBytes(b64){
+  var pad = "=".repeat((4 - b64.length % 4) % 4);
+  var raa = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  var ud = new Uint8Array(raa.length);
+  for (var i = 0; i < raa.length; i++) ud[i] = raa.charCodeAt(i);
+  return ud;
+}
+function bytesTilBase64(buf){
+  var u = new Uint8Array(buf), t = "";
+  for (var i = 0; i < u.length; i++) t += String.fromCharCode(u[i]);
+  return btoa(t).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function pushMuligt(){
+  return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+}
+function erInstalleret(){
+  try { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
+  catch(e){ return false; }
+}
+function slaaPushTil(){
+  if (!S.bruger) return Promise.reject(new Error("Log ind først."));
+  if (!pushMuligt()) return Promise.reject(new Error("Denne browser understøtter ikke notifikationer."));
+  if (!erInstalleret()) return Promise.reject(new Error("På iPhone virker notifikationer kun, når appen er lagt på hjemmeskærmen og åbnes derfra."));
+  return Notification.requestPermission().then(function(svar){
+    if (svar !== "granted") throw new Error("Der blev ikke givet lov til notifikationer.");
+    return navigator.serviceWorker.ready;
+  }).then(function(reg){
+    return reg.pushManager.getSubscription().then(function(eks){
+      return eks || reg.pushManager.subscribe({
+        userVisibleOnly:true, applicationServerKey: base64TilBytes(VAPID_OFFENTLIG) });
+    });
+  }).then(function(ab){
+    var j = ab.toJSON ? ab.toJSON() : null;
+    return sbRest("push_abonnenter?on_conflict=endpoint", {
+      method:"POST",
+      headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify([{
+        endpoint: ab.endpoint,
+        bruger_id: laes(K_PROFIL_ID),
+        p256dh: j && j.keys ? j.keys.p256dh : bytesTilBase64(ab.getKey("p256dh")),
+        auth:   j && j.keys ? j.keys.auth   : bytesTilBase64(ab.getKey("auth")),
+        sidst_set: new Date().toISOString()
+      }])
+    });
+  }).then(function(){ skriv(K_PUSH, "1"); return true; });
+}
+function slaaPushFra(){
+  fjern(K_PUSH);
+  if (!pushMuligt()) return Promise.resolve();
+  return navigator.serviceWorker.ready.then(function(reg){ return reg.pushManager.getSubscription(); })
+    .then(function(ab){
+      if (!ab) return null;
+      var e = ab.endpoint;
+      return ab.unsubscribe().then(function(){
+        return sbRest("push_abonnenter?endpoint=eq." + encodeURIComponent(e), { method:"DELETE" }).catch(function(){});
+      });
+    }).catch(function(){});
+}
+
+/* --- Opstart: genkend brugeren hvis sessionen stadig er gyldig --- */
+function genkendBruger(){
+  if (!session()) return Promise.resolve(null);
+  return hentMinProfil().then(function(p){
+    if (!p) return null;
+    S.bruger = p;
+    delDage();
+    return p;
+  }).catch(function(){ return null; });
 }
 
 /* ================= Lykønskning =================
@@ -3489,7 +3996,8 @@ $("importfil").onchange = function(e){
 
 var skjultSiden = 0;
 document.addEventListener("visibilitychange", function(){
-  if (document.visibilityState === "hidden"){ skjultSiden = Date.now(); return; }
+  if (document.visibilityState === "hidden"){ skjultSiden = Date.now(); luklRealtid(); return; }
+  if (S.bruger && S.skaerm === "trends") aabnRealtid(function(){ if (S.skaerm === "trends") tegnHold(); });
   if (harLaas() && aktivNoegle && skjultSiden){
     var minutter = (Date.now() - skjultSiden) / 60000;
     if (minutter >= laasTid()){ laasNu(); return; }
@@ -3535,6 +4043,7 @@ visForbindelse();
 if (!harLaas()) aktivNoegle = laes(K_NOEGLE);
 tegn();
 haandterGenvej();
+genkendBruger();
 (function(){ var f = fejringsdag(); if (f) setTimeout(function(){ visFejring(f); }, 420); })();
 tjekOpdatering(false);
 </script>
