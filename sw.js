@@ -11,7 +11,7 @@
  * denne fil, så der aldrig gemmes svar med dine måltider i en cache.
  */
 
-var CACHE = "kaloriedagbog-skal-2";
+var CACHE = "kaloriedagbog-skal-3";
 
 var SKAL = [
   "./",
@@ -101,4 +101,42 @@ self.addEventListener("fetch", function (e) {
 /* Appen kan bede den nye udgave om at overtage med det samme */
 self.addEventListener("message", function (e) {
   if (e.data === "overtag") self.skipWaiting();
+});
+
+/* ------------------------------------------------------------
+   Push. iOS leverer kun til hjemmeskærms-apps, og kun når der er
+   en synlig besked — der findes ingen stille push.
+   ------------------------------------------------------------ */
+self.addEventListener("push", function (e) {
+  var d = { title: "Kaloriedagbog", body: "", url: "./", tag: "kaloriedagbog" };
+  try {
+    if (e.data) d = Object.assign(d, e.data.json());
+  } catch (fejl) {
+    try { d.body = e.data.text(); } catch (f2) {}
+  }
+  e.waitUntil(
+    self.registration.showNotification(d.title, {
+      body: d.body,
+      tag: d.tag,
+      icon: "./icon-192.png",
+      badge: "./icon-192.png",
+      data: { url: d.url },
+      renotify: false
+    })
+  );
+});
+
+self.addEventListener("notificationclick", function (e) {
+  e.notification.close();
+  var maal = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (vinduer) {
+      for (var i = 0; i < vinduer.length; i++) {
+        if (vinduer[i].url.indexOf(self.location.origin) === 0 && "focus" in vinduer[i]) {
+          return vinduer[i].focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(maal);
+    })
+  );
 });
