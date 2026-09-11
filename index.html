@@ -307,7 +307,8 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     P_SNAP = "kd:snap:", K_EKSPORT = "kd:sidste-eksport",
     K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand",
     K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret",
-    K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail";
+    K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail",
+    K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb";
 var reserve = {};
 
 function laes(k){
@@ -1371,6 +1372,96 @@ function beregnStatus(kcal, tilbageFoer){
   return "tungt";
 }
 
+/* De sidste kommentarer huskes. Uden dem gentager modellen sig, fordi den
+   ikke kan vide, at den allerede har sagt noget lignende i går. */
+function seteKommentarer(){
+  try { var v = JSON.parse(laes(K_KOMMENTARER) || "[]"); return Array.isArray(v) ? v : []; }
+  catch(e){ return []; }
+}
+function notérKommentar(t){
+  if (!t) return;
+  var liste = [t].concat(seteKommentarer().filter(function(x){ return x !== t; }));
+  skriv(K_KOMMENTARER, JSON.stringify(liste.slice(0, 18)));
+}
+
+/* Et roterende greb, så to måltider i træk ikke gribes ens an */
+var GREB = [
+  "Gå efter selvbedraget i portionsstørrelsen.",
+  "Sammenlign med noget han har spist tidligere på ugen.",
+  "Tag fat i klokkeslættet og hvad det siger om beslutningen.",
+  "Brug et mønster fra dagbogen — noget der går igen.",
+  "Overdriv én enkelt ingrediens ud over alle proportioner.",
+  "Stil et retorisk spørgsmål han ikke har lyst til at svare på.",
+  "Hold det op mod hvad der er tilbage af dagen.",
+  "Tag udgangspunkt i ugedagen og hvad folk bilder sig ind på den."
+];
+function naesteGreb(){
+  var n = (Number(laes(K_GREB)) || 0) % GREB.length;
+  skriv(K_GREB, String((n + 1) % GREB.length));
+  return GREB[n];
+}
+
+/* Alt hvad modellen kan hænge en kommentar op på: dagen indtil nu, ugens
+   retning, stimen, gengangere, vægten og hvad den selv har sagt for nylig. */
+function kommentarKontekst(dag){
+  var d = dag || S.iDag;
+  var ud = [];
+
+  var idag = hentDag(d);
+  ud.push(idag.length
+    ? "SPIST I DAG INDTIL NU: " + idag.map(function(p){
+        return p.tid + " " + p.navn + " " + Math.round(p.kalorier) + " kcal"; }).join(" · ")
+    : "SPIST I DAG INDTIL NU: ingenting — dette er dagens første registrering.");
+
+  try {
+    var a = analyseAfVindue(7);
+    if (a.antalDage >= 2){
+      ud.push("SENESTE 7 DAGE: snit " + Math.round(a.snit) + " kcal pr. dag mod et mål på " + S.maal
+        + (a.aendring !== null && Math.abs(a.aendring) >= 4
+            ? ", altså " + Math.abs(Math.round(a.aendring)) + " % "
+              + (a.aendring > 0 ? "mere" : "mindre") + " end ugen før" : "") + ".");
+      if (a.gengangere.length){
+        ud.push("GÅR IGEN: " + a.gengangere.slice(0,4).map(function(g){
+          return g.navn + " " + g.antal + " gange"; }).join(", ") + ".");
+      }
+      if (a.toppe.length){
+        ud.push("TUNGESTE ENKELTMÅLTID PÅ UGEN: " + a.toppe[0].navn + " på "
+          + Math.round(a.toppe[0].kcal) + " kcal.");
+      }
+    }
+  } catch(e){}
+
+  var stime = 0;
+  for (var i = 1; i < 60; i++){
+    var n = dagKey(new Date(tilDato(d).getTime() - i * 86400000));
+    var poster = hentDag(n);
+    if (!poster.length) break;
+    if (poster.reduce(function(x,p){ return x + p.kalorier; }, 0) <= S.maal) stime++; else break;
+  }
+  if (stime > 0) ud.push("DAGE I TRÆK UNDER MÅLET FØR I DAG: " + stime + ".");
+
+  try {
+    var k = kropstal();
+    if (k.nu && k.aendring !== null && k.liste.length > 2){
+      ud.push("VÆGT: " + kg(k.nu) + " kg, "
+        + (k.aendring < 0 ? kg(Math.abs(k.aendring)) + " kg ned" : kg(k.aendring) + " kg op")
+        + " siden første vejning"
+        + (k.tilMaal !== null && k.tilMaal > 0 ? ", " + kg(k.tilMaal) + " kg fra målet" : "") + ".");
+    }
+  } catch(e){}
+
+  var t = new Date();
+  ud.push("NU: " + t.toLocaleDateString("da-DK", { weekday:"long" }) + ", klokken "
+    + t.toLocaleTimeString("da-DK", { hour:"2-digit", minute:"2-digit" }) + ".");
+
+  var gamle = seteKommentarer();
+  if (gamle.length){
+    ud.push("DETTE HAR DU ALLEREDE SAGT — find på noget helt andet, og genbrug hverken "
+      + "vendinger, billeder eller opbygning:\n- " + gamle.slice(0, 12).join("\n- "));
+  }
+  return ud.join("\n");
+}
+
 /* Anden fase: kommentar og forslag. Rent tekstkald uden foto, og det sættes i gang
    i det øjeblik tallene er på skærmen, så brugeren ikke venter på det. */
 function hentPersonlighed(r, dag, tid, antal){
@@ -1383,8 +1474,9 @@ function hentPersonlighed(r, dag, tid, antal){
     + (r.gram ? ', cirka ' + r.gram + ' g pr. portion' : "")
     + (antal > 1 ? ', ' + antal + ' portioner' : "") + '.\n\n'
     + dagskontekst(dag, tid) + '\n\n'
+    + kommentarKontekst(dag) + '\n\n'
     + forslagsregler(dag) + '\n\n'
-    + (S.kaek ? tone() + '\n\n' : '')
+    + (S.kaek ? tone() + '\nGREB DENNE GANG: ' + naesteGreb() + '\n\n' : '')
     + 'Svar udelukkende med JSON, uden markdown:\n{'
     + (S.kaek ? '"kommentar": "en kæk bemærkning på max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
     + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, '
@@ -1753,6 +1845,13 @@ function tone(){
           + 'aldrig kommer, portionen der blev vurderet med et optimistisk øje, ugen der blev '
           + 'kaldt en undtagelse for fjerde gang. Vær hård ved undskyldningerne. Du behøver '
           + 'ikke afslutte med noget opmuntrende.\n'
+          + '11. BRUG DAGBOGEN SOM AMMUNITION. Du får dagens måltider, ugens retning, stimen, '
+          + 'gengangerne og vægtkurven med. Den skarpeste kommentar er den, der kun kunne '
+          + 'skrives til netop denne person på netop denne dag — et tal fra dagbogen, et '
+          + 'mønster der går igen, en stime der lige røg. Generelle bemærkninger om mad kunne '
+          + 'stå i en hvilken som helst app og er derfor spildt.\n'
+          + '12. GENTAG DIG ALDRIG. Du får en liste over det, du har sagt for nylig. Samme '
+          + 'vits to gange er værre end ingen vits. Skift vinkel, billedsprog og opbygning.\n'
         : '')
     + 'Du må drille ' + n + ' personligt: vaner, udflugter, optimistiske portionsvurderinger, '
     + 'gode forsætter der holdt en uge, og de forklaringer folk giver sig selv efter klokken 22.\n'
@@ -3229,7 +3328,7 @@ function startPersonlighed(){
     .then(function(t){
       if (S.ark !== a || a.status !== "resultat") return;
       a.tekstStatus = "klar";
-      if (t.kommentar) a.r.kommentar = t.kommentar;
+      if (t.kommentar){ a.r.kommentar = t.kommentar; notérKommentar(t.kommentar); }
       if (Array.isArray(t.alternativer)) a.r.alternativer = t.alternativer;
       var b2 = $("personlighed");
       if (b2){ b2.innerHTML = personlighedHtml(a); bindAlternativer(a); }
