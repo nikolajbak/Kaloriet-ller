@@ -55,8 +55,16 @@ body{
   border-top:1px solid var(--linje);padding-top:12px;}
 .makro b{font-weight:600;color:var(--blaek);font-variant-numeric:tabular-nums;}
 h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
+.postrum{position:relative;border-radius:12px;overflow:hidden;margin-bottom:8px;}
+.slettebag{position:absolute;inset:0;background:var(--ler);color:#F7F2F0;
+  display:flex;align-items:center;justify-content:flex-end;gap:8px;
+  padding-right:22px;font-size:15px;font-weight:600;}
+.slettebag svg{width:19px;height:19px;}
 .post{display:flex;gap:12px;align-items:center;background:var(--kort);
-  border:1px solid var(--linje);border-radius:12px;padding:10px;margin-bottom:8px;}
+  border:1px solid var(--linje);border-radius:12px;padding:10px;
+  position:relative;touch-action:pan-y;
+  transition:transform .24s cubic-bezier(.22,.7,.3,1);}
+.post.glider{transition:none;}
 .post img,.post .tom-foto{width:52px;height:52px;border-radius:8px;flex:none;
   object-fit:cover;background:#DDE0D8;}
 .post .tom-foto{display:flex;align-items:center;justify-content:center;color:#4A554F;}
@@ -102,6 +110,10 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 @keyframes fold{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 @keyframes traedfrem{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .panel h3{margin:0 0 14px;font-size:17px;}
+.panel{position:relative;padding-top:26px;}
+.panel::before{content:"";position:absolute;top:9px;left:50%;transform:translateX(-50%);
+  width:38px;height:5px;border-radius:3px;background:var(--linje);}
+.panel.glider{transition:none;}
 .foto{width:100%;border-radius:12px;display:block;background:#DDE0D8;}
 .foto.venter{animation:aande 1.5s ease-in-out infinite;}
 @keyframes aande{0%,100%{opacity:1}50%{opacity:.5}}
@@ -277,7 +289,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "29.3";
+var APP_VERSION = "29.4";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -385,7 +397,9 @@ function bindPortioner(idAntal, felter, efter){
 /* Rettes beskrivelsen, regnes måltidet om ud fra den nye tekst. Det sker på
    tekstvejen, så det er et billigt kald uden foto. De gamle tal gemmes, så
    genberegningen kan fortrydes — den må ikke kunne overskrive noget uopretteligt. */
+var nyKommentar = null;
 function bindGenberegning(praefiks, dag, tid){
+  nyKommentar = null;
   var navnFelt = $(praefiks + "-navn");
   var status = $(praefiks + "-genstatus");
   if (!navnFelt || !status) return;
@@ -404,10 +418,20 @@ function bindGenberegning(praefiks, dag, tid){
     var katFelt = $(praefiks + "-kat");
     if (katFelt) foer.kat = katFelt.value;
 
+    /* Rettes et måltid fra i dag, sker det jo nu — så både det registrerede
+       klokkeslæt og det, kommentaren skrives ud fra, følger med. Måltider fra
+       tidligere dage rører vi ikke, dér ville "nu" være forkert. */
+    var brugtTid = tid;
+    if ((dag || S.iDag) === S.iDag){
+      brugtTid = nuKlokken();
+      var tidFelt = $(praefiks + "-tid");
+      if (tidFelt) tidFelt.value = brugtTid.replace(".", ":");
+    }
+
     status.innerHTML = '<p class="grafnote" style="margin:7px 0 0" role="status" aria-live="polite">'
       + 'Regner “' + esc(nyt) + '” om …</p>';
 
-    analyser(null, "", null, nyt, dag, tid).then(function(r){
+    analyser(null, "", null, nyt, dag, brugtTid).then(function(r){
       koerer = false;
       if (!r || r.er_mad === false){
         status.innerHTML = '<p class="grafnote" style="margin:7px 0 0">'
@@ -423,9 +447,12 @@ function bindGenberegning(praefiks, dag, tid){
       saet("gen",  Math.round((Number(r.genstande) || 0) * antal * 10) / 10);
       if (Number(r.gram)) saet("gram", Math.round(Number(r.gram)));
       if (katFelt && KATEGORIER.indexOf(r.kategori) >= 0) katFelt.value = r.kategori;
+      if (S.ark && S.ark.r && r.kommentar) S.ark.r.kommentar = r.kommentar;
+      if (praefiks === "r") nyKommentar = r.kommentar || "";
 
       status.innerHTML = '<p class="grafnote" style="margin:7px 0 0">Tallene er regnet om'
-        + (r.portion ? ' — regnet som ' + esc(r.portion) : "") + '. '
+        + (r.portion ? ' — regnet som ' + esc(r.portion) : "")
+        + (brugtTid !== tid ? '. Tidspunktet er sat til ' + esc(brugtTid) : "") + '. '
         + '<button class="txtknap" id="' + praefiks + '-fortrydgen">Fortryd</button></p>';
       var fk = $(praefiks + "-fortrydgen");
       if (fk) fk.onclick = function(){
@@ -1075,6 +1102,51 @@ function skjulFortryd(){
   var b = $("fortryd-bar"); if (b) b.remove();
 }
 /* Sletter en registrering og husker baade posten og dens plads i raekken */
+/* Stryg til venstre for at slette, som i Mail. Vandret bevægelse overtager først,
+   når den tydeligt overgår den lodrette — ellers ville listen ikke kunne rulles. */
+function bindStryg(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-glid]"), function(el){
+    var x0 = 0, y0 = 0, raa = 0, laast = null, id = el.getAttribute("data-glid");
+    var graense = 96;
+
+    el.addEventListener("touchstart", function(e){
+      if (e.touches.length !== 1) return;
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+      raa = 0; laast = null;
+      el.classList.add("glider");
+    }, { passive: true });
+
+    el.addEventListener("touchmove", function(e){
+      if (e.touches.length !== 1) return;
+      var nx = e.touches[0].clientX - x0, ny = e.touches[0].clientY - y0;
+      if (laast === null){
+        if (Math.abs(nx) < 10 && Math.abs(ny) < 10) return;
+        laast = Math.abs(nx) > Math.abs(ny) * 1.4 ? "vandret" : "lodret";
+      }
+      if (laast !== "vandret") return;
+      e.preventDefault();
+      raa = Math.min(0, nx);                      /* kun til venstre */
+      /* Modtrykket gælder kun det, man SER — beslutningen træffes på den rå
+         afstand, ellers kan tærsklen aldrig nås. */
+      var vist = raa < -graense ? -graense + (raa + graense) * 0.35 : raa;
+      el.style.transform = "translateX(" + vist + "px)";
+    }, { passive: false });
+
+    function slip(){
+      el.classList.remove("glider");
+      if (laast === "vandret" && raa <= -graense){
+        el.style.transform = "translateX(-100%)";
+        setTimeout(function(){ sletPost(S.iDag, id); tegn(); }, 180);
+      } else {
+        el.style.transform = "";
+      }
+      laast = null;
+    }
+    el.addEventListener("touchend", slip, { passive: true });
+    el.addEventListener("touchcancel", slip, { passive: true });
+  });
+}
+
 function sletPost(dag, id){
   var poster = hentDag(dag);
   var plads = -1, post = null;
@@ -1885,18 +1957,22 @@ function tegnHoved(){
     h += '<div class="tom">Ingen måltider endnu. Tag et billede af det første, så regner appen resten ud.</div>';
   } else {
     poster.forEach(function(p){
-      h += '<div class="post">'
+      h += '<div class="postrum">'
+        + '<div class="slettebag" aria-hidden="true">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
+        + 'stroke-linecap="round"><path d="M5 7h14 M10 7V5h4v2 M7 7l1 13h8l1-13 M10 11v6 M14 11v6"/></svg>'
+        + 'Slet</div>'
+        + '<div class="post" data-glid="' + esc(p.id) + '">'
         + (p.billede ? '<img src="' + p.billede + '" alt="">'
                      : '<div class="tom-foto" title="' + esc(p.kategori) + '">' + kategoriIkon(p.kategori) + '</div>')
         + '<div class="txt" role="button" tabindex="0" aria-label="Ret ' + esc(p.navn) + '" data-red="' + esc(S.iDag) + '|' + esc(p.id) + '"><div class="navn">' + esc(p.navn) + '</div>'
         + '<div class="meta">' + esc(p.tid) + " · " + esc(p.kategori)
         + (portionsTekst(p) ? " · " + portionsTekst(p) : "") + '</div>'
         + (p.kommentar ? '<div class="kom">' + esc(p.kommentar) + '</div>' : "") + '</div>'
-        + '<div class="kcal">' + tal(p.kalorier) + '</div>'
-        + '<button class="xknap" data-slet="' + esc(p.id) + '" aria-label="Slet ' + esc(p.navn) + '">&times;</button></div>';
+        + '<div class="kcal">' + tal(p.kalorier) + '</div></div></div>';
     });
   }
-  if (poster.length) h += '<p class="grafnote" style="margin:2px 2px 0">Tryk på et måltid for at rette det.</p>';
+  if (poster.length) h += '<p class="grafnote" style="margin:2px 2px 0">Tryk på et måltid for at rette det. Stryg til venstre for at slette.</p>';
   h += '<h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>'
     + '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
     + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div>'
@@ -1911,12 +1987,7 @@ function tegnHoved(){
   $("b-skriv").onclick = function(){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); };
   tegnSpiseforslag();
   bindRediger();
-  Array.prototype.forEach.call(document.querySelectorAll("[data-slet]"), function(b){
-    b.onclick = function(){
-      sletPost(S.iDag, b.getAttribute("data-slet"));
-      tegn();
-    };
-  });
+  bindStryg();
 }
 
 /* --- Forslag til resten af dagen --- */
@@ -2156,6 +2227,7 @@ function aabnVejning(dag){
   document.body.insertAdjacentHTML("beforeend", h);
   function luk(){ lukBlodt("v-overlay"); }
   $("v-overlay").onclick = function(e){ if (e.target.id === "v-overlay") luk(); };
+  bindTraekNed("v-overlay", luk);
   $("v-luk").onclick = luk;
   $("v-gem").onclick = function(){
     var kgv = laesKomma($("v-kg").value);
@@ -2237,6 +2309,7 @@ function aabnRediger(dag, id){
     luk(); tegn();
   }
   $("r-overlay").onclick = function(e){ if (e.target.id === "r-overlay") luk(); };
+  bindTraekNed("r-overlay", luk);
   $("r-luk").onclick = luk;
   $("r-gem").onclick = function(){
     var nyDag = $("r-dato").value;
@@ -2258,7 +2331,7 @@ function aabnRediger(dag, id){
         navn: $("r-navn").value.trim() || "Måltid",
         kategori: $("r-kat").value,
         portion: p.portion,
-        kommentar: p.kommentar,
+        kommentar: nyKommentar !== null ? nyKommentar : p.kommentar,
         portioner: ant,
         gram: Number($("r-gram").value) || 0,
         pr_portion: prPortion(totaler, ant),
@@ -2977,6 +3050,7 @@ function tegnArk(){
   $("overlay").onclick = function(e){
     if (e.target.id === "overlay" && a.status !== "analyserer") lukArk();
   };
+  if (a.status !== "analyserer") bindTraekNed("overlay", lukArk);
   var bl = $("b-luk"); if (bl) bl.onclick = lukArk;
   var bm = $("b-manuel"); if (bm) bm.onclick = function(){
     var st = $("s-tekst");
@@ -3273,6 +3347,50 @@ function bindFoldning(rod){
 
 /* Ark skal ogsaa glide ud igen. Id-et fjernes med det samme, saa arket ikke
    kan findes to gange, mens udgangen spiller. */
+/* Ark kan trækkes nedad for at lukke. Bevægelsen overtager kun, når arket
+   allerede er rullet helt til tops — ellers ville man ikke kunne rulle i det. */
+function bindTraekNed(id, luk){
+  var overlay = $(id);
+  if (!overlay) return;
+  var panel = overlay.querySelector(".panel");
+  if (!panel) return;
+  var y0 = 0, dy = 0, laast = null;
+
+  panel.addEventListener("touchstart", function(e){
+    if (e.touches.length !== 1) return;
+    y0 = e.touches[0].clientY; dy = 0; laast = null;
+    panel.classList.add("glider");
+  }, { passive: true });
+
+  panel.addEventListener("touchmove", function(e){
+    if (e.touches.length !== 1) return;
+    var ny = e.touches[0].clientY - y0;
+    if (laast === null){
+      if (Math.abs(ny) < 8) return;
+      /* kun hvis der trækkes nedad fra toppen af arket */
+      laast = (ny > 0 && panel.scrollTop <= 0) ? "traek" : "rul";
+    }
+    if (laast !== "traek") return;
+    e.preventDefault();
+    dy = Math.max(0, ny);
+    panel.style.transform = "translateY(" + dy + "px)";
+    overlay.style.background = "rgba(23,33,29," + Math.max(0.08, 0.42 - dy / 700) + ")";
+  }, { passive: false });
+
+  function slip(){
+    panel.classList.remove("glider");
+    if (laast === "traek" && dy > 110){
+      luk();
+    } else {
+      panel.style.transform = "";
+      overlay.style.background = "";
+    }
+    laast = null;
+  }
+  panel.addEventListener("touchend", slip, { passive: true });
+  panel.addEventListener("touchcancel", slip, { passive: true });
+}
+
 function lukBlodt(id, naar){
   var o = $(id);
   if (!o){ if (naar) naar(); return; }
@@ -3460,6 +3578,7 @@ function tegnIndstillinger(){
     };
   });
   bindFoldning($("ind-overlay"));
+  bindTraekNed("ind-overlay", luk);
   tegnKonto();
   var lt = $("s-laastil"); if (lt) lt.onclick = function(){ opsaetKode(); };
   var lf = $("s-laasfra"); if (lf) lf.onclick = function(){
@@ -3929,6 +4048,7 @@ function opsaetKode(){
   function luk(){ lukBlodt("k-overlay"); }
   $("k-luk").onclick = luk;
   $("k-overlay").onclick = function(e){ if (e.target.id === "k-overlay") luk(); };
+  bindTraekNed("k-overlay", luk);
   $("k-gem").onclick = function(){
     var a = $("k-1").value, b = $("k-2").value;
     if (!/^[0-9]{4,8}$/.test(a)){
