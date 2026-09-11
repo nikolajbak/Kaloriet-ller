@@ -289,7 +289,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "29.5";
+var APP_VERSION = "29.6";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -3553,7 +3553,7 @@ function tegnIndstillinger(){
     + '<input id="s-unsplash" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Uændret">'
     + '<div class="note">Dagbogen ligger kun i denne browser. Nøglen bliver liggende ved opdateringer — du skal kun taste den igen, hvis appen flytter til en ny adresse.</div>'
     + '<div class="tjek"><input type="checkbox" id="s-medn"><label for="s-medn">Tag nøglen med i sikkerhedskopien, så en ny telefon er klar med det samme</label></div>'
-    + '<button class="knap" id="s-gem" style="margin-top:16px">Gem</button>'
+
     + '</div></details>'
     + '<details class="afsnit"><summary>Sikkerhedskopier</summary><div>'
     + '<p class="grafnote" style="margin:6px 0 10px">Appen tager selv en kopi hver dag og altid før '
@@ -3596,7 +3596,8 @@ function tegnIndstillinger(){
     + '<div id="kontoboks"></div>'
     + '</div></details>'
     + '<div class="bundfelt">'
-    + '<button class="knap sek" id="s-opdater">Søg efter opdatering</button>'
+    + '<button class="knap" id="s-gem">Gem</button>'
+    + '<button class="knap sek" id="s-opdater" style="margin-top:8px">Søg efter opdatering</button>'
     + '<p class="fodnote" style="text-align:center;margin-top:12px">Version ' + APP_VERSION
     + ' · ' + forbrugDenneMaaned() + ' analyser denne måned</p>'
     + '</div></div></div>';
@@ -3605,7 +3606,10 @@ function tegnIndstillinger(){
 
   function luk(){ S.indst = false; lukBlodt("ind-overlay", tegn); }
   $("ind-overlay").onclick = function(e){ if (e.target.id === "ind-overlay") luk(); };
-  $("s-gem").onclick = function(){
+  /* Felterne gemmer sig selv, når man forlader dem. Gem-knappen er dermed en
+     bekræftelse og ikke et krav — ellers taber man sine rettelser ved at lukke
+     arket, og det er nemt at gøre nu hvor det kan strygees ned. */
+  function gemFelter(){
     var nv = $("s-navn").value.trim();
     if (nv){ S.navn = nv.slice(0,30); skriv(K_BRUGER, S.navn); }
     S.kaekhed = $("s-kaek").value;
@@ -3637,6 +3641,16 @@ function tegnIndstillinger(){
         skriv(K_NOEGLE, n);
       }
     }
+  }
+
+  ["s-navn","s-kaek","s-maal","s-hoejde","s-alder","s-koen","s-akt","s-hensigt",
+   "s-mvaegt","s-model"].forEach(function(id){
+    var el = $(id);
+    if (el) el.onchange = function(){ gemFelter(); };
+  });
+
+  $("s-gem").onclick = function(){
+    gemFelter();
     luk();
   };
   $("s-eksport").onclick = function(){
