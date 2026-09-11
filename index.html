@@ -289,7 +289,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "29.6";
+var APP_VERSION = "29.7";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2848,7 +2848,7 @@ function tegnHold(){
   boks.innerHTML = '<p style="color:var(--daempet)">Henter …</p>';
   Promise.all([hentHold(S.vindue), hentVenskaber()]).then(function(svar){
     var raekker = svar[0] || [], venskaber = svar[1] || [];
-    var mig = laes(K_PROFIL_ID);
+    var mig = minId();
 
     /* Stilling */
     var pr = {};
@@ -3804,9 +3804,26 @@ function sbRest(sti, o){
   });
 }
 
+/* Brugerens id læses ud af selve adgangstegnet. Databasen godkender rækker mod
+   netop det id, så alt andet end tegnet selv er et gæt — og et gæt der ikke
+   passer, bliver afvist af adgangsreglerne med en kryptisk fejl. */
+function minId(){
+  var s = session();
+  if (!s || !s.adgang) return laes(K_PROFIL_ID) || "";
+  try {
+    var del = s.adgang.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    var krop = JSON.parse(decodeURIComponent(escape(atob(del + "===".slice((del.length + 3) % 4)))));
+    if (krop && krop.sub){
+      if (laes(K_PROFIL_ID) !== krop.sub) skriv(K_PROFIL_ID, krop.sub);
+      return krop.sub;
+    }
+  } catch(e){}
+  return laes(K_PROFIL_ID) || "";
+}
+
 /* --- Profil --- */
 function hentMinProfil(){
-  return sbRest("profiler?select=id,brugernavn,visningsnavn&id=eq." + encodeURIComponent(laes(K_PROFIL_ID) || "")).then(function(r){
+  return sbRest("profiler?select=id,brugernavn,visningsnavn&id=eq." + encodeURIComponent(minId())).then(function(r){
     return (r && r[0]) || null;
   });
 }
@@ -3814,7 +3831,7 @@ function opretProfil(brugernavn, visningsnavn){
   return sbRest("profiler", {
     method:"POST",
     headers:{ "Prefer":"return=representation" },
-    body: JSON.stringify([{ id: laes(K_PROFIL_ID), brugernavn: brugernavn.toLowerCase(), visningsnavn: visningsnavn || "" }])
+    body: JSON.stringify([{ id: minId(), brugernavn: brugernavn.toLowerCase(), visningsnavn: visningsnavn || "" }])
   }).then(function(r){ return (r && r[0]) || null; });
 }
 
@@ -3824,13 +3841,19 @@ function findBruger(navn){
     .then(function(r){ return (r && r[0]) || null; });
 }
 function anmodVen(andenId){
-  var mig = laes(K_PROFIL_ID);
+  var mig = minId();
   var lav = mig < andenId ? mig : andenId;
   var hoej = mig < andenId ? andenId : mig;
+  /* Ren indsættelse frem for en fletning: en fletning ville også skulle bestå
+     reglen for opdatering, og den kræver at status er accepteret. */
   return sbRest("venskaber", {
     method:"POST",
-    headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
+    headers:{ "Prefer":"return=minimal" },
     body: JSON.stringify([{ lav_id:lav, hoej_id:hoej, anmoder_id:mig, status:"anmodet" }])
+  }).catch(function(e){
+    if (/duplicate|23505/.test(e.message)) throw new Error("Der er allerede en anmodning mellem jer.");
+    if (/42501|row-level/.test(e.message)) throw new Error("Anmodningen blev afvist. Prøv at logge ud og ind igen.");
+    throw e;
   });
 }
 function hentVenskaber(){
@@ -3852,7 +3875,7 @@ function dagsresultat(noegle){
   if (!poster.length || !S.maal) return null;
   var sum = poster.reduce(function(a,p){ return a + p.kalorier; }, 0);
   return {
-    bruger_id: laes(K_PROFIL_ID),
+    bruger_id: minId(),
     dag: noegle,
     pct: Math.round(sum / S.maal * 1000) / 10,
     indenfor: sum <= S.maal,
@@ -3957,7 +3980,7 @@ function slaaPushTil(){
       headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify([{
         endpoint: ab.endpoint,
-        bruger_id: laes(K_PROFIL_ID),
+        bruger_id: minId(),
         p256dh: j && j.keys ? j.keys.p256dh : bytesTilBase64(ab.getKey("p256dh")),
         auth:   j && j.keys ? j.keys.auth   : bytesTilBase64(ab.getKey("auth")),
         sidst_set: new Date().toISOString()
