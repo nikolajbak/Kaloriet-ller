@@ -277,7 +277,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "29.1";
+var APP_VERSION = "29.2";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2525,54 +2525,71 @@ function tegnKonto(){
     if (b) b.innerHTML = '<div class="note' + (fejl ? " fejl" : "") + '">' + esc(t) + '</div>';
   }
 
-  /* Ikke logget ind: e-mail og engangskode */
+  /* Ikke logget ind: e-mail og adgangskode.
+     Engangskoder ville kræve en rettet mailskabelon, og det er en betalt
+     funktion hos Supabase. Adgangskode foregår helt inde i appen. */
   if (!S.bruger){
     boks.innerHTML =
-      '<p class="grafnote" style="margin:6px 0 0">Log ind for at dyste med andre. Du får en '
-      + 'sekscifret kode på mail — ingen adgangskode at huske.</p>'
+      '<p class="grafnote" style="margin:6px 0 0">Log ind for at dyste med andre. '
+      + 'Har du ikke en konto, opretter du den her med det samme — der bliver ikke '
+      + 'sendt nogen mail.</p>'
       + '<span class="lbl">E-mail</span>'
-      + '<input id="konto-mail" type="email" inputmode="email" autocomplete="email" '
+      + '<input id="konto-mail" type="email" inputmode="email" autocomplete="username" '
       + 'autocapitalize="off" spellcheck="false" value="' + esc(laes(K_MAIL) || "") + '">'
-      + '<button class="knap sek" id="konto-send" style="margin-top:12px">Send mig en kode</button>'
-      + '<div id="konto-kodefelt"></div><div id="konto-besked"></div>';
+      + '<span class="lbl">Adgangskode — mindst 8 tegn</span>'
+      + '<input id="konto-kode" type="password" autocomplete="current-password">'
+      + '<button class="knap" id="konto-ind" style="margin-top:12px">Log ind</button>'
+      + '<button class="knap sek" id="konto-ny" style="margin-top:8px">Opret en ny konto</button>'
+      + '<div id="konto-besked"></div>'
+      + '<p class="fodnote">Lad iPhone gemme adgangskoden i nøgleringen. Der findes ingen '
+      + 'gendannelse pr. mail, så den skal du kunne finde igen.</p>';
 
-    $("konto-send").onclick = function(){
+    function forsoeg(sti, krop, knap, tekst){
+      knap.textContent = tekst; knap.disabled = true;
+      return sbAuth(sti, krop).then(function(d){
+        if (!d.access_token){
+          /* Supabase kan svare uden session, hvis bekræftelse er slået til */
+          throw new Error("Kontoen blev oprettet, men kræver bekræftelse. "
+            + "Slå Confirm email fra under Authentication → Providers → Email.");
+        }
+        gemSession(d);
+        skriv(K_PROFIL_ID, d.user && d.user.id);
+        return hentMinProfil();
+      }).then(function(profil){
+        S.bruger = profil || { brugernavn: null };
+        tegnKonto();
+        if (profil) delDage();
+      });
+    }
+
+    $("konto-ind").onclick = function(){
       var mail = ($("konto-mail").value || "").trim();
+      var kode = $("konto-kode").value || "";
       if (mail.indexOf("@") < 1){ skriv_besked("Skriv en gyldig e-mail.", true); return; }
       skriv(K_MAIL, mail);
-      var k = $("konto-send");
-      k.textContent = "Sender …"; k.disabled = true;
-      sbAuth("otp", { email: mail, create_user: true }).then(function(){
-        $("konto-kodefelt").innerHTML =
-          '<span class="lbl">Koden fra mailen</span>'
-          + '<input id="konto-kode" type="text" inputmode="numeric" autocomplete="one-time-code" '
-          + 'maxlength="10" placeholder="koden fra mailen">'
-          + '<button class="knap" id="konto-login" style="margin-top:12px">Log ind</button>';
-        k.textContent = "Send en ny kode"; k.disabled = false;
-        skriv_besked("Koden er sendt. Den gælder i en time.");
-        $("konto-login").onclick = function(){
-          /* Kun cifre beholdes, så mellemrum fra kopiering ikke vælter det */
-          var kode = ($("konto-kode").value || "").replace(/\D/g, "");
-          if (kode.length < 4){ skriv_besked("Skriv hele koden fra mailen.", true); return; }
-          var lk = $("konto-login");
-          lk.textContent = "Logger ind …"; lk.disabled = true;
-          sbAuth("verify", { email: mail, token: kode, type: "email" }).then(function(d){
-            if (!gemSession(d)) throw new Error("Der kom ingen session retur.");
-            skriv(K_PROFIL_ID, d.user && d.user.id);
-            return hentMinProfil();
-          }).then(function(profil){
-            S.bruger = profil;
-            tegnKonto();
-            if (profil) delDage();
-          }).catch(function(e){
-            skriv_besked(e.message, true);
-            lk.textContent = "Log ind"; lk.disabled = false;
-          });
-        };
-      }).catch(function(e){
-        skriv_besked(e.message, true);
-        k.textContent = "Send mig en kode"; k.disabled = false;
-      });
+      var k = $("konto-ind");
+      forsoeg("token?grant_type=password", { email:mail, password:kode }, k, "Logger ind …")
+        .catch(function(e){
+          skriv_besked(/invalid login/i.test(e.message)
+            ? "E-mail eller adgangskode passer ikke." : e.message, true);
+          k.textContent = "Log ind"; k.disabled = false;
+        });
+    };
+
+    $("konto-ny").onclick = function(){
+      var mail = ($("konto-mail").value || "").trim();
+      var kode = $("konto-kode").value || "";
+      if (mail.indexOf("@") < 1){ skriv_besked("Skriv en gyldig e-mail.", true); return; }
+      if (kode.length < 8){ skriv_besked("Adgangskoden skal være mindst 8 tegn.", true); return; }
+      skriv(K_MAIL, mail);
+      var k = $("konto-ny");
+      forsoeg("signup", { email:mail, password:kode }, k, "Opretter …")
+        .catch(function(e){
+          skriv_besked(/already registered|User already/i.test(e.message)
+            ? "Der findes allerede en konto på den mail — tryk Log ind i stedet."
+            : e.message, true);
+          k.textContent = "Opret en ny konto"; k.disabled = false;
+        });
     };
     return;
   }
