@@ -277,7 +277,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "29.2";
+var APP_VERSION = "29.3";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2646,6 +2646,19 @@ function tegnKonto(){
     slaaPushFra().then(function(){ tegnKonto(); skriv_besked("Notifikationer er slået fra."); });
   };
   $("konto-ud").onclick = function(){ logUd(); tegnKonto(); };
+}
+
+/* Hvor mange dage i træk op til i dag der blev holdt. Et hul i registreringen
+   bryder stimen — ellers ville dage uden data tælle som en sejr. */
+function stimeFor(raekker){
+  var kort = {};
+  (raekker || []).forEach(function(r){ if (r && r.dag) kort[r.dag] = r.indenfor; });
+  var n = 0;
+  for (var i = 1; i < 400; i++){
+    var d = dagKey(new Date(tilDato(S.iDag).getTime() - i * 86400000));
+    if (kort[d] === true) n++; else break;
+  }
+  return n;
 }
 
 /* Dysten. Der sammenlignes på procent af hver sit EGET mål — jeres kroppe har
