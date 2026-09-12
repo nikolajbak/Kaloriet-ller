@@ -275,6 +275,40 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 .fejring .linje{font-family:Georgia,serif;font-size:20px;line-height:1.35;margin:26px 0 0;}
 .fejring button{margin-top:32px;background:#F4F6F2;color:#17211D;border:none;border-radius:12px;
   padding:14px 30px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;}
+/* --- Dysten --- */
+.duel{background:var(--kort);border:1px solid var(--linje);border-radius:14px;
+  padding:16px 16px 14px;margin-bottom:12px;}
+.duel .uge{font-size:12.5px;color:var(--daempet);text-align:center;}
+.duel .stilling{display:flex;align-items:flex-start;justify-content:center;
+  gap:10px;margin-top:10px;}
+.duel .side{flex:1;text-align:center;min-width:0;}
+.duel .side .navn{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.duel .side .tal{font-family:Georgia,serif;font-size:44px;line-height:1;margin-top:4px;}
+.duel .side.foran .tal{color:var(--gron);}
+.duel .side .enhed{font-size:12px;color:var(--daempet);margin-top:3px;}
+.duel .mod{flex:none;font-size:13px;color:var(--daempet);padding-top:22px;}
+.duel .dom{text-align:center;font-size:13.5px;margin-top:12px;
+  border-top:1px solid var(--linje);padding-top:11px;}
+.ugerk{display:flex;align-items:center;gap:9px;padding:9px 2px;
+  border-bottom:1px solid var(--linje);}
+.ugerk .hvem{flex:1;min-width:0;font-size:14px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.ugerk .prikker{display:flex;gap:5px;flex:none;}
+.prik{width:19px;height:19px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:9.5px;color:#F4F6F2;background:#DDE0D8;}
+.prik.holdt{background:var(--gron);}
+.prik.over{background:var(--ler);}
+.prik.tom{background:none;border:1px dashed var(--linje);color:var(--daempet);}
+.prik.idag{outline:2px solid var(--blaek);outline-offset:1px;}
+.idagrk{display:flex;align-items:center;gap:11px;padding:10px 2px;}
+.idagrk .hvem{width:88px;flex:none;font-size:14px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.idagrk .spor{flex:1;height:8px;border-radius:4px;background:#DADCD3;overflow:hidden;}
+.idagrk .spor span{display:block;height:100%;background:var(--gron);}
+.idagrk .spor span.over{background:var(--ler);}
+.idagrk .pct{flex:none;width:46px;text-align:right;font-family:Georgia,serif;
+  font-size:15px;font-variant-numeric:tabular-nums;}
+.stime{font-size:12.5px;color:var(--daempet);}
 .skjul{display:none;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -289,7 +323,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "29.7";
+var APP_VERSION = "30.0";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2820,79 +2854,165 @@ function tegnKonto(){
   $("konto-ud").onclick = function(){ logUd(); tegnKonto(); };
 }
 
-/* Hvor mange dage i træk op til i dag der blev holdt. Et hul i registreringen
-   bryder stimen — ellers ville dage uden data tælle som en sejr. */
-function stimeFor(raekker){
-  var kort = {};
-  (raekker || []).forEach(function(r){ if (r && r.dag) kort[r.dag] = r.indenfor; });
-  var n = 0;
-  for (var i = 1; i < 400; i++){
-    var d = dagKey(new Date(tilDato(S.iDag).getTime() - i * 86400000));
-    if (kort[d] === true) n++; else break;
-  }
-  return n;
+/* ================= Dysten =================
+   Bygget på det, der virker i andre apps: der scores i procent af HVER SIT
+   eget mål, så to forskellige kroppe kan sammenlignes retfærdigt. Ugen
+   nulstilles hver mandag, så en enkelt skæv dag ikke hænger ved i en måned.
+   Og der vises ét tal pr. person — ikke tre, der konkurrerer om opmærksomheden. */
+
+function mandagIUgen(noegle){
+  var d = tilDato(noegle);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
 }
 
-/* Dysten. Der sammenlignes på procent af hver sit EGET mål — jeres kroppe har
-   forskellige behov, så absolutte kalorier kan ikke stilles op mod hinanden. */
+/* Samler hver persons uge: dag for dag, dagens stilling og stimen */
+function ugeoversigt(raekker){
+  var mandag = mandagIUgen(S.iDag);
+  var ugedage = [];
+  for (var i = 0; i < 7; i++){
+    var d = new Date(mandag); d.setDate(d.getDate() + i);
+    ugedage.push(dagKey(d));
+  }
+
+  var folk = {};
+  raekker.forEach(function(r){
+    if (!r.bruger_id) return;
+    var f = folk[r.bruger_id] = folk[r.bruger_id] || {
+      id: r.bruger_id, navn: r.visningsnavn || r.brugernavn, brugernavn: r.brugernavn, dage: {}
+    };
+    if (r.dag) f.dage[r.dag] = { pct: Number(r.pct), indenfor: r.indenfor, antal: r.antal };
+  });
+
+  return Object.keys(folk).map(function(id){
+    var f = folk[id];
+    f.uge = ugedage.map(function(n){
+      var v = f.dage[n];
+      return { dag: n, findes: !!v, indenfor: v ? v.indenfor : null,
+               pct: v ? v.pct : null, fremtid: n > S.iDag };
+    });
+    f.holdt = f.uge.filter(function(u){ return u.indenfor === true; }).length;
+    f.idag  = f.dage[S.iDag] || null;
+
+    /* Stime: dage i træk op til i går. Et hul bryder den. */
+    f.stime = 0;
+    for (var i = 1; i < 200; i++){
+      var n = dagKey(new Date(tilDato(S.iDag).getTime() - i * 86400000));
+      var v = f.dage[n];
+      if (v && v.indenfor) f.stime++; else break;
+    }
+    if (f.idag && f.idag.indenfor) f.stime++;
+    return f;
+  });
+}
+
+function ugenummerTekst(){
+  var m = mandagIUgen(S.iDag);
+  var slut = new Date(m); slut.setDate(slut.getDate() + 6);
+  return "Uge " + ugeNr(m) + " · " + m.toLocaleDateString("da-DK",{day:"numeric",month:"short"})
+    + " – " + slut.toLocaleDateString("da-DK",{day:"numeric",month:"short"});
+}
+
+function prikRaekke(f, mig){
+  var bogstaver = ["M","T","O","T","F","L","S"];
+  var h = '<div class="ugerk"><span class="hvem">' + esc(f.navn)
+    + (f.id === mig ? " (dig)" : "") + '</span><span class="prikker">';
+  f.uge.forEach(function(u, i){
+    var klasse = u.fremtid ? "tom" : (u.indenfor === true ? "holdt"
+                : (u.indenfor === false ? "over" : "tom"));
+    h += '<span class="prik ' + klasse + (u.dag === S.iDag ? " idag" : "") + '" '
+      + 'title="' + esc(kortDato(u.dag)) + '">' + bogstaver[i] + '</span>';
+  });
+  return h + '</span></div>';
+}
+
 function tegnHold(){
   var boks = $("holdboks");
   if (!boks) return;
 
   if (!S.bruger || !S.bruger.brugernavn){
-    boks.innerHTML = '<div class="tom">Log ind under Indstillinger for at dyste med andre. '
-      + 'Kun dit brugernavn, datoen og hvor stor en del af dit eget mål du brugte bliver delt.</div>';
+    boks.innerHTML = '<div class="tom">Log ind under Indstillinger for at dyste med en anden. '
+      + 'Kun dit brugernavn, datoen og hvor stor en del af dit eget mål du brugte bliver delt — '
+      + 'ikke dine måltider.</div>';
     return;
   }
 
   boks.innerHTML = '<p style="color:var(--daempet)">Henter …</p>';
-  Promise.all([hentHold(S.vindue), hentVenskaber()]).then(function(svar){
-    var raekker = svar[0] || [], venskaber = svar[1] || [];
-    var mig = minId();
 
-    /* Stilling */
-    var pr = {};
-    raekker.forEach(function(r){
-      if (!r.bruger_id) return;
-      var n = r.visningsnavn || r.brugernavn;
-      pr[r.bruger_id] = pr[r.bruger_id] || { navn:n, brugernavn:r.brugernavn, dage:0, holdt:0, sum:0, raekker:[] };
-      if (!r.dag) return;
-      var x = pr[r.bruger_id];
-      x.dage++; x.sum += Number(r.pct);
-      if (r.indenfor) x.holdt++;
-      x.raekker.push({ dag:r.dag, indenfor:r.indenfor });
-    });
-    var folk = Object.keys(pr).map(function(k){
-      var x = pr[k];
-      x.erMig = k === mig;
-      x.andel = x.dage ? x.holdt / x.dage * 100 : 0;
-      x.snit = x.dage ? x.sum / x.dage : 0;
-      x.stime = stimeFor(x.raekker);
-      return x;
-    }).sort(function(a,b){ return b.andel - a.andel || a.snit - b.snit; });
+  Promise.all([hentHold(30), hentVenskaber()]).then(function(svar){
+    var folk = ugeoversigt(svar[0] || []);
+    var venskaber = svar[1] || [];
+    var mig = minId();
+    var jeg = null, andre = [];
+    folk.forEach(function(f){ if (f.id === mig) jeg = f; else andre.push(f); });
 
     var ud = "";
-    if (folk.length < 2){
-      ud += '<div class="tom" style="margin-bottom:14px">Du dyster ikke mod nogen endnu. '
-        + 'Tilføj en med deres brugernavn nedenfor.</div>';
-    } else {
-      ud += '<p class="grafnote" style="margin:0 0 10px">Målt på hvor mange dage hver især holdt '
-        + 'sig under sit eget mål. Kalorier kan ikke sammenlignes — procenter kan.</p>';
-    }
-    folk.forEach(function(x, i){
-      ud += '<div class="katraekke' + (i === 0 && folk.length > 1 ? " top" : "") + '">'
-        + '<div class="kattop"><span class="katnavn">' + esc(x.navn || x.brugernavn)
-        + (x.erMig ? ' <em>dig</em>' : "")
-        + (i === 0 && folk.length > 1 ? '<span class="maerke god">fører</span>' : "")
-        + ' <em>' + x.holdt + ' af ' + x.dage + ' dage'
-        + (x.stime > 1 ? ' · ' + x.stime + ' i træk' : "") + '</em></span>'
-        + '<span class="kattal">' + Math.round(x.andel) + ' %</span></div>'
-        + '<div class="katbar"><span style="width:' + x.andel.toFixed(1) + '%"></span></div>'
-        + (x.dage ? '<div class="grafnote" style="margin-top:5px">snit ' + Math.round(x.snit) + ' % af eget mål</div>' : "")
-        + '</div>';
-    });
 
-    /* Indkomne anmodninger */
+    if (!andre.length){
+      ud += '<div class="tom" style="margin-bottom:14px">'
+        + '<b>Du dyster ikke mod nogen endnu.</b><br>'
+        + 'Skriv en vens brugernavn nedenfor. Når anmodningen er accepteret, '
+        + 'kan I følge hinandens uge her.</div>';
+      if (jeg) ud += '<div class="ugerk" style="border-top:1px solid var(--linje)">'
+        + '</div>' + prikRaekke(jeg, mig);
+    } else {
+      var modstander = andre[0];
+
+      /* Ugens stilling — ét tal hver */
+      var foranMig = jeg && jeg.holdt > modstander.holdt;
+      var foranHam = modstander.holdt > (jeg ? jeg.holdt : 0);
+      ud += '<div class="duel">'
+        + '<div class="uge">' + esc(ugenummerTekst()) + '</div>'
+        + '<div class="stilling">'
+        + '<div class="side' + (foranMig ? " foran" : "") + '">'
+        + '<div class="navn">' + esc(jeg ? jeg.navn : "Dig") + '</div>'
+        + '<div class="tal">' + (jeg ? jeg.holdt : 0) + '</div>'
+        + '<div class="enhed">dage holdt</div></div>'
+        + '<div class="mod">mod</div>'
+        + '<div class="side' + (foranHam ? " foran" : "") + '">'
+        + '<div class="navn">' + esc(modstander.navn) + '</div>'
+        + '<div class="tal">' + modstander.holdt + '</div>'
+        + '<div class="enhed">dage holdt</div></div>'
+        + '</div>';
+
+      var mine = jeg ? jeg.holdt : 0;
+      ud += '<div class="dom">'
+        + (mine === modstander.holdt
+            ? "Det står lige."
+            : (mine > modstander.holdt
+                ? "Du fører med " + (mine - modstander.holdt) + "."
+                : esc(modstander.navn) + " fører med " + (modstander.holdt - mine) + "."))
+        + '</div></div>';
+
+      /* Hvor står i lige nu */
+      ud += '<h2 class="sek" style="margin-top:18px">I dag</h2>';
+      [jeg, modstander].forEach(function(f){
+        if (!f) return;
+        var pct = f.idag ? f.idag.pct : 0;
+        var over = pct > 100;
+        ud += '<div class="idagrk">'
+          + '<span class="hvem">' + esc(f.navn) + (f.id === mig ? " (dig)" : "") + '</span>'
+          + '<span class="spor"><span class="' + (over ? "over" : "") + '" style="width:'
+          + Math.min(100, pct) + '%"></span></span>'
+          + '<span class="pct">' + (f.idag ? Math.round(pct) + " %" : "–") + '</span></div>';
+      });
+      ud += '<p class="grafnote" style="margin:2px 2px 0">Procent af hver sit eget daglige mål. '
+        + 'Jeres kroppe har forskellige behov, så kalorier kan ikke sammenlignes — det kan procenter.</p>';
+
+      /* Ugen dag for dag */
+      ud += '<h2 class="sek" style="margin-top:18px">Ugen</h2>';
+      ud += prikRaekke(jeg || { navn:"Dig", id:mig, uge:[] }, mig);
+      ud += prikRaekke(modstander, mig);
+      ud += '<p class="grafnote" style="margin-top:8px">Grøn er en dag under målet, rød er over, '
+        + 'tom er endnu ikke registreret. Ugen begynder forfra hver mandag.</p>';
+
+      /* Stimer, kun når der er noget at prale af */
+      var stimer = [jeg, modstander].filter(function(f){ return f && f.stime >= 2; })
+        .map(function(f){ return esc(f.navn) + " " + f.stime + " dage i træk"; });
+      if (stimer.length) ud += '<p class="stime" style="margin-top:6px">' + stimer.join(" · ") + '</p>';
+    }
+
+    /* Anmodninger */
     var indkomne = venskaber.filter(function(v){ return v.status === "anmodet" && v.anmoder_id !== mig; });
     if (indkomne.length){
       ud += '<h2 class="sek">Anmodninger</h2>';
@@ -2905,20 +3025,22 @@ function tegnHold(){
     }
     var afsendte = venskaber.filter(function(v){ return v.status === "anmodet" && v.anmoder_id === mig; });
     if (afsendte.length){
-      ud += '<p class="grafnote" style="margin-top:12px">' + afsendte.length
-        + ' anmodning' + (afsendte.length > 1 ? "er" : "") + ' afventer svar.</p>';
+      ud += '<p class="grafnote" style="margin-top:12px">Venter på svar på ' + afsendte.length
+        + ' anmodning' + (afsendte.length > 1 ? "er" : "") + '.</p>';
     }
 
-    /* Tilføj en */
-    ud += '<h2 class="sek">Tilføj en at dyste mod</h2>'
-      + '<div style="display:flex;gap:8px">'
-      + '<input id="ven-soeg" style="flex:1" autocapitalize="off" spellcheck="false" placeholder="brugernavn">'
-      + '<button class="knap sek" id="ven-tilfoej" style="width:auto;flex:none;padding:11px 16px">Tilføj</button>'
-      + '</div><div id="ven-besked"></div>';
+    if (!andre.length || indkomne.length === 0){
+      ud += '<h2 class="sek">Tilføj en at dyste mod</h2>'
+        + '<div style="display:flex;gap:8px">'
+        + '<input id="ven-soeg" style="flex:1" autocapitalize="off" spellcheck="false" placeholder="brugernavn">'
+        + '<button class="knap sek" id="ven-tilfoej" style="width:auto;flex:none;padding:11px 16px">Tilføj</button>'
+        + '</div><div id="ven-besked"></div>'
+        + '<p class="grafnote" style="margin-top:8px">Dit eget brugernavn er <b>'
+        + esc(S.bruger.brugernavn) + '</b>.</p>';
+    }
 
     boks.innerHTML = ud;
 
-    /* Navne på dem der har anmodet hentes enkeltvis */
     indkomne.forEach(function(v){
       var anden = v.lav_id === mig ? v.hoej_id : v.lav_id;
       sbRest("profiler?select=brugernavn,visningsnavn&id=eq." + anden).then(function(r){
@@ -2941,19 +3063,22 @@ function tegnHold(){
         fjernVen(d[0], d[1]).then(tegnHold).catch(function(e){ alert(e.message); });
       };
     });
-    $("ven-tilfoej").onclick = function(){
+    var vt = $("ven-tilfoej");
+    if (vt) vt.onclick = function(){
       var navn = ($("ven-soeg").value || "").toLowerCase().trim();
       var b = $("ven-besked");
       function sig(t, fejl){ b.innerHTML = '<div class="note' + (fejl ? " fejl" : "") + '">' + esc(t) + '</div>'; }
       if (navn.length < 3){ sig("Skriv mindst tre tegn.", true); return; }
       if (navn === S.bruger.brugernavn){ sig("Det er dig selv.", true); return; }
+      vt.disabled = true;
       findBruger(navn).then(function(f){
         if (!f) throw new Error("Der findes ingen med brugernavnet " + navn + ".");
         return anmodVen(f.id).then(function(){
           sig("Anmodning sendt til " + navn + ". Dysten begynder, når den accepteres.");
           $("ven-soeg").value = "";
         });
-      }).catch(function(e){ sig(e.message, true); });
+      }).catch(function(e){ sig(e.message, true); })
+        .then(function(){ vt.disabled = false; });
     };
 
     aabnRealtid(function(){ if (S.skaerm === "trends") tegnHold(); });
