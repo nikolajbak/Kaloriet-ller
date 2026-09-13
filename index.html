@@ -326,7 +326,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "30.2";
+var APP_VERSION = "31.0";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -345,7 +345,8 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand",
     K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret",
     K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail",
-    K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb";
+    K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb",
+    K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_MODEL2 = "kd:gemini-model";
 var reserve = {};
 
 function laes(k){
@@ -1299,19 +1300,80 @@ function udtraekJson(tekst){
   return null;
 }
 
+/* Gemini bruger et andet format end Claude. Kaldet bygges samme sted som før,
+   og oversættes her — så alle instruktioner og hele resten af appen er uændret.
+   Gemini kan desuden tvinges til gyldig JSON på API-niveau, hvilket fjerner den
+   hyppigste fejl: et svar der ikke kunne læses. */
+function udbyder(){ return laes(K_UDBYDER) === "gemini" ? "gemini" : "claude"; }
+
+function geminiKald(krop){
+  var noegle = laes(K_GNOEGLE) || "";
+  if (!noegle) return Promise.reject(new Error("Der mangler en Gemini-nøgle under Indstillinger."));
+  var model = laes(K_MODEL2) || "gemini-flash-latest";
+
+  var dele = [];
+  (krop.messages[0].content instanceof Array ? krop.messages[0].content
+    : [{ type:"text", text: krop.messages[0].content }]).forEach(function(b){
+    if (b.type === "image"){
+      dele.push({ inline_data: { mime_type: b.source.media_type, data: b.source.data } });
+    } else if (b.type === "text"){
+      dele.push({ text: b.text });
+    }
+  });
+
+  return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
+      + encodeURIComponent(model) + ":generateContent", {
+    method: "POST",
+    headers: { "Content-Type":"application/json", "x-goog-api-key": noegle },
+    body: JSON.stringify({
+      contents: [{ parts: dele }],
+      generationConfig: {
+        maxOutputTokens: Number(krop.max_tokens) || 1200,
+        responseMimeType: "application/json"
+      }
+    })
+  }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(d){
+      if (!r.ok){
+        var m = (d.error && d.error.message) || "";
+        if (r.status === 400 && /API key/i.test(m)) throw new Error("Gemini-nøglen blev afvist. Ret den under Indstillinger.");
+        if (r.status === 429) throw new Error("Gemini er ramt af sin gratisgrænse. Vent et minut.");
+        throw new Error(m || ("Gemini svarede " + r.status));
+      }
+      var k = d.candidates && d.candidates[0];
+      var tekst = k && k.content && k.content.parts
+        ? k.content.parts.map(function(x){ return x.text || ""; }).join("") : "";
+      /* Samme formatering som Claude, så resten af appen ikke mærker forskel */
+      return { content: [{ type:"text", text: tekst }],
+               stop_reason: k && k.finishReason === "MAX_TOKENS" ? "max_tokens" : "end_turn" };
+    });
+  });
+}
+
 function kald(krop, andetForsoeg){
   tael();
-  return fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": aktivNoegle || laes(K_NOEGLE) || "",
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
-    body: JSON.stringify(krop)
-  }).then(function(r){
-    return r.json().catch(function(){ return {}; }).then(function(data){
+  var svarLoefte = udbyder() === "gemini"
+    ? geminiKald(krop).then(function(d){ return { ok:true, status:200, data:d }; })
+        .catch(function(e){ return { ok:false, fejl:e }; })
+    : fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": aktivNoegle || laes(K_NOEGLE) || "",
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify(krop)
+      }).then(function(r){
+        return r.json().catch(function(){ return {}; })
+          .then(function(d){ return { ok:r.ok, status:r.status, data:d }; });
+      });
+
+  return svarLoefte.then(function(svar){
+    if (svar.fejl) throw svar.fejl;
+    var r = { ok: svar.ok, status: svar.status };
+    var data = svar.data;
+    return Promise.resolve().then(function(){
       if (!r.ok){
         var m = (data.error && data.error.message) || "";
         if (r.status === 401 || r.status === 403) throw new Error("Nøglen blev afvist. Ret den under Indstillinger.");
@@ -3673,7 +3735,23 @@ function tegnIndstillinger(){
     + '<input id="s-mvaegt" type="text" inputmode="decimal" value="' + (S.profil.maalvaegt || "") + '" placeholder="fx 78,0">'
     + '</div></details>'
     + '<details class="afsnit"><summary>Nøgler og model</summary><div>'
-    + '<span class="lbl">Model</span><select id="s-model">'
+    + '<span class="lbl">Udbyder</span><select id="s-udbyder">'
+    + [["claude","Claude — betalt, bedst til dansk"],
+       ["gemini","Gemini — gratis niveau"]].map(function(a){
+        return '<option value="' + a[0] + '"' + (udbyder() === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
+      }).join("") + '</select>'
+    + (udbyder() === "gemini"
+        ? '<span class="lbl">Gemini-nøgle fra aistudio.google.com</span>'
+          + '<input id="s-gnoegle" type="password" autocomplete="off" autocapitalize="off" '
+          + 'spellcheck="false" placeholder="' + (laes(K_GNOEGLE) ? "Uændret" : "AIza…") + '">'
+          + '<span class="lbl">Gemini-model</span>'
+          + '<input id="s-gmodel" autocapitalize="off" spellcheck="false" '
+          + 'value="' + esc(laes(K_MODEL2) || "gemini-flash-latest") + '">'
+          + '<div class="note">På det gratis niveau kan dine billeder og din dagbog indgå i '
+          + 'Googles produktforbedring. Det gælder ikke hos Claude. Til afprøvning er det '
+          + 'sjældent et problem — til daglig brug er det værd at vide.</div>'
+        : '')
+    + '<span class="lbl">Claude-model</span><select id="s-model">'
     + '<option value="claude-sonnet-5"' + (S.model === "claude-sonnet-5" ? " selected" : "") + '>Sonnet 5 — bedst til mad</option>'
     + '<option value="claude-haiku-4-5-20251001"' + (S.model === "claude-haiku-4-5-20251001" ? " selected" : "") + '>Haiku 4.5 — billigst</option>'
     + '</select>'
@@ -3762,6 +3840,9 @@ function tegnIndstillinger(){
     }
     var us = $("s-unsplash").value.trim();
     if (us) skriv(K_UNSPLASH, us);
+    var uv = $("s-udbyder"); if (uv) skriv(K_UDBYDER, uv.value);
+    var gn = $("s-gnoegle"); if (gn && gn.value.trim()) skriv(K_GNOEGLE, gn.value.trim());
+    var gm = $("s-gmodel"); if (gm && gm.value.trim()) skriv(K_MODEL2, gm.value.trim());
     var n = $("s-noegle").value.trim();
     if (n){
       aktivNoegle = n;
@@ -3778,6 +3859,8 @@ function tegnIndstillinger(){
     var el = $(id);
     if (el) el.onchange = function(){ gemFelter(); };
   });
+  var uds = $("s-udbyder");
+  if (uds) uds.onchange = function(){ gemFelter(); tegnIndstillinger(); };
 
   $("s-gem").onclick = function(){
     gemFelter();
