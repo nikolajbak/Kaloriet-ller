@@ -344,7 +344,7 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret",
     K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail",
     K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb",
-    K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_MODEL2 = "kd:gemini-model";
+    K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_GAUTO = "kd:gemini-auto";
 var reserve = {};
 
 function laes(k){
@@ -1304,10 +1304,72 @@ function udtraekJson(tekst){
    hyppigste fejl: et svar der ikke kunne læses. */
 function udbyder(){ return laes(K_UDBYDER) === "gemini" ? "gemini" : "claude"; }
 
+function gFejl(status, m){
+  if (status === 403) return new Error("Gemini afviser n\u00f8glen. Opret en ny p\u00e5 aistudio.google.com og indl\u00e6s den under Indstillinger.");
+  if (status === 429) return new Error("Gemini er ramt af sin gratisgr\u00e6nse. Vent et minut.");
+  if (status === 503 || status === 500) return new Error("Gemini er overbelastet lige nu. Pr\u00f8v igen om lidt, eller skift til Claude under Indstillinger.");
+  if (status === 400 && /API key/i.test(m)) return new Error("Gemini-n\u00f8glen blev afvist. Ret den under Indstillinger.");
+  return new Error(m || ("Gemini svarede " + status));
+}
+
+/* Modellen v\u00e6lges automatisk. Aliasser som -latest og preview-modeller fravalgt:
+   de ruter til de mest belastede puljer og giver hyppige 503-fejl. Nyeste
+   flash-model vinder, fordi den er hurtig nok til billedanalyse og har den
+   st\u00f8rste kvote p\u00e5 det gratis niveau. */
+function gRang(navn){
+  var n = String(navn).toLowerCase();
+  if (/embedding|aqa|gemma|learnlm|tts|audio|live|image|imagen|veo|vision/.test(n)) return -1;
+  if (/latest|preview|exp|thinking/.test(n)) return -1;
+  var m = n.match(/^gemini-(\d+(?:\.\d+)?)-/);
+  if (!m) return -1;
+  var v = parseFloat(m[1]) * 10;
+  if (/flash-lite/.test(n)) return v + 4;
+  if (/flash/.test(n)) return v + 6;
+  if (/pro/.test(n)) return v + 2;
+  return -1;
+}
+
+function gHentListe(){
+  var noegle = laes(K_GNOEGLE) || "";
+  return fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {
+    headers: { "x-goog-api-key": noegle }
+  }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(d){
+      if (!r.ok) throw gFejl(r.status, (d.error && d.error.message) || "");
+      var liste = (d.models || []).filter(function(m){
+        return (m.supportedGenerationMethods || []).indexOf("generateContent") >= 0;
+      }).map(function(m){
+        return String(m.name || "").replace(/^models\//, "");
+      }).filter(function(n){ return gRang(n) > 0; });
+      liste.sort(function(a, b){ return gRang(b) - gRang(a); });
+      liste = liste.slice(0, 4);
+      if (!liste.length) throw new Error("Din Gemini-n\u00f8gle har ikke adgang til en brugbar model.");
+      skriv(K_GAUTO, JSON.stringify({ liste: liste, tid: Date.now() }));
+      return liste;
+    });
+  });
+}
+
+function gValgt(){
+  try {
+    var c = JSON.parse(laes(K_GAUTO) || "null");
+    return c && c.liste && c.liste.length ? c.liste[0] : "";
+  } catch(e){ return ""; }
+}
+
+function gListe(){
+  var c = null;
+  try { c = JSON.parse(laes(K_GAUTO) || "null"); } catch(e){}
+  if (c && c.liste && c.liste.length && Date.now() - (c.tid || 0) < 6048e5)
+    return Promise.resolve(c.liste);
+  return gHentListe();
+}
+
+function gVent(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+
 function geminiKald(krop){
   var noegle = laes(K_GNOEGLE) || "";
-  if (!noegle) return Promise.reject(new Error("Der mangler en Gemini-nøgle under Indstillinger."));
-  var model = laes(K_MODEL2) || "gemini-flash-latest";
+  if (!noegle) return Promise.reject(new Error("Der mangler en Gemini-n\u00f8gle under Indstillinger."));
 
   var dele = [];
   (krop.messages[0].content instanceof Array ? krop.messages[0].content
@@ -1319,33 +1381,54 @@ function geminiKald(krop){
     }
   });
 
-  return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
-      + encodeURIComponent(model) + ":generateContent", {
-    method: "POST",
-    headers: { "Content-Type":"application/json", "x-goog-api-key": noegle },
-    body: JSON.stringify({
-      contents: [{ parts: dele }],
-      generationConfig: {
-        maxOutputTokens: Number(krop.max_tokens) || 1200,
-        responseMimeType: "application/json"
-      }
-    })
-  }).then(function(r){
-    return r.json().catch(function(){ return {}; }).then(function(d){
-      if (!r.ok){
-        var m = (d.error && d.error.message) || "";
-        if (r.status === 400 && /API key/i.test(m)) throw new Error("Gemini-nøglen blev afvist. Ret den under Indstillinger.");
-        if (r.status === 429) throw new Error("Gemini er ramt af sin gratisgrænse. Vent et minut.");
-        throw new Error(m || ("Gemini svarede " + r.status));
-      }
-      var k = d.candidates && d.candidates[0];
-      var tekst = k && k.content && k.content.parts
-        ? k.content.parts.map(function(x){ return x.text || ""; }).join("") : "";
-      /* Samme formatering som Claude, så resten af appen ikke mærker forskel */
-      return { content: [{ type:"text", text: tekst }],
-               stop_reason: k && k.finishReason === "MAX_TOKENS" ? "max_tokens" : "end_turn" };
-    });
+  var krop2 = JSON.stringify({
+    contents: [{ parts: dele }],
+    generationConfig: {
+      maxOutputTokens: Number(krop.max_tokens) || 1200,
+      responseMimeType: "application/json"
+    }
   });
+
+  function etKald(model){
+    return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
+        + encodeURIComponent(model) + ":generateContent", {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "x-goog-api-key": noegle },
+      body: krop2
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){
+        if (!r.ok){
+          var e = gFejl(r.status, (d.error && d.error.message) || "");
+          e.status = r.status;
+          throw e;
+        }
+        var k = d.candidates && d.candidates[0];
+        var tekst = k && k.content && k.content.parts
+          ? k.content.parts.map(function(x){ return x.text || ""; }).join("") : "";
+        /* Samme formatering som Claude, s\u00e5 resten af appen ikke m\u00e6rker forskel */
+        return { content: [{ type:"text", text: tekst }],
+                 stop_reason: k && k.finishReason === "MAX_TOKENS" ? "max_tokens" : "end_turn" };
+      });
+    });
+  }
+
+  /* Overbelastning er n\u00e6sten altid forbig\u00e5ende, s\u00e5 der ventes to gange f\u00f8r
+     appen giver op. Hj\u00e6lper det ikke, pr\u00f8ves den n\u00e6ste model p\u00e5 listen:
+     kvoter og kapacitet g\u00f8res op per model, ikke per n\u00f8gle. */
+  function proev(liste, i, forsoeg){
+    return etKald(liste[i]).catch(function(e){
+      var s = e.status || 0;
+      var mellem = (s === 429 || s === 500 || s === 503);
+      if (mellem && forsoeg < 2)
+        return gVent(forsoeg === 0 ? 1500 : 4000).then(function(){ return proev(liste, i, forsoeg + 1); });
+      if ((mellem || s === 404) && i + 1 < liste.length)
+        return proev(liste, i + 1, 0);
+      if (s === 404) skriv(K_GAUTO, "");
+      throw e;
+    });
+  }
+
+  return gListe().then(function(l){ return proev(l, 0, 0); });
 }
 
 function kald(krop, andetForsoeg){
@@ -3742,9 +3825,8 @@ function tegnIndstillinger(){
         ? '<span class="lbl">Gemini-nøgle fra aistudio.google.com</span>'
           + '<input id="s-gnoegle" type="password" autocomplete="off" autocapitalize="off" '
           + 'spellcheck="false" placeholder="' + (laes(K_GNOEGLE) ? "Uændret" : "AIza…") + '">'
-          + '<span class="lbl">Gemini-model</span>'
-          + '<input id="s-gmodel" autocapitalize="off" spellcheck="false" '
-          + 'value="' + esc(laes(K_MODEL2) || "gemini-flash-latest") + '">'
+          + '<div class="note">Modellen vælges automatisk'
+          + (gValgt() ? ' — bruger nu ' + esc(gValgt()) : '') + '.</div>'
           + '<div class="note">På det gratis niveau kan dine billeder og din dagbog indgå i '
           + 'Googles produktforbedring. Det gælder ikke hos Claude. Til afprøvning er det '
           + 'sjældent et problem — til daglig brug er det værd at vide.</div>'
@@ -3840,7 +3922,6 @@ function tegnIndstillinger(){
     if (us) skriv(K_UNSPLASH, us);
     var uv = $("s-udbyder"); if (uv) skriv(K_UDBYDER, uv.value);
     var gn = $("s-gnoegle"); if (gn && gn.value.trim()) skriv(K_GNOEGLE, gn.value.trim());
-    var gm = $("s-gmodel"); if (gm && gm.value.trim()) skriv(K_MODEL2, gm.value.trim());
     var n = $("s-noegle").value.trim();
     if (n){
       aktivNoegle = n;
