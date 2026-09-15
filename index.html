@@ -1965,14 +1965,20 @@ function hentTilskud(a){
     + 'har sjældent brug for det. B12 er kun relevant ved helt eller næsten plantebaseret kost. '
     + 'Calcium og D-vitamin hænger sammen og nævnes som ét råd. Højst tre tilskud i alt, '
     + 'og sæt det vigtigste først.\n\n'
+    + 'Du SKAL altid udfylde feltet "tilskud" med mindst ét råd. Peger kosten ikke på noget, '
+    + 'så skriv det som ét råd med navnet "Ingen tilskud ud over D-vitamin" eller "Ingen tilskud '
+    + 'nødvendige" og forklar hvorfor — et velbegrundet nej er også et svar. Er vi i september, '
+    + 'må du gerne nævne, at D-vitamin bliver relevant fra oktober. Feltet må aldrig være tomt '
+    + 'eller udeladt.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
     + '{"sikkerhed": "loest indtryk"/"nogenlunde"/"rimeligt billede", '
     + '"opsummering": "hvad mønstret viser, max 25 ord", '
     + '"moenstre": [{"emne": "fx fisk og omega-3", "set": "hvad dagbogen viser, max 14 ord", '
-    + '"mad": "hvad der kan spises i stedet, max 16 ord", '
-    + '"tilskud": "tilskudsråd hvis relevant, ellers tom tekst, max 16 ord"}]}';
+    + '"mad": "hvad der kan spises i stedet, max 16 ord"}], '
+    + '"tilskud": [{"navn": "fx D-vitamin", "dosis": "fx 10 mikrogram dagligt, ellers tom tekst", '
+    + '"hvorfor": "kort begrundelse, max 18 ord"}]}';
 
-  return kald({ model:S.model, max_tokens:1000, messages:[{ role:"user", content:p }] });
+  return kald({ model:S.model, max_tokens:1200, messages:[{ role:"user", content:p }] });
 }
 
 /* Forslag til lettere alternativer. Tonen er kaek, men gaar altid paa maden
@@ -2824,9 +2830,11 @@ var TILSKUD_MINDST = 7;
 function tilskudGemt(){
   try { return JSON.parse(laes(K_TILSKUD) || "null"); } catch(e){ return null; }
 }
+var TILSKUD_UDG = 2;
 function tilskudForaeldet(a){
   var g = tilskudGemt();
   if (!g || !g.data) return true;
+  if (g.udg !== TILSKUD_UDG) return true;
   if (g.vindue !== S.vindue) return true;
   if (Date.now() - (Number(g.tid) || 0) > 7 * 864e5) return true;
   return a.antalDage - (Number(g.dage) || 0) >= TILSKUD_MINDST;
@@ -2835,7 +2843,7 @@ function tegnTilskud(a){
   var boks = $("tilskudsboks"); if (!boks) return;
   if (S.tilskudStatus === "tom"){
     var gemt = tilskudGemt();
-    if (gemt && gemt.data){ S.tilskud = gemt.data; S.tilskudStatus = "klar"; }
+    if (gemt && gemt.data && gemt.udg === TILSKUD_UDG){ S.tilskud = gemt.data; S.tilskudStatus = "klar"; }
     if (a.antalDage >= TILSKUD_MINDST && tilskudForaeldet(a) && navigator.onLine){
       setTimeout(function(){ if (S.tilskudStatus !== "henter") startTilskud(a); }, 0);
     }
@@ -2860,9 +2868,17 @@ function tegnTilskud(a){
       ud += '<div class="kort"><div class="fra">' + esc(m.emne) + '</div>'
         + (m.set ? '<div class="kom" style="font-style:normal">' + esc(m.set) + '</div>' : "")
         + (m.mad ? '<div class="til">→ <b>' + esc(m.mad) + '</b></div>' : "")
-        + (m.tilskud ? '<div class="kom">Tilskud: ' + esc(m.tilskud) + '</div>' : "")
         + '</div>';
     });
+    if ((t.tilskud || []).length){
+      ud += '<h3 class="sek" style="font-size:16px;margin:18px 0 8px">Vitaminer og tilskud</h3>';
+      t.tilskud.slice(0,3).forEach(function(v){
+        ud += '<div class="kort"><div class="fra">' + esc(v.navn || "") + '</div>'
+          + (v.dosis ? '<div class="til">→ <b>' + esc(v.dosis) + '</b></div>' : "")
+          + (v.hvorfor ? '<div class="kom" style="font-style:normal">' + esc(v.hvorfor) + '</div>' : "")
+          + '</div>';
+      });
+    }
     ud += '<button class="knap sek" id="b-tilskud" style="margin-top:6px">Vurdér igen</button>'
       + '<p class="fodnote">Dagbogen måler kalorier og kategorier, ikke vitaminer. Det her er mønstre '
       + 'i det, du har registreret — ikke en konstatering af mangel. Kun en blodprøve hos lægen '
@@ -2881,7 +2897,7 @@ function startTilskud(a){
   S.tilskudStatus = "henter"; tegnTilskud(a);
   hentTilskud(a).then(function(r){
     S.tilskud = r; S.tilskudStatus = "klar";
-    skriv(K_TILSKUD, JSON.stringify({ tid:Date.now(), dage:a.antalDage, vindue:S.vindue, data:r }));
+    skriv(K_TILSKUD, JSON.stringify({ udg:TILSKUD_UDG, tid:Date.now(), dage:a.antalDage, vindue:S.vindue, data:r }));
     tegnTilskud(a);
   }).catch(function(err){
     S.tilskudStatus = "fejl";
