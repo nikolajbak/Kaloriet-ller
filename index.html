@@ -78,6 +78,7 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
 .tom{border:1px dashed var(--linje);border-radius:12px;padding:22px 18px;
   color:var(--daempet);font-size:14px;}
 .fodnote{font-size:12px;color:var(--daempet);margin:22px 2px 0;line-height:1.5;}
+.gruppelabel{font-size:12px;color:var(--daempet);margin:22px 2px 4px;text-transform:uppercase;letter-spacing:.03em;}
 .bund{position:fixed;left:0;right:0;bottom:0;z-index:10;
   padding:14px 18px calc(18px + env(safe-area-inset-bottom));
   background:linear-gradient(to top,var(--papir) 66%,rgba(232,233,227,0));}
@@ -2813,8 +2814,11 @@ function tegnTrends(){
   }
 
   /* forslag */
-  h += '<h2 class="sek">Lettere alternativer</h2><div id="forslag"></div>'
-    + '<h2 class="sek">Kost og tilskud</h2><div id="tilskudsboks"></div>'
+  h += '<p class="gruppelabel">AI-vurdering af kosten</p>'
+    + '<details class="afsnit"><summary id="sum-forslag">Lettere alternativer</summary>'
+    + '<div id="forslag"></div></details>'
+    + '<details class="afsnit"><summary id="sum-tilskud">Kost og tilskud</summary>'
+    + '<div id="tilskudsboks"></div></details>'
     + '<h2 class="sek">Dysten</h2><div id="holdboks"></div>'
     + '</div>';
   $("rod").innerHTML = h;
@@ -2841,6 +2845,13 @@ function tilskudForaeldet(a){
 }
 function tegnTilskud(a){
   var boks = $("tilskudsboks"); if (!boks) return;
+  var mrkKort = { "loest indtryk":"Løst indtryk", "nogenlunde":"Nogenlunde grundlag",
+                  "rimeligt billede":"Rimeligt billede" };
+  var sum = $("sum-tilskud");
+  if (sum) sum.textContent = "Kost og tilskud" + (
+    S.tilskudStatus === "henter" ? " · henter" :
+    S.tilskudStatus === "fejl" ? " · kunne ikke hentes" :
+    S.tilskudStatus === "klar" && S.tilskud ? " · " + (mrkKort[S.tilskud.sikkerhed] || "Løst indtryk") : "");
   if (S.tilskudStatus === "tom"){
     var gemt = tilskudGemt();
     if (gemt && gemt.data && gemt.udg === TILSKUD_UDG){ S.tilskud = gemt.data; S.tilskudStatus = "klar"; }
@@ -3296,6 +3307,11 @@ function forslagStadigGyldigt(data, a){
 }
 function tegnForslag(a){
   var boks = $("forslag"); if (!boks) return;
+  var sum = $("sum-forslag");
+  if (sum) sum.textContent = "Lettere alternativer" + (
+    S.forslagStatus === "henter" ? " · henter" :
+    S.forslagStatus === "fejl" ? " · kunne ikke hentes" :
+    S.forslagStatus === "klar" && S.forslag ? " · " + (S.forslag.forslag || []).length + " forslag" : "");
   if (S.forslagStatus === "tom"){
     try {
       var gemt = JSON.parse(laes(K_FORSLAG) || "null");
