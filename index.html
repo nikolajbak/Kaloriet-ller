@@ -344,7 +344,8 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret",
     K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail",
     K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb",
-    K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_GAUTO = "kd:gemini-auto";
+    K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_GAUTO = "kd:gemini-auto",
+    K_SYNKTID = "kd:synk-tid", K_SYNKKOE = "kd:synk-koe", K_SYNKSTAND = "kd:synk-stand";
 var reserve = {};
 
 function laes(k){
@@ -558,7 +559,12 @@ function frigoerPlads(){
   }
   return false;
 }
+/* Alt der aendrer en dag gaar gennem gemDag, saa skyen faar besked eet sted */
 function gemDag(noegle, poster){
+  gemDagLokalt(noegle, poster);
+  synkMaerk(noegle);
+}
+function gemDagLokalt(noegle, poster){
   if (!poster || !poster.length){ fjern(P_DAG + noegle); return; }
   var svar = skriv(P_DAG + noegle, JSON.stringify(poster)), n = 0;
   while (svar === "fuld" && n++ < 60 && frigoerPlads()) svar = skriv(P_DAG + noegle, JSON.stringify(poster));
@@ -3839,7 +3845,7 @@ function tegnIndstillinger(){
     + '<input id="s-noegle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Uændret">'
     + '<span class="lbl">Unsplash-nøgle til billeder (valgfri — der ligger en i appen)</span>'
     + '<input id="s-unsplash" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Uændret">'
-    + '<div class="note">Dagbogen ligger kun i denne browser. Nøglen bliver liggende ved opdateringer — du skal kun taste den igen, hvis appen flytter til en ny adresse.</div>'
+    + '<div class="note">' + esc(synkTekst()) + ' Nøglen bliver liggende på telefonen ved opdateringer — du skal kun taste den igen, hvis appen flytter til en ny adresse.</div>'
     + '<div class="tjek"><input type="checkbox" id="s-medn"><label for="s-medn">Tag nøglen med i sikkerhedskopien, så en ny telefon er klar med det samme</label></div>'
 
     + '</div></details>'
@@ -4092,7 +4098,8 @@ function sbRest(sti, o){
     return fetch(SB_URL + "/rest/v1/" + sti, o);
   }).then(function(r){
     if (!r.ok) return r.text().then(function(t){ throw new Error("Serveren svarede " + r.status + ": " + t.slice(0,110)); });
-    return r.status === 204 ? null : r.json();
+    /* Upsert med return=minimal svarer 201 uden krop — det er ikke en fejl */
+    return r.status === 204 ? null : r.json().catch(function(){ return null; });
   });
 }
 
@@ -4616,6 +4623,123 @@ function visForbindelse(){
 window.addEventListener("online", visForbindelse);
 window.addEventListener("offline", visForbindelse);
 
+/* ================= Dagbogen i skyen =================
+   Skyen er den rigtige udgave af dagbogen. Telefonens lager er en kopi, saa
+   appen ogsaa virker uden net: aendringer lavet offline staar i koe og sendes,
+   naar forbindelsen er tilbage. Rydder Safari sit lager, eller skiftes telefon,
+   hentes alt ned igen ved naeste login. Ved uenighed vinder den nyeste
+   aendring for den enkelte dag — hele dagen, ikke det enkelte maaltid. */
+var synkTimer = null, synkIGang = false;
+
+function synkKoe(){ try { return JSON.parse(laes(K_SYNKKOE) || "{}") || {}; } catch(e){ return {}; } }
+function synkMaerk(dato){
+  var k = synkKoe(); k[dato] = Date.now(); skriv(K_SYNKKOE, JSON.stringify(k));
+  if (synkTimer) clearTimeout(synkTimer);
+  synkTimer = setTimeout(function(){ synkSend(); }, 1500);
+}
+function synkVenter(){ return Object.keys(synkKoe()).length; }
+function synkTekst(){
+  if (!session()) return "Log ind for at gemme dagbogen i skyen.";
+  var v = synkVenter();
+  var st = String(laes(K_SYNKSTAND) || ""), t = Number(st.split(":")[1]) || 0;
+  var naar = t ? new Date(t).toLocaleDateString("da-DK",{day:"numeric",month:"short"})
+                 + " kl. " + new Date(t).toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"}) : "";
+  if (v) return "Gemt her, " + v + (v === 1 ? " dag" : " dage") + " venter paa at komme i skyen.";
+  if (st.indexOf("fejl") === 0) return "Skyen svarede ikke" + (naar ? " " + naar : "") + ". Appen proever igen.";
+  if (t) return "Gemt i skyen " + naar + ".";
+  return "Endnu ikke gemt i skyen.";
+}
+
+function indstPakke(){
+  return { maal:S.maal, navn:S.navn, profil:S.profil, vaegte:hentVaegte() };
+}
+
+/* Alle koeede dage sendes i eet kald. Lykkes det ikke, bliver de staaende i
+   koeen — intet gaar tabt, og naeste forsoeg tager dem med. */
+function synkSend(){
+  if (synkIGang || !session() || !navigator.onLine) return Promise.resolve(false);
+  var k = synkKoe(), datoer = Object.keys(k).filter(function(d){ return d !== "#indst"; });
+  var indst = !!k["#indst"];
+  if (!datoer.length && !indst) return Promise.resolve(false);
+  synkIGang = true;
+  var id = minId();
+  var arbejde = [];
+  if (datoer.length) arbejde.push(sbRest("dagbog?on_conflict=bruger_id,dato", {
+    method: "POST",
+    headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(datoer.map(function(d){
+      return { bruger_id: id, dato: d, poster: hentDag(d) };
+    }))
+  }));
+  if (indst) arbejde.push(sbRest("dagbog_indstillinger?on_conflict=bruger_id", {
+    method: "POST",
+    headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{ bruger_id: id, data: indstPakke() }])
+  }));
+  return Promise.all(arbejde).then(function(){
+    var nu = synkKoe();
+    datoer.forEach(function(d){ if (nu[d] <= k[d]) delete nu[d]; });
+    if (indst && nu["#indst"] <= k["#indst"]) delete nu["#indst"];
+    skriv(K_SYNKKOE, JSON.stringify(nu));
+    skriv(K_SYNKSTAND, "ok:" + Date.now());
+    return true;
+  }).catch(function(){
+    skriv(K_SYNKSTAND, "fejl:" + Date.now());
+    return false;
+  }).then(function(r){ synkIGang = false; return r; });
+}
+
+/* Henter kun det, der er aendret siden sidst. Dage der ligger i koeen springes
+   over: der er en lokal aendring, som endnu ikke er naaet frem. */
+function synkHent(){
+  if (!session() || !navigator.onLine) return Promise.resolve(false);
+  var sidst = laes(K_SYNKTID) || "1970-01-01T00:00:00Z";
+  var id = minId();
+  return sbRest("dagbog?select=dato,poster,aendret&aendret=gt." + encodeURIComponent(sidst)
+                + "&order=aendret.asc").then(function(r){
+    var koe = synkKoe(), rort = false, nyeste = sidst;
+    (r || []).forEach(function(x){
+      if (x.aendret > nyeste) nyeste = x.aendret;
+      if (koe[x.dato]) return;
+      gemDagLokalt(x.dato, (x.poster || []).map(normaliser));
+      rort = true;
+    });
+    if (nyeste !== sidst) skriv(K_SYNKTID, nyeste);
+    return sbRest("dagbog_indstillinger?select=data&bruger_id=eq." + encodeURIComponent(id))
+      .then(function(p){
+        var d = p && p[0] && p[0].data;
+        if (d && !koe["#indst"]){
+          if (d.vaegte) skriv(K_VAEGT, JSON.stringify(d.vaegte));
+          if (d.profil){ S.profil = d.profil; skriv(K_PROFIL, JSON.stringify(d.profil)); }
+          if (d.maal){ S.maal = d.maal; skriv(K_MAAL, String(d.maal)); }
+          if (d.navn){ S.navn = d.navn; skriv(K_BRUGER, d.navn); }
+          rort = true;
+        }
+        return rort;
+      }).catch(function(){ return rort; });
+  }).catch(function(){ return false; });
+}
+
+/* Foerste gang paa en telefon der allerede har data, skal alt op i skyen.
+   Er telefonen tom — ny enhed eller ryddet lager — henter den bare ned. */
+function synkStart(){
+  if (!session()) return;
+  if (!laes(K_SYNKTID)){
+    dageMedData().forEach(function(d){ synkMaerk(d); });
+    synkMaerk("#indst");
+  }
+  synkHent().then(function(rort){
+    if (rort) tegn();
+    return synkSend();
+  });
+}
+
+window.addEventListener("online", function(){ synkSend(); });
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState !== "visible" || !session()) return;
+  synkHent().then(function(rort){ if (rort) tegn(); return synkSend(); });
+});
+
 migrer();
 tagSnap("dagligt", false);
 sendTilSky(false);
@@ -4624,6 +4748,7 @@ if (!harLaas()) aktivNoegle = laes(K_NOEGLE);
 tegn();
 haandterGenvej();
 genkendBruger();
+synkStart();
 (function(){ var f = fejringsdag(); if (f) setTimeout(function(){ visFejring(f); }, 420); })();
 tjekOpdatering(false);
 </script>
