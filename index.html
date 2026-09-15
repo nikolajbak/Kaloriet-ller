@@ -1959,6 +1959,12 @@ function hentTilskud(a){
     + 'aldrig høje doser. D-vitamin i vinterhalvåret gælder alle voksne uanset hvad der står '
     + 'i dagbogen, så den må gerne med, når vi er i oktober til april. Anbefal ikke tilskud '
     + 'på noget, dagbogen ikke kan sige noget om.\n\n'
+    + 'Nævner du et tilskud, så skriv den konkrete daglige dosis, hvis der findes en officiel '
+    + 'dansk anbefaling for netop denne person — ellers ingen dosis. Foreslå aldrig jerntilskud '
+    + 'uden blodprøve: for meget jern er skadeligt, og mænd og kvinder efter overgangsalderen '
+    + 'har sjældent brug for det. B12 er kun relevant ved helt eller næsten plantebaseret kost. '
+    + 'Calcium og D-vitamin hænger sammen og nævnes som ét råd. Højst tre tilskud i alt, '
+    + 'og sæt det vigtigste først.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
     + '{"sikkerhed": "loest indtryk"/"nogenlunde"/"rimeligt billede", '
     + '"opsummering": "hvad mønstret viser, max 25 ord", '
@@ -2811,17 +2817,28 @@ function tegnTrends(){
   tegnTilskud(a);
   tegnHold();
 }
-function tilskudSignatur(a){
-  return S.vindue + ":" + a.antalDage + ":" + a.poster.length + ":"
-    + a.kategorier.map(function(k){ return k.navn + Math.round(k.kcal / 100); }).join("|");
+/* En kostvurdering aendrer sig ikke af et enkelt maaltid. Den fornyer sig selv
+   efter en uge, eller naar grundlaget er vokset med en uges dage. Uden den
+   braemse ville hver ny frokost koste et API-kald. */
+var TILSKUD_MINDST = 7;
+function tilskudGemt(){
+  try { return JSON.parse(laes(K_TILSKUD) || "null"); } catch(e){ return null; }
+}
+function tilskudForaeldet(a){
+  var g = tilskudGemt();
+  if (!g || !g.data) return true;
+  if (g.vindue !== S.vindue) return true;
+  if (Date.now() - (Number(g.tid) || 0) > 7 * 864e5) return true;
+  return a.antalDage - (Number(g.dage) || 0) >= TILSKUD_MINDST;
 }
 function tegnTilskud(a){
   var boks = $("tilskudsboks"); if (!boks) return;
   if (S.tilskudStatus === "tom"){
-    try {
-      var gemt = JSON.parse(laes(K_TILSKUD) || "null");
-      if (gemt && gemt.sign === tilskudSignatur(a)){ S.tilskud = gemt.data; S.tilskudStatus = "klar"; }
-    } catch(e){}
+    var gemt = tilskudGemt();
+    if (gemt && gemt.data){ S.tilskud = gemt.data; S.tilskudStatus = "klar"; }
+    if (a.antalDage >= TILSKUD_MINDST && tilskudForaeldet(a) && navigator.onLine){
+      setTimeout(function(){ if (S.tilskudStatus !== "henter") startTilskud(a); }, 0);
+    }
   }
   if (S.tilskudStatus === "henter"){
     boks.innerHTML = '<p style="color:var(--daempet)" role="status" aria-live="polite">Gennemgår kosten …</p>'
@@ -2855,16 +2872,16 @@ function tegnTilskud(a){
     return;
   }
   boks.innerHTML = '<p style="color:var(--daempet);font-size:14px;margin:0 0 10px">'
-    + 'Appen kan se på, hvad kosten peger på over tid, og om et tilskud giver mening. '
-    + 'Vurderingen bliver skarpere, jo flere dage du registrerer. Det koster ét API-kald.</p>'
-    + '<button class="knap sek" id="b-tilskud">Vurdér min kost</button>';
+    + 'Vurderingen kommer af sig selv, når der er ' + TILSKUD_MINDST + ' dage med registreringer '
+    + '— du har ' + a.antalDage + '. Derefter fornyer den sig selv en gang om ugen.</p>'
+    + '<button class="knap sek" id="b-tilskud">Vurdér alligevel</button>';
   $("b-tilskud").onclick = function(){ startTilskud(a); };
 }
 function startTilskud(a){
   S.tilskudStatus = "henter"; tegnTilskud(a);
   hentTilskud(a).then(function(r){
     S.tilskud = r; S.tilskudStatus = "klar";
-    skriv(K_TILSKUD, JSON.stringify({ sign:tilskudSignatur(a), data:r }));
+    skriv(K_TILSKUD, JSON.stringify({ tid:Date.now(), dage:a.antalDage, vindue:S.vindue, data:r }));
     tegnTilskud(a);
   }).catch(function(err){
     S.tilskudStatus = "fejl";
