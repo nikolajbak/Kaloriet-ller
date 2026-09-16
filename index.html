@@ -378,7 +378,12 @@ var FOEDEVAREGRUPPE_NOEGLER = ["fisk_skaldyr","roedt_koed","mejeri_aeg",
 function normGrupper(g){
   if (!g || typeof g !== "object") return null;
   var ud = {};
-  FOEDEVAREGRUPPE_NOEGLER.forEach(function(k){ ud[k] = !!g[k]; });
+  /* Number(true)/Number(false) giver 1/0, saa gamle ja/nej-tags fra foer
+     maengdeskalaen blev indfoert konverteres automatisk til "lille maengde". */
+  FOEDEVAREGRUPPE_NOEGLER.forEach(function(k){
+    var v = Math.round(Number(g[k]));
+    ud[k] = (v >= 0 && v <= 3) ? v : 0;
+  });
   return ud;
 }
 function normaliser(p, i){
@@ -1712,11 +1717,13 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + (beskrivelse ? '\n\n' : ' Se efter glassets form og hvor fyldt det er.\n\n')
     + 'Angiv også antal danske genstande, hvor en genstand er 12 gram ren alkohol: '
     + 'en øl eller et glas vin er cirka en genstand. Alkoholfrit giver 0.\n\n'
-    + 'Vurder desuden, ud fra hvad der reelt indgår i retten, om måltidet indeholder disse '
-    + 'fødevaregrupper: fisk/skaldyr, rødt kød/indmad, mejeriprodukter/æg, mørkegrønt bladgrønt '
+    + 'Vurder desuden, ud fra hvad der reelt indgår i retten og hvor meget, disse fødevaregrupper '
+    + 'på en skala 0-3: fisk/skaldyr, rødt kød/indmad, mejeriprodukter/æg, mørkegrønt bladgrønt '
     + '(spinat, grønkål, broccoli — ikke almindelig salat eller agurk), frugt/bær, og fuldkorn/'
-    + 'bælgfrugter/nødder. Det bruges senere til at pege på fødevaregrupper der går igen eller '
-    + 'mangler over tid, så vurdér kun det der faktisk er i akkurat dette måltid.\n\n'
+    + 'bælgfrugter/nødder. 0 = optræder slet ikke, 1 = kun som pynt eller i en lille mængde, '
+    + '2 = en almindelig del af måltidet, 3 = udgør hovedparten af måltidet. Det bruges senere til '
+    + 'at pege på fødevaregrupper der går igen, mangler, eller kun optræder i symbolske mængder '
+    + 'over tid, så vurdér kun det der faktisk er i akkurat dette måltid.\n\n'
     + 'Er du i reel tvivl om noget, der flytter estimatet væsentligt — tilberedning, fedtstof, '
     + 'hvad der gemmer sig i retten, om et glas indeholder vand eller noget andet, hvor meget '
     + 'der reelt er spist — så stil op til 3 korte spørgsmål med 2-4 konkrete svarmuligheder hver. '
@@ -1737,8 +1744,8 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + '"gram": heltal — anslået vægt af ÉN portion i gram, alt medregnet, 0 hvis det slet ikke kan vurderes, '
     + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
-    + '"grupper": {"fisk_skaldyr": true/false, "roedt_koed": true/false, "mejeri_aeg": true/false, ' 
-    + '"groent_blad": true/false, "frugt_baer": true/false, "fuldkorn_baelg": true/false}, '
+    + '"grupper": {"fisk_skaldyr": 0-3, "roedt_koed": 0-3, "mejeri_aeg": 0-3, ' 
+    + '"groent_blad": 0-3, "frugt_baer": 0-3, "fuldkorn_baelg": 0-3}, '
     + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort sætning om det væsentligste forbehold", '
     + '"spoergsmaal": [{"tekst": "spørgsmålet", "valg": ["mulighed", "mulighed"]}]}\n\n'
     + (beskrivelse
@@ -2793,6 +2800,7 @@ function tegnTrends(){
   tegnForslag(a);
   tegnTilskud(a);
   tegnHold();
+  koerGrupperBagud();
 }
 /* Fodevaregrupper og hvilket naeringsstof de er kendt for at daekke. Sat af
    modellen selv paa hvert enkelt maaltid, naar det analyseres foerste gang —
@@ -2807,32 +2815,50 @@ var FOEDEVAREGRUPPER = [
   { key:"frugt_baer",    navn:"frugt og bær",                 mad:"et stykke frugt eller lidt bær om dagen" },
   { key:"fuldkorn_baelg",navn:"fuldkorn, bælgfrugter og nødder", mad:"fuldkorn, bønner, linser eller nødder et par gange om ugen" }
 ];
-/* Rødt kød holdes bevidst uden for listen ovenfor: fravær af det er ikke et
+/* Rødt kød holdes bevidst uden for FOEDEVAREGRUPPER: fravær af det er ikke et
    fund der skal rettes, de danske kostråd anbefaler tvaertimod at begraense
-   det. Det taeller stadig med i B12-tjekket nedenfor. */
+   det. Det taeller stadig med i B12-tjekket nedenfor.
+
+   Hver gruppe er nu en maengde 0-3 pr. maaltid, ikke bare til-stede/ikke. Det
+   giver tre reelle niveauer: ALDRIG (sket 0 gange), SPARSOMT (sket, men aldrig
+   i mere end en lille maengde — fx persille som pynt) og TILSTEDE (mindst een
+   gang i en almindelig eller stor portion). Det er forskellen der goer
+   anbefalingen mere praecis: en salat med lidt rugbroed toppet med karse
+   taeller ikke som groent paa lige fod med en skaal groenkaal. */
 function beregnTilskud(a){
   var kendte = a.poster.filter(function(p){ return p.grupper; });
   if (a.antalDage < TILSKUD_MINDST || kendte.length < 5) return null;
 
-  var tael = { roedt_koed:0 };
-  FOEDEVAREGRUPPER.forEach(function(g){ tael[g.key] = 0; });
+  var stat = { roedt_koed:{ sum:0, antal:0, maks:0 } };
+  FOEDEVAREGRUPPER.forEach(function(g){ stat[g.key] = { sum:0, antal:0, maks:0 }; });
   kendte.forEach(function(p){
-    if (p.grupper.roedt_koed) tael.roedt_koed++;
-    FOEDEVAREGRUPPER.forEach(function(g){ if (p.grupper[g.key]) tael[g.key]++; });
+    Object.keys(stat).forEach(function(k){
+      var v = (p.grupper[k] || 0);
+      if (v > 0){ stat[k].sum += v; stat[k].antal++; }
+      if (v > stat[k].maks) stat[k].maks = v;
+    });
   });
 
   var mrk = kendte.length < 14 ? "Løst indtryk" : kendte.length < 40 ? "Nogenlunde grundlag" : "Rimeligt billede";
-  var fravaerende = FOEDEVAREGRUPPER.filter(function(g){ return tael[g.key] === 0; });
-  var tilstede = FOEDEVAREGRUPPER.filter(function(g){ return tael[g.key] > 0; })
-    .sort(function(x,y){ return tael[y.key] - tael[x.key]; });
+  var aldrig = FOEDEVAREGRUPPER.filter(function(g){ return stat[g.key].antal === 0; });
+  var sparsomt = FOEDEVAREGRUPPER.filter(function(g){ return stat[g.key].antal > 0 && stat[g.key].maks <= 1; });
+  var tilstede = FOEDEVAREGRUPPER.filter(function(g){ return stat[g.key].maks >= 2; })
+    .sort(function(x,y){ return stat[y.key].sum - stat[x.key].sum; });
 
-  var moenstre = fravaerende.slice(0,3).map(function(g){
-    return { emne:g.navn, set:"Ingen registrerede retter med " + g.navn + " i perioden", mad:g.mad };
+  var moenstre = [];
+  aldrig.slice(0,2).forEach(function(g){
+    moenstre.push({ emne:g.navn, set:"Ingen registrerede retter med " + g.navn + " i perioden", mad:g.mad });
+  });
+  sparsomt.slice(0, Math.max(0, 3 - moenstre.length)).forEach(function(g){
+    moenstre.push({ emne:g.navn,
+      set:g.navn.charAt(0).toUpperCase() + g.navn.slice(1) + " har kun optrådt i små mængder, aldrig som en rigtig del af måltidet",
+      mad:g.mad });
   });
   if (tilstede.length && moenstre.length < 4){
     var bedst = tilstede[0];
     moenstre.push({ emne:bedst.navn,
-      set:tael[bedst.key] + " af " + kendte.length + " vurderede måltider indeholdt " + bedst.navn, mad:"" });
+      set:stat[bedst.key].antal + " af " + kendte.length + " vurderede måltider indeholdt en god portion " + bedst.navn,
+      mad:"" });
   }
 
   var maaned = new Date().getMonth(), vinter = maaned <= 3 || maaned >= 9;
@@ -2847,7 +2873,9 @@ function beregnTilskud(a){
     tilskud.push({ navn:"D-vitamin", dosis:"10 mikrogram dagligt, oktober til april",
       hvorfor:"Sundhedsstyrelsens anbefaling til alle voksne i vinterhalvåret, uanset kost" });
   }
-  if (tael.fisk_skaldyr === 0 && tael.roedt_koed === 0 && tael.mejeri_aeg === 0 && kendte.length >= 10){
+  /* B12 kraever helt fravaer, ikke bare smaa maengder — antal, ikke maks, saa
+     selv en enkelt lille portion mejeri eller fisk fjerner signalet. */
+  if (stat.fisk_skaldyr.antal === 0 && stat.roedt_koed.antal === 0 && stat.mejeri_aeg.antal === 0 && kendte.length >= 10){
     tilskud.push({ navn:"B12", dosis:"",
       hvorfor:"ingen registrerede kilder til B12 — hverken fisk, kød, mejeri eller æg — i perioden" });
   }
@@ -2857,11 +2885,79 @@ function beregnTilskud(a){
   }
 
   return { mrk:mrk, kendte:kendte.length,
-    opsummering: fravaerende.length
-      ? fravaerende.length + " af " + FOEDEVAREGRUPPER.length + " fødevaregrupper er ikke set i perioden"
+    opsummering: (aldrig.length + sparsomt.length)
+      ? (aldrig.length + sparsomt.length) + " af " + FOEDEVAREGRUPPER.length + " fødevaregrupper mangler helt eller kun i små mængder"
       : "De registrerede retter dækker bredt på tværs af fødevaregrupper",
-    moenstre:moenstre, tilskud:tilskud.slice(0,3) };
+    moenstre:moenstre.slice(0,4), tilskud:tilskud.slice(0,3) };
 }
+/* ================= Bagudrettet fodevaregruppe-tagging =================
+   Maaltider gemt foer denne funktion fandtes har intet grupper-felt. De
+   klassificeres samlet i eet enkelt kald pr. 30 stk — ikke eet kald pr.
+   maaltid — ud fra navn, kategori og portion, og skrives tilbage til de
+   dage de hoerer til. Koerer kun naar der reelt mangler noget, og kun eet
+   sat ad gangen; findes intet at hente, koster det ingenting. */
+var GRUPPER_BAGUD_STOERRELSE = 30;
+var grupperBagudKoerer = false;
+
+function posterUdenGrupper(){
+  var ud = [];
+  dageMedData().forEach(function(dag){
+    hentDag(dag).forEach(function(p){
+      if (!p.grupper) ud.push({ dag:dag, id:p.id, navn:p.navn, kategori:p.kategori, portion:p.portion });
+    });
+  });
+  return ud;
+}
+
+function byggBagudPrompt(saet){
+  var linjer = saet.map(function(x, i){
+    return (i + 1) + ". " + x.navn + " (" + x.kategori + (x.portion ? ", " + x.portion : "") + ")";
+  }).join("\n");
+  return 'Nedenfor er ' + saet.length + ' tidligere registrerede måltider fra en dansk kaloriedagbog, '
+    + 'kun med navn, kategori og evt. portion — ingen billeder.\n\n' + linjer + '\n\n'
+    + 'Vurder for hvert nummer, udelukkende ud fra teksten, hvor meget det indeholder af disse '
+    + 'fødevaregrupper på en skala 0-3: fisk/skaldyr, rødt kød/indmad, mejeriprodukter/æg, '
+    + 'mørkegrønt bladgrønt (spinat, grønkål, broccoli — ikke almindelig salat), frugt/bær, og '
+    + 'fuldkorn/bælgfrugter/nødder. 0 = optræder slet ikke, 1 = kun som pynt eller i en lille '
+    + 'mængde, 2 = en almindelig del af måltidet, 3 = udgør hovedparten. Er navnet for uspecifikt '
+    + 'til at vide det — fx bare "Måltid" — sæt alle til 0 for det nummer frem for at gætte vildt.\n\n'
+    + 'Svar udelukkende med JSON, uden markdown, med præcis ' + saet.length + ' elementer i samme '
+    + 'rækkefølge som listen:\n'
+    + '{"vurderinger": [{"id": heltal — samme nummer som på listen, '
+    + '"grupper": {"fisk_skaldyr": 0-3, "roedt_koed": 0-3, "mejeri_aeg": 0-3, "groent_blad": 0-3, '
+    + '"frugt_baer": 0-3, "fuldkorn_baelg": 0-3}}]}';
+}
+
+function koerGrupperBagud(){
+  if (grupperBagudKoerer || !navigator.onLine) return;
+  var mangler = posterUdenGrupper();
+  if (!mangler.length) return;
+  grupperBagudKoerer = true;
+
+  var saet = mangler.slice(0, GRUPPER_BAGUD_STOERRELSE);
+  kald({ model:S.model, max_tokens:2400,
+    messages:[{ role:"user", content:byggBagudPrompt(saet) }] })
+    .then(function(r){
+      var pr_dag = {};
+      (r.vurderinger || []).forEach(function(v){
+        var kilde = saet[(Number(v.id) || 0) - 1];
+        if (!kilde) return;
+        pr_dag[kilde.dag] = pr_dag[kilde.dag] || {};
+        pr_dag[kilde.dag][kilde.id] = normGrupper(v.grupper);
+      });
+      Object.keys(pr_dag).forEach(function(dag){
+        var poster = hentDag(dag);
+        poster.forEach(function(p){
+          if (pr_dag[dag][p.id]) p.grupper = pr_dag[dag][p.id];
+        });
+        gemDag(dag, poster);
+      });
+      grupperBagudKoerer = false;
+      if (S.skaerm === "trends"){ tegnTilskud(analyseAfVindue(S.vindue)); koerGrupperBagud(); }
+    })
+    .catch(function(){ grupperBagudKoerer = false; });
+}
+
 function tegnTilskud(a){
   var boks = $("tilskudsboks"); if (!boks) return;
   var t = beregnTilskud(a);
