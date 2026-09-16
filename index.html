@@ -339,7 +339,7 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_BRUGER = "kd:navn", K_KAEK = "kd:kaek",
     K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek",
     K_LAAS = "kd:laas", K_LAASTID = "kd:laastid", K_FEJL = "kd:fejl",
-    K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", K_TILSKUD = "kd:tilskud", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash",
+    K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash",
     P_SNAP = "kd:snap:", K_EKSPORT = "kd:sidste-eksport",
     K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand",
     K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret",
@@ -370,6 +370,17 @@ function alleNoegler(){
 function dagNoegler(){
   return alleNoegler().filter(function(k){ return k.indexOf(P_DAG) === 0; }).sort();
 }
+/* Hvilke fodevaregrupper et maaltid indeholder, saat af modellen selv naar
+   maaltidet analyseres. null betyder "ikke vurderet" (manuelt indtastet
+   maaltid) og skal aldrig taelle som fravaer i tilskudsberegningen. */
+var FOEDEVAREGRUPPE_NOEGLER = ["fisk_skaldyr","roedt_koed","mejeri_aeg",
+  "groent_blad","frugt_baer","fuldkorn_baelg"];
+function normGrupper(g){
+  if (!g || typeof g !== "object") return null;
+  var ud = {};
+  FOEDEVAREGRUPPE_NOEGLER.forEach(function(k){ ud[k] = !!g[k]; });
+  return ud;
+}
 function normaliser(p, i){
   p = p && typeof p === "object" ? p : {};
   var ant = Number(p.portioner);
@@ -389,6 +400,7 @@ function normaliser(p, i){
     Object.keys(tal).forEach(function(k){ pr[k] = tal[k] / ant; });
   }
   return {
+    grupper: normGrupper(p.grupper),
     id: String(p.id != null ? p.id : "gl" + i),
     tid: typeof p.tid === "string" ? p.tid : "",
     navn: typeof p.navn === "string" && p.navn ? p.navn : "Måltid",
@@ -843,9 +855,7 @@ var S = {
   spise: null,
   spiseStatus: "tom",
   aabenRet: null,
-  opskrifter: {},
-  tilskud: null,
-  tilskudStatus: "tom"
+  opskrifter: {}
 };
 
 /* ================= Historik ================= */
@@ -1209,8 +1219,7 @@ function nulstilAfledt(){
   if (S.bruger) delDage();
   S.forslag = null; S.forslagStatus = "tom";
   S.spise = null; S.spiseStatus = "tom";
-  S.tilskud = null; S.tilskudStatus = "tom";
-  fjern(K_FORSLAG); fjern(K_SPISE); fjern(K_TILSKUD);
+  fjern(K_FORSLAG); fjern(K_SPISE);
 }
 
 function dagsbudget(dag){
@@ -1703,6 +1712,11 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + (beskrivelse ? '\n\n' : ' Se efter glassets form og hvor fyldt det er.\n\n')
     + 'Angiv også antal danske genstande, hvor en genstand er 12 gram ren alkohol: '
     + 'en øl eller et glas vin er cirka en genstand. Alkoholfrit giver 0.\n\n'
+    + 'Vurder desuden, ud fra hvad der reelt indgår i retten, om måltidet indeholder disse '
+    + 'fødevaregrupper: fisk/skaldyr, rødt kød/indmad, mejeriprodukter/æg, mørkegrønt bladgrønt '
+    + '(spinat, grønkål, broccoli — ikke almindelig salat eller agurk), frugt/bær, og fuldkorn/'
+    + 'bælgfrugter/nødder. Det bruges senere til at pege på fødevaregrupper der går igen eller '
+    + 'mangler over tid, så vurdér kun det der faktisk er i akkurat dette måltid.\n\n'
     + 'Er du i reel tvivl om noget, der flytter estimatet væsentligt — tilberedning, fedtstof, '
     + 'hvad der gemmer sig i retten, om et glas indeholder vand eller noget andet, hvor meget '
     + 'der reelt er spist — så stil op til 3 korte spørgsmål med 2-4 konkrete svarmuligheder hver. '
@@ -1723,6 +1737,8 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + '"gram": heltal — anslået vægt af ÉN portion i gram, alt medregnet, 0 hvis det slet ikke kan vurderes, '
     + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
+    + '"grupper": {"fisk_skaldyr": true/false, "roedt_koed": true/false, "mejeri_aeg": true/false, ' 
+    + '"groent_blad": true/false, "frugt_baer": true/false, "fuldkorn_baelg": true/false}, '
     + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort sætning om det væsentligste forbehold", '
     + '"spoergsmaal": [{"tekst": "spørgsmålet", "valg": ["mulighed", "mulighed"]}]}\n\n'
     + (beskrivelse
@@ -1932,81 +1948,6 @@ function billedKredit(b){
 
 /* Vurdering af kosten over tid og eventuelle tilskud. Bygger paa hvad der er
    registreret, som er kalorier og kategorier — ikke maalinger af naeringsstoffer. */
-function hentTilskud(a){
-  var maaneder = ["januar","februar","marts","april","maj","juni","juli",
-                  "august","september","oktober","november","december"];
-  var kat = a.kategorier.map(function(k){
-    return "- " + k.navn + ": " + Math.round(k.kcal) + " kcal fordelt paa " + k.antal + " maaltider";
-  }).join("\n");
-
-  /* Alle distinkte retter i perioden — ikke kun gengangere. En ret der kun er
-     set een gang taeller stadig med i vurderingen af fx fisk eller graeskar,
-     og det er praecis det en diaetist ville scanne en kostdagbog for. */
-  var set = {};
-  a.poster.forEach(function(p){
-    var n = p.navn.toLowerCase().trim();
-    set[n] = set[n] || { navn:p.navn, kategori:p.kategori, antal:0 };
-    set[n].antal++;
-  });
-  var retter = Object.keys(set).map(function(k){ return set[k]; })
-    .sort(function(x,y){ return y.antal - x.antal; }).slice(0,40)
-    .map(function(r){ return "- " + r.navn + " (" + r.kategori + ", " + r.antal + " gang" + (r.antal > 1 ? "e" : "") + ")"; })
-    .join("\n") || "- ingen retter endnu";
-
-  var p = 'Vurder ' + (S.navn || "brugerens") + ' kost over de seneste ' + S.vindue + ' dage.\n\n'
-    + 'Der er registreret ' + a.antalDage + ' dage med i alt ' + a.poster.length + ' måltider. '
-    + 'Snit ' + Math.round(a.snit) + ' kcal pr. dag mod et mål på ' + S.maal + '.\n'
-    + 'Om personen: ' + profiltekst() + '.\n'
-    + 'Vi er i ' + maaneder[new Date().getMonth()] + '.\n\n'
-    + 'Fordeling på kategorier:\n' + kat + '\n\nRetter i perioden:\n' + retter + '\n\n'
-    + kostgrundlag() + '\n\n'
-    + 'OM DATAGRUNDLAGET: registreringen indeholder kalorier, makronæringsstoffer, en grov '
-    + 'kategori og navnet på hver ret — men ingen laboratoriemåling af vitaminer eller mineraler. '
-    + 'Du skal alligevel vurdere vitaminer og mineraler, ligesom en diætist ville gøre det ved at '
-    + 'læse en kostdagbog igennem: se på hvilke fødevaregrupper der går igen eller mangler i '
-    + 'listen af retter, og brug den kendte sammenhæng mellem fødevaregruppe og næringsstof:\n'
-    + '- fisk og skaldyr → D-vitamin, B12, jod, omega-3\n'
-    + '- rødt kød og indmad → jern, B12, zink\n'
-    + '- mejeriprodukter og æg → calcium, B12, D-vitamin\n'
-    + '- mørkegrønt bladgrønt (spinat, grønkål, broccoli) → K-vitamin, folat\n'
-    + '- frugt og bær → C-vitamin\n'
-    + '- fuldkorn, bælgfrugter og nødder → B-vitaminer, magnesium, fibre\n'
-    + 'Optræder en gruppe slet ikke i listen af retter, er det et konkret fund du kan bruge og '
-    + 'nævne ved navn. Optræder den jævnligt, taler det imod mangel på netop det næringsstof — '
-    + 'sig gerne det med, det er lige så nyttig en oplysning. Nævn kun de fødevaregrupper der '
-    + 'reelt springer i øjnene, aldrig alle seks. Højst 4 mønstre i alt, sæt det tydeligste først. '
-    + 'Dette er stadig mønstergenkendelse '
-    + 'ud fra hvad der er registreret, ikke en næringsberegning eller en diagnose, og du må aldrig '
-    + 'omtale det som en konstateret mangel. Kun en blodprøve hos lægen kan afgøre et faktisk '
-    + 'niveau. Vær mere forbeholden jo færre dage der er registreret: under 14 dage er et løst '
-    + 'indtryk, over 60 dage er et rimeligt billede.\n\n'
-    + 'Mad først, tilskud bagefter: peg på hvad der kan spises i stedet, og nævn kun tilskud '
-    + 'hvor det er relevant. Hold dig inden for de officielle danske anbefalinger og foreslå '
-    + 'aldrig høje doser. D-vitamin i vinterhalvåret gælder alle voksne uanset hvad der står '
-    + 'i dagbogen, så den må gerne med, når vi er i oktober til april.\n\n'
-    + 'Nævner du et tilskud, så skriv den konkrete daglige dosis, hvis der findes en officiel '
-    + 'dansk anbefaling for netop denne person — ellers ingen dosis. Foreslå aldrig jerntilskud '
-    + 'uden blodprøve: for meget jern er skadeligt, og mænd og kvinder efter overgangsalderen '
-    + 'har sjældent brug for det, selv hvis rødt kød sjældent optræder i listen. B12 er kun '
-    + 'relevant ved helt eller næsten plantebaseret kost. Calcium og D-vitamin hænger sammen '
-    + 'og nævnes som ét råd. Højst tre tilskud i alt, og sæt det vigtigste først. Alle felter '
-    + 'skal holdes inden for deres ordgrænse — det er en hård grænse, ikke et fingerpeg.\n\n'
-    + 'Du SKAL altid udfylde feltet "tilskud" med mindst ét råd. Peger fødevaregrupperne ikke '
-    + 'på noget udover D-vitamin i vinterhalvåret, så skriv det som ét råd med navnet "Ingen '
-    + 'tilskud ud over D-vitamin" eller "Ingen tilskud nødvendige" og forklar hvorfor ud fra '
-    + 'hvad der rent faktisk går igen i retterne — et velbegrundet nej er også et svar. Feltet '
-    + 'må aldrig være tomt eller udeladt.\n\n'
-    + 'Svar udelukkende med JSON, uden markdown:\n'
-    + '{"sikkerhed": "loest indtryk"/"nogenlunde"/"rimeligt billede", '
-    + '"opsummering": "hvad mønstret viser, max 25 ord", '
-    + '"moenstre": [{"emne": "fx fisk og omega-3", "set": "hvad retterne viser, max 14 ord", '
-    + '"mad": "hvad der kan spises i stedet, max 16 ord"}], '
-    + '"tilskud": [{"navn": "fx D-vitamin", "dosis": "fx 10 mikrogram dagligt, ellers tom tekst", '
-    + '"hvorfor": "kort begrundelse med afsæt i de faktiske retter, max 18 ord"}]}';
-
-  return kald({ model:S.model, max_tokens:2200, messages:[{ role:"user", content:p }] });
-}
-
 /* Forslag til lettere alternativer. Tonen er kaek, men gaar altid paa maden
    og aldrig paa personen — det er skrevet ind i selve instruktionen. */
 function hentForslag(a){
@@ -2663,6 +2604,7 @@ function aabnRediger(dag, id){
         kulhydrat_g: totaler.kulhydrat_g,
         fedt_g: totaler.fedt_g,
         genstande: totaler.genstande,
+        grupper: p.grupper,
         billede: p.billede
       }, 0);
       opdateret = ny;
@@ -2852,96 +2794,105 @@ function tegnTrends(){
   tegnTilskud(a);
   tegnHold();
 }
-/* En kostvurdering aendrer sig ikke af et enkelt maaltid. Den fornyer sig selv
-   efter en uge, eller naar grundlaget er vokset med en uges dage. Uden den
-   braemse ville hver ny frokost koste et API-kald. */
+/* Fodevaregrupper og hvilket naeringsstof de er kendt for at daekke. Sat af
+   modellen selv paa hvert enkelt maaltid, naar det analyseres foerste gang —
+   se byggPrompt(). Beregningen her er derfor bare en optaelling, ingen kald,
+   ingen ventetid, og den opdaterer sig selv i samme oejeblik et nyt maaltid
+   er gemt, fordi den koerer paa a.poster hver gang Trends tegnes. */
 var TILSKUD_MINDST = 7;
-function tilskudGemt(){
-  try { return JSON.parse(laes(K_TILSKUD) || "null"); } catch(e){ return null; }
-}
-var TILSKUD_UDG = 3;
-function tilskudForaeldet(a){
-  var g = tilskudGemt();
-  if (!g || !g.data) return true;
-  if (g.udg !== TILSKUD_UDG) return true;
-  if (g.vindue !== S.vindue) return true;
-  if (Date.now() - (Number(g.tid) || 0) > 7 * 864e5) return true;
-  return a.antalDage - (Number(g.dage) || 0) >= TILSKUD_MINDST;
+var FOEDEVAREGRUPPER = [
+  { key:"fisk_skaldyr",  navn:"fisk og skaldyr",              mad:"en fiskeret én til to gange om ugen, fx laks, makrel eller torsk" },
+  { key:"mejeri_aeg",    navn:"mejeriprodukter og æg",        mad:"mejeriprodukter eller æg et par gange om ugen" },
+  { key:"groent_blad",   navn:"mørkegrønt bladgrønt",         mad:"spinat, grønkål eller broccoli et par gange om ugen" },
+  { key:"frugt_baer",    navn:"frugt og bær",                 mad:"et stykke frugt eller lidt bær om dagen" },
+  { key:"fuldkorn_baelg",navn:"fuldkorn, bælgfrugter og nødder", mad:"fuldkorn, bønner, linser eller nødder et par gange om ugen" }
+];
+/* Rødt kød holdes bevidst uden for listen ovenfor: fravær af det er ikke et
+   fund der skal rettes, de danske kostråd anbefaler tvaertimod at begraense
+   det. Det taeller stadig med i B12-tjekket nedenfor. */
+function beregnTilskud(a){
+  var kendte = a.poster.filter(function(p){ return p.grupper; });
+  if (a.antalDage < TILSKUD_MINDST || kendte.length < 5) return null;
+
+  var tael = { roedt_koed:0 };
+  FOEDEVAREGRUPPER.forEach(function(g){ tael[g.key] = 0; });
+  kendte.forEach(function(p){
+    if (p.grupper.roedt_koed) tael.roedt_koed++;
+    FOEDEVAREGRUPPER.forEach(function(g){ if (p.grupper[g.key]) tael[g.key]++; });
+  });
+
+  var mrk = kendte.length < 14 ? "Løst indtryk" : kendte.length < 40 ? "Nogenlunde grundlag" : "Rimeligt billede";
+  var fravaerende = FOEDEVAREGRUPPER.filter(function(g){ return tael[g.key] === 0; });
+  var tilstede = FOEDEVAREGRUPPER.filter(function(g){ return tael[g.key] > 0; })
+    .sort(function(x,y){ return tael[y.key] - tael[x.key]; });
+
+  var moenstre = fravaerende.slice(0,3).map(function(g){
+    return { emne:g.navn, set:"Ingen registrerede retter med " + g.navn + " i perioden", mad:g.mad };
+  });
+  if (tilstede.length && moenstre.length < 4){
+    var bedst = tilstede[0];
+    moenstre.push({ emne:bedst.navn,
+      set:tael[bedst.key] + " af " + kendte.length + " vurderede måltider indeholdt " + bedst.navn, mad:"" });
+  }
+
+  var maaned = new Date().getMonth(), vinter = maaned <= 3 || maaned >= 9;
+  var alder = Number(S.profil && S.profil.alder) || 0;
+  var tilskud = [];
+  if (alder >= 70){
+    tilskud.push({ navn:"D-vitamin", dosis:"20 mikrogram dagligt, hele året",
+      hvorfor:"Sundhedsstyrelsens anbefaling til alle over 70 år, uanset kost" });
+    tilskud.push({ navn:"Calcium", dosis:"800-1000 mg dagligt, hele året",
+      hvorfor:"anbefales sammen med D-vitamin til personer over 70 år" });
+  } else if (vinter){
+    tilskud.push({ navn:"D-vitamin", dosis:"10 mikrogram dagligt, oktober til april",
+      hvorfor:"Sundhedsstyrelsens anbefaling til alle voksne i vinterhalvåret, uanset kost" });
+  }
+  if (tael.fisk_skaldyr === 0 && tael.roedt_koed === 0 && tael.mejeri_aeg === 0 && kendte.length >= 10){
+    tilskud.push({ navn:"B12", dosis:"",
+      hvorfor:"ingen registrerede kilder til B12 — hverken fisk, kød, mejeri eller æg — i perioden" });
+  }
+  if (!tilskud.length){
+    tilskud.push({ navn:"Ingen tilskud ud over de generelle danske anbefalinger", dosis:"",
+      hvorfor:"de registrerede retter dækker bredt nok til at intet konkret peger sig ud" });
+  }
+
+  return { mrk:mrk, kendte:kendte.length,
+    opsummering: fravaerende.length
+      ? fravaerende.length + " af " + FOEDEVAREGRUPPER.length + " fødevaregrupper er ikke set i perioden"
+      : "De registrerede retter dækker bredt på tværs af fødevaregrupper",
+    moenstre:moenstre, tilskud:tilskud.slice(0,3) };
 }
 function tegnTilskud(a){
   var boks = $("tilskudsboks"); if (!boks) return;
-  var mrkKort = { "loest indtryk":"Løst indtryk", "nogenlunde":"Nogenlunde grundlag",
-                  "rimeligt billede":"Rimeligt billede" };
+  var t = beregnTilskud(a);
   var sum = $("sum-tilskud");
-  if (sum) sum.textContent = "Kost og tilskud" + (
-    S.tilskudStatus === "henter" ? " · henter" :
-    S.tilskudStatus === "fejl" ? " · kunne ikke hentes" :
-    S.tilskudStatus === "klar" && S.tilskud ? " · " + (mrkKort[S.tilskud.sikkerhed] || "Løst indtryk") : "");
-  if (S.tilskudStatus === "tom"){
-    var gemt = tilskudGemt();
-    if (gemt && gemt.data && gemt.udg === TILSKUD_UDG){ S.tilskud = gemt.data; S.tilskudStatus = "klar"; }
-    if (a.antalDage >= TILSKUD_MINDST && tilskudForaeldet(a) && navigator.onLine){
-      setTimeout(function(){ if (S.tilskudStatus !== "henter") startTilskud(a); }, 0);
-    }
-  }
-  if (S.tilskudStatus === "henter"){
-    boks.innerHTML = '<p style="color:var(--daempet)" role="status" aria-live="polite">Gennemgår kosten …</p>'
-      + '<div class="skelet linje" style="width:65%"></div><div class="skelet linje" style="width:80%"></div>'; return;
-  }
-  if (S.tilskudStatus === "fejl"){
-    boks.innerHTML = '<div class="note fejl">' + esc(S.tilskudFejl) + '</div>'
-      + '<button class="knap sek" id="b-tilskud" style="margin-top:10px">Prøv igen</button>';
-    $("b-tilskud").onclick = function(){ startTilskud(a); };
+  if (sum) sum.textContent = "Kost og tilskud" + (t ? " · " + t.mrk : "");
+  if (!t){
+    boks.innerHTML = '<p style="color:var(--daempet);font-size:14px;margin:0 0 10px">'
+      + 'Vurderingen kommer af sig selv, når der er ' + TILSKUD_MINDST + ' dage med registreringer, '
+      + 'hvor maden er blevet vurderet af appen — du har ' + a.antalDage + ' dage indtil videre.</p>';
     return;
   }
-  if (S.tilskudStatus === "klar" && S.tilskud){
-    var t = S.tilskud;
-    var mrk = { "loest indtryk":"Løst indtryk", "nogenlunde":"Nogenlunde grundlag",
-                "rimeligt billede":"Rimeligt billede" }[t.sikkerhed] || "Løst indtryk";
-    var ud = '<span class="maerke stor">' + esc(mrk) + ' · ' + a.antalDage + ' dage</span>'
-      + (t.opsummering ? '<p class="overskrift" style="margin-top:12px">' + esc(t.opsummering) + '</p>' : "");
-    (t.moenstre || []).slice(0,5).forEach(function(m){
-      ud += '<div class="kort"><div class="fra">' + esc(m.emne) + '</div>'
-        + (m.set ? '<div class="kom" style="font-style:normal">' + esc(m.set) + '</div>' : "")
-        + (m.mad ? '<div class="til">→ <b>' + esc(m.mad) + '</b></div>' : "")
-        + '</div>';
-    });
-    if ((t.tilskud || []).length){
-      ud += '<h3 class="sek" style="font-size:16px;margin:18px 0 8px">Vitaminer og tilskud</h3>';
-      t.tilskud.slice(0,3).forEach(function(v){
-        ud += '<div class="kort"><div class="fra">' + esc(v.navn || "") + '</div>'
-          + (v.dosis ? '<div class="til">→ <b>' + esc(v.dosis) + '</b></div>' : "")
-          + (v.hvorfor ? '<div class="kom" style="font-style:normal">' + esc(v.hvorfor) + '</div>' : "")
-          + '</div>';
-      });
-    }
-    ud += '<button class="knap sek" id="b-tilskud" style="margin-top:6px">Vurdér igen</button>'
-      + '<p class="fodnote">Vurderingen ser på hvilke fødevaregrupper der går igen eller mangler i '
-      + 'de retter, du har registreret, og oversætter det til vitaminer og mineraler, der plejer at '
-      + 'følge dem. Det er mønstergenkendelse, ikke en næringsberegning — kun en blodprøve hos lægen '
-      + 'kan afgøre et faktisk niveau, og tal med lægen eller apoteket, før du lægger tilskud til '
-      + 'fast medicin.</p>';
-    boks.innerHTML = ud;
-    $("b-tilskud").onclick = function(){ startTilskud(a); };
-    return;
-  }
-  boks.innerHTML = '<p style="color:var(--daempet);font-size:14px;margin:0 0 10px">'
-    + 'Vurderingen kommer af sig selv, når der er ' + TILSKUD_MINDST + ' dage med registreringer '
-    + '— du har ' + a.antalDage + '. Derefter fornyer den sig selv en gang om ugen.</p>'
-    + '<button class="knap sek" id="b-tilskud">Vurdér alligevel</button>';
-  $("b-tilskud").onclick = function(){ startTilskud(a); };
-}
-function startTilskud(a){
-  S.tilskudStatus = "henter"; tegnTilskud(a);
-  hentTilskud(a).then(function(r){
-    S.tilskud = r; S.tilskudStatus = "klar";
-    skriv(K_TILSKUD, JSON.stringify({ udg:TILSKUD_UDG, tid:Date.now(), dage:a.antalDage, vindue:S.vindue, data:r }));
-    tegnTilskud(a);
-  }).catch(function(err){
-    S.tilskudStatus = "fejl";
-    S.tilskudFejl = (err && err.message) || "Kunne ikke vurdere kosten.";
-    tegnTilskud(a);
+  var ud = '<span class="maerke stor">' + esc(t.mrk) + ' · ' + t.kendte + ' vurderede måltider</span>'
+    + '<p class="overskrift" style="margin-top:12px">' + esc(t.opsummering) + '</p>';
+  t.moenstre.forEach(function(m){
+    ud += '<div class="kort"><div class="fra">' + esc(m.emne) + '</div>'
+      + '<div class="kom" style="font-style:normal">' + esc(m.set) + '</div>'
+      + (m.mad ? '<div class="til">→ <b>' + esc(m.mad) + '</b></div>' : "")
+      + '</div>';
   });
+  ud += '<h3 class="sek" style="font-size:16px;margin:18px 0 8px">Vitaminer og tilskud</h3>';
+  t.tilskud.forEach(function(v){
+    ud += '<div class="kort"><div class="fra">' + esc(v.navn) + '</div>'
+      + (v.dosis ? '<div class="til">→ <b>' + esc(v.dosis) + '</b></div>' : "")
+      + '<div class="kom" style="font-style:normal">' + esc(v.hvorfor) + '</div></div>';
+  });
+  ud += '<p class="fodnote">Vurderingen tælles op fra de fødevaregrupper, appen genkender i hver ret, '
+    + 'når den analyseres — og oversætter fravær eller tilstedeværelse til vitaminer og mineraler, der '
+    + 'plejer at følge dem. Det er mønstergenkendelse, ikke en næringsberegning — kun en blodprøve hos '
+    + 'lægen kan afgøre et faktisk niveau, og tal med lægen eller apoteket, før du lægger tilskud til '
+    + 'fast medicin.</p>';
+  boks.innerHTML = ud;
 }
 
 /* --- Kontoafsnittet i indstillinger --- */
@@ -3315,7 +3266,6 @@ function bindVindue(){
     b.onclick = function(){
       S.vindue = Number(b.getAttribute("data-vin"));
       S.forslag = null; S.forslagStatus = "tom";
-      S.tilskud = null; S.tilskudStatus = "tom";
       tegnTrends();
     };
   });
@@ -3582,6 +3532,7 @@ function tegnArk(){
       protein_g: Number($("f-pro").value) || 0,
       kulhydrat_g: Number($("f-kul").value) || 0,
       fedt_g: Number($("f-fedt").value) || 0,
+      grupper: (a.r && a.r.grupper) || null,
       billede: a.lille || null
     }, 0));
     gemDag(dag, poster);
