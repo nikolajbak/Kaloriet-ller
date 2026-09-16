@@ -1973,7 +1973,9 @@ function hentTilskud(a){
     + '- fuldkorn, bælgfrugter og nødder → B-vitaminer, magnesium, fibre\n'
     + 'Optræder en gruppe slet ikke i listen af retter, er det et konkret fund du kan bruge og '
     + 'nævne ved navn. Optræder den jævnligt, taler det imod mangel på netop det næringsstof — '
-    + 'sig gerne det med, det er lige så nyttig en oplysning. Dette er stadig mønstergenkendelse '
+    + 'sig gerne det med, det er lige så nyttig en oplysning. Nævn kun de fødevaregrupper der '
+    + 'reelt springer i øjnene, aldrig alle seks. Højst 4 mønstre i alt, sæt det tydeligste først. '
+    + 'Dette er stadig mønstergenkendelse '
     + 'ud fra hvad der er registreret, ikke en næringsberegning eller en diagnose, og du må aldrig '
     + 'omtale det som en konstateret mangel. Kun en blodprøve hos lægen kan afgøre et faktisk '
     + 'niveau. Vær mere forbeholden jo færre dage der er registreret: under 14 dage er et løst '
@@ -1987,7 +1989,8 @@ function hentTilskud(a){
     + 'uden blodprøve: for meget jern er skadeligt, og mænd og kvinder efter overgangsalderen '
     + 'har sjældent brug for det, selv hvis rødt kød sjældent optræder i listen. B12 er kun '
     + 'relevant ved helt eller næsten plantebaseret kost. Calcium og D-vitamin hænger sammen '
-    + 'og nævnes som ét råd. Højst tre tilskud i alt, og sæt det vigtigste først.\n\n'
+    + 'og nævnes som ét råd. Højst tre tilskud i alt, og sæt det vigtigste først. Alle felter '
+    + 'skal holdes inden for deres ordgrænse — det er en hård grænse, ikke et fingerpeg.\n\n'
     + 'Du SKAL altid udfylde feltet "tilskud" med mindst ét råd. Peger fødevaregrupperne ikke '
     + 'på noget udover D-vitamin i vinterhalvåret, så skriv det som ét råd med navnet "Ingen '
     + 'tilskud ud over D-vitamin" eller "Ingen tilskud nødvendige" og forklar hvorfor ud fra '
@@ -2001,7 +2004,7 @@ function hentTilskud(a){
     + '"tilskud": [{"navn": "fx D-vitamin", "dosis": "fx 10 mikrogram dagligt, ellers tom tekst", '
     + '"hvorfor": "kort begrundelse med afsæt i de faktiske retter, max 18 ord"}]}';
 
-  return kald({ model:S.model, max_tokens:1400, messages:[{ role:"user", content:p }] });
+  return kald({ model:S.model, max_tokens:2200, messages:[{ role:"user", content:p }] });
 }
 
 /* Forslag til lettere alternativer. Tonen er kaek, men gaar altid paa maden
