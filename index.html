@@ -326,8 +326,11 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 "use strict";
 
 var APP_VERSION = "31.0";
-/* Faktisk udgivet commit, kort form. Opdateres i et lille efterfoelgende patch hver gang der udgives, saa versionslinjen altid viser den commit der reelt kører i browseren — ikke bare et versionsnummer man kan glemme at hæve. */
-var APP_COMMIT = "16d3339";
+/* Loebenummer for den udgivelses-raekke der byggede denne fil — svarer til
+   id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
+   selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
+   med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
+var APP_BUILD = 28;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -4018,7 +4021,7 @@ function tegnIndstillinger(){
     + '<button class="knap" id="s-gem">Gem</button>'
     + '<button class="knap sek" id="s-opdater" style="margin-top:8px">Søg efter opdatering</button>'
     + '<p class="fodnote" style="text-align:center;margin-top:12px">Version ' + APP_VERSION
-    + ' (' + esc(APP_COMMIT) + ') · ' + forbrugDenneMaaned() + ' analyser denne måned</p>'
+    + ' (build ' + APP_BUILD + ') · ' + forbrugDenneMaaned() + ' analyser denne måned</p>'
     + '</div></div></div>';
   var gl = $("ind-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
