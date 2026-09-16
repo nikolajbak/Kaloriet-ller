@@ -326,6 +326,8 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 "use strict";
 
 var APP_VERSION = "31.0";
+/* Faktisk udgivet commit, kort form. Opdateres i et lille efterfoelgende patch hver gang der udgives, saa versionslinjen altid viser den commit der reelt kører i browseren — ikke bare et versionsnummer man kan glemme at hæve. */
+var APP_COMMIT = "ukendt";
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1760,7 +1762,7 @@ function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
     indhold.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } });
   }
   indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse, dag, tid) });
-  return kald({ model:S.model, max_tokens:1800, messages:[{ role:"user", content:indhold }] });
+  return kald({ model:S.model, max_tokens:2400, messages:[{ role:"user", content:indhold }] });
 }
 
 /* Retter appen allerede har foreslaaet. Uden den her liste kommer de samme
@@ -2896,7 +2898,7 @@ function beregnTilskud(a){
    maaltid — ud fra navn, kategori og portion, og skrives tilbage til de
    dage de hoerer til. Koerer kun naar der reelt mangler noget, og kun eet
    sat ad gangen; findes intet at hente, koster det ingenting. */
-var GRUPPER_BAGUD_STOERRELSE = 30;
+var GRUPPER_BAGUD_STOERRELSE = 20;
 var grupperBagudKoerer = false;
 
 function posterUdenGrupper(){
@@ -2935,7 +2937,7 @@ function koerGrupperBagud(){
   grupperBagudKoerer = true;
 
   var saet = mangler.slice(0, GRUPPER_BAGUD_STOERRELSE);
-  kald({ model:S.model, max_tokens:2400,
+  kald({ model:S.model, max_tokens:3200,
     messages:[{ role:"user", content:byggBagudPrompt(saet) }] })
     .then(function(r){
       var pr_dag = {};
@@ -4016,7 +4018,7 @@ function tegnIndstillinger(){
     + '<button class="knap" id="s-gem">Gem</button>'
     + '<button class="knap sek" id="s-opdater" style="margin-top:8px">Søg efter opdatering</button>'
     + '<p class="fodnote" style="text-align:center;margin-top:12px">Version ' + APP_VERSION
-    + ' · ' + forbrugDenneMaaned() + ' analyser denne måned</p>'
+    + ' (' + esc(APP_COMMIT) + ') · ' + forbrugDenneMaaned() + ' analyser denne måned</p>'
     + '</div></div></div>';
   var gl = $("ind-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
