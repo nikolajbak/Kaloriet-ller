@@ -1938,48 +1938,70 @@ function hentTilskud(a){
   var kat = a.kategorier.map(function(k){
     return "- " + k.navn + ": " + Math.round(k.kcal) + " kcal fordelt paa " + k.antal + " maaltider";
   }).join("\n");
-  var retter = a.gengangere.slice(0,8).map(function(g){
-    return "- " + g.navn + " (" + g.antal + " gange)";
-  }).join("\n") || "- ingen gengangere endnu";
+
+  /* Alle distinkte retter i perioden — ikke kun gengangere. En ret der kun er
+     set een gang taeller stadig med i vurderingen af fx fisk eller graeskar,
+     og det er praecis det en diaetist ville scanne en kostdagbog for. */
+  var set = {};
+  a.poster.forEach(function(p){
+    var n = p.navn.toLowerCase().trim();
+    set[n] = set[n] || { navn:p.navn, kategori:p.kategori, antal:0 };
+    set[n].antal++;
+  });
+  var retter = Object.keys(set).map(function(k){ return set[k]; })
+    .sort(function(x,y){ return y.antal - x.antal; }).slice(0,40)
+    .map(function(r){ return "- " + r.navn + " (" + r.kategori + ", " + r.antal + " gang" + (r.antal > 1 ? "e" : "") + ")"; })
+    .join("\n") || "- ingen retter endnu";
 
   var p = 'Vurder ' + (S.navn || "brugerens") + ' kost over de seneste ' + S.vindue + ' dage.\n\n'
     + 'Der er registreret ' + a.antalDage + ' dage med i alt ' + a.poster.length + ' måltider. '
     + 'Snit ' + Math.round(a.snit) + ' kcal pr. dag mod et mål på ' + S.maal + '.\n'
     + 'Om personen: ' + profiltekst() + '.\n'
     + 'Vi er i ' + maaneder[new Date().getMonth()] + '.\n\n'
-    + 'Fordeling på kategorier:\n' + kat + '\n\nGengangere:\n' + retter + '\n\n'
+    + 'Fordeling på kategorier:\n' + kat + '\n\nRetter i perioden:\n' + retter + '\n\n'
     + kostgrundlag() + '\n\n'
-    + 'AFGØRENDE OM DATAGRUNDLAGET: registreringen indeholder kalorier, makronæringsstoffer og '
-    + 'en grov kategori pr. måltid. Den indeholder INGEN målinger af vitaminer eller mineraler. '
-    + 'Du kan derfor kun tale om mønstre — at der sjældent registreres fisk, eller at grønt '
-    + 'fylder lidt — og aldrig konstatere en mangel. Kun en blodprøve hos lægen kan det. '
-    + 'Sig det tydeligt, og vær mere forbeholden jo færre dage der er registreret: '
-    + 'under 14 dage er et løst indtryk, over 60 dage er et rimeligt billede.\n\n'
+    + 'OM DATAGRUNDLAGET: registreringen indeholder kalorier, makronæringsstoffer, en grov '
+    + 'kategori og navnet på hver ret — men ingen laboratoriemåling af vitaminer eller mineraler. '
+    + 'Du skal alligevel vurdere vitaminer og mineraler, ligesom en diætist ville gøre det ved at '
+    + 'læse en kostdagbog igennem: se på hvilke fødevaregrupper der går igen eller mangler i '
+    + 'listen af retter, og brug den kendte sammenhæng mellem fødevaregruppe og næringsstof:\n'
+    + '- fisk og skaldyr → D-vitamin, B12, jod, omega-3\n'
+    + '- rødt kød og indmad → jern, B12, zink\n'
+    + '- mejeriprodukter og æg → calcium, B12, D-vitamin\n'
+    + '- mørkegrønt bladgrønt (spinat, grønkål, broccoli) → K-vitamin, folat\n'
+    + '- frugt og bær → C-vitamin\n'
+    + '- fuldkorn, bælgfrugter og nødder → B-vitaminer, magnesium, fibre\n'
+    + 'Optræder en gruppe slet ikke i listen af retter, er det et konkret fund du kan bruge og '
+    + 'nævne ved navn. Optræder den jævnligt, taler det imod mangel på netop det næringsstof — '
+    + 'sig gerne det med, det er lige så nyttig en oplysning. Dette er stadig mønstergenkendelse '
+    + 'ud fra hvad der er registreret, ikke en næringsberegning eller en diagnose, og du må aldrig '
+    + 'omtale det som en konstateret mangel. Kun en blodprøve hos lægen kan afgøre et faktisk '
+    + 'niveau. Vær mere forbeholden jo færre dage der er registreret: under 14 dage er et løst '
+    + 'indtryk, over 60 dage er et rimeligt billede.\n\n'
     + 'Mad først, tilskud bagefter: peg på hvad der kan spises i stedet, og nævn kun tilskud '
     + 'hvor det er relevant. Hold dig inden for de officielle danske anbefalinger og foreslå '
     + 'aldrig høje doser. D-vitamin i vinterhalvåret gælder alle voksne uanset hvad der står '
-    + 'i dagbogen, så den må gerne med, når vi er i oktober til april. Anbefal ikke tilskud '
-    + 'på noget, dagbogen ikke kan sige noget om.\n\n'
+    + 'i dagbogen, så den må gerne med, når vi er i oktober til april.\n\n'
     + 'Nævner du et tilskud, så skriv den konkrete daglige dosis, hvis der findes en officiel '
     + 'dansk anbefaling for netop denne person — ellers ingen dosis. Foreslå aldrig jerntilskud '
     + 'uden blodprøve: for meget jern er skadeligt, og mænd og kvinder efter overgangsalderen '
-    + 'har sjældent brug for det. B12 er kun relevant ved helt eller næsten plantebaseret kost. '
-    + 'Calcium og D-vitamin hænger sammen og nævnes som ét råd. Højst tre tilskud i alt, '
-    + 'og sæt det vigtigste først.\n\n'
-    + 'Du SKAL altid udfylde feltet "tilskud" med mindst ét råd. Peger kosten ikke på noget, '
-    + 'så skriv det som ét råd med navnet "Ingen tilskud ud over D-vitamin" eller "Ingen tilskud '
-    + 'nødvendige" og forklar hvorfor — et velbegrundet nej er også et svar. Er vi i september, '
-    + 'må du gerne nævne, at D-vitamin bliver relevant fra oktober. Feltet må aldrig være tomt '
-    + 'eller udeladt.\n\n'
+    + 'har sjældent brug for det, selv hvis rødt kød sjældent optræder i listen. B12 er kun '
+    + 'relevant ved helt eller næsten plantebaseret kost. Calcium og D-vitamin hænger sammen '
+    + 'og nævnes som ét råd. Højst tre tilskud i alt, og sæt det vigtigste først.\n\n'
+    + 'Du SKAL altid udfylde feltet "tilskud" med mindst ét råd. Peger fødevaregrupperne ikke '
+    + 'på noget udover D-vitamin i vinterhalvåret, så skriv det som ét råd med navnet "Ingen '
+    + 'tilskud ud over D-vitamin" eller "Ingen tilskud nødvendige" og forklar hvorfor ud fra '
+    + 'hvad der rent faktisk går igen i retterne — et velbegrundet nej er også et svar. Feltet '
+    + 'må aldrig være tomt eller udeladt.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
     + '{"sikkerhed": "loest indtryk"/"nogenlunde"/"rimeligt billede", '
     + '"opsummering": "hvad mønstret viser, max 25 ord", '
-    + '"moenstre": [{"emne": "fx fisk og omega-3", "set": "hvad dagbogen viser, max 14 ord", '
+    + '"moenstre": [{"emne": "fx fisk og omega-3", "set": "hvad retterne viser, max 14 ord", '
     + '"mad": "hvad der kan spises i stedet, max 16 ord"}], '
     + '"tilskud": [{"navn": "fx D-vitamin", "dosis": "fx 10 mikrogram dagligt, ellers tom tekst", '
-    + '"hvorfor": "kort begrundelse, max 18 ord"}]}';
+    + '"hvorfor": "kort begrundelse med afsæt i de faktiske retter, max 18 ord"}]}';
 
-  return kald({ model:S.model, max_tokens:1200, messages:[{ role:"user", content:p }] });
+  return kald({ model:S.model, max_tokens:1400, messages:[{ role:"user", content:p }] });
 }
 
 /* Forslag til lettere alternativer. Tonen er kaek, men gaar altid paa maden
@@ -2834,7 +2856,7 @@ var TILSKUD_MINDST = 7;
 function tilskudGemt(){
   try { return JSON.parse(laes(K_TILSKUD) || "null"); } catch(e){ return null; }
 }
-var TILSKUD_UDG = 2;
+var TILSKUD_UDG = 3;
 function tilskudForaeldet(a){
   var g = tilskudGemt();
   if (!g || !g.data) return true;
@@ -2891,9 +2913,11 @@ function tegnTilskud(a){
       });
     }
     ud += '<button class="knap sek" id="b-tilskud" style="margin-top:6px">Vurdér igen</button>'
-      + '<p class="fodnote">Dagbogen måler kalorier og kategorier, ikke vitaminer. Det her er mønstre '
-      + 'i det, du har registreret — ikke en konstatering af mangel. Kun en blodprøve hos lægen '
-      + 'kan afgøre det, og tal med lægen eller apoteket, før du lægger tilskud til fast medicin.</p>';
+      + '<p class="fodnote">Vurderingen ser på hvilke fødevaregrupper der går igen eller mangler i '
+      + 'de retter, du har registreret, og oversætter det til vitaminer og mineraler, der plejer at '
+      + 'følge dem. Det er mønstergenkendelse, ikke en næringsberegning — kun en blodprøve hos lægen '
+      + 'kan afgøre et faktisk niveau, og tal med lægen eller apoteket, før du lægger tilskud til '
+      + 'fast medicin.</p>';
     boks.innerHTML = ud;
     $("b-tilskud").onclick = function(){ startTilskud(a); };
     return;
