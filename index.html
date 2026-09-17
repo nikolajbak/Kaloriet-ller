@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 29;
+var APP_BUILD = 30;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -4640,11 +4640,18 @@ function tjekOpdatering(tvunget){
     .then(function(r){ return r.ok ? r.text() : null; })
     .then(function(t){
       if (!t) return null;
-      /* Moenstret saettes sammen af stumper, saa det ikke kan finde sig selv i filen */
-      var m = t.match(new RegExp("var APP" + "_VERSION = \"([^\"]+)\""));
-      if (!m || !erNyere(m[1], APP_VERSION)) return null;
-      if (optaget()) visOpdatering(m[1]); else hentNyVersion(m[1]);
-      return m[1];
+      /* Moenstrene saettes sammen af stumper, saa de ikke kan finde sig selv i filen.
+         APP_BUILD er det afgoerende: det stiger ved hver udgivelse uden undtagelse,
+         mens APP_VERSION er et frit tekstfelt der let glemmes at blive haevet — som
+         det faktisk skete her, hvor flere builds delte samme versionsnummer. */
+      var mv = t.match(new RegExp("var APP" + "_VERSION = \"([^\"]+)\""));
+      var mb = t.match(new RegExp("var APP" + "_BUILD = (\\d+)"));
+      var nyereVersion = mv && erNyere(mv[1], APP_VERSION);
+      var nyereBuild = mb && Number(mb[1]) > APP_BUILD;
+      if (!nyereVersion && !nyereBuild) return null;
+      var visVersion = mv ? mv[1] : APP_VERSION;
+      if (optaget()) visOpdatering(visVersion); else hentNyVersion(visVersion);
+      return visVersion;
     })
     .catch(function(){ return null; });
 }
