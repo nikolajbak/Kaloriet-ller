@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 28;
+var APP_BUILD = 29;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -391,6 +391,18 @@ function normGrupper(g){
   });
   return ud;
 }
+/* Normaliserede enkeltbestanddele (fx "vin"), uafhaengigt af hvordan maaltidet
+   er beskrevet. Bruges i Trends til at finde det der reelt gaar igen, ogsaa
+   naar formuleringen varierer fra gang til gang. */
+function normIndhold(l){
+  if (!Array.isArray(l)) return [];
+  var set = {}, ud = [];
+  l.forEach(function(x){
+    var t = String(x || "").toLowerCase().trim().slice(0, 30);
+    if (t && !set[t]){ set[t] = 1; ud.push(t); }
+  });
+  return ud.slice(0, 6);
+}
 function normaliser(p, i){
   p = p && typeof p === "object" ? p : {};
   var ant = Number(p.portioner);
@@ -411,6 +423,7 @@ function normaliser(p, i){
   }
   return {
     grupper: normGrupper(p.grupper),
+    indhold: normIndhold(p.indhold),
     id: String(p.id != null ? p.id : "gl" + i),
     tid: typeof p.tid === "string" ? p.tid : "",
     navn: typeof p.navn === "string" && p.navn ? p.navn : "Måltid",
@@ -458,9 +471,9 @@ function bindPortioner(idAntal, felter, efter){
 /* Rettes beskrivelsen, regnes måltidet om ud fra den nye tekst. Det sker på
    tekstvejen, så det er et billigt kald uden foto. De gamle tal gemmes, så
    genberegningen kan fortrydes — den må ikke kunne overskrive noget uopretteligt. */
-var nyKommentar = null;
+var nyKommentar = null, nyGrupper = null, nyIndhold = null;
 function bindGenberegning(praefiks, dag, tid){
-  nyKommentar = null;
+  nyKommentar = null; nyGrupper = null; nyIndhold = null;
   var navnFelt = $(praefiks + "-navn");
   var status = $(praefiks + "-genstatus");
   if (!navnFelt || !status) return;
@@ -509,7 +522,16 @@ function bindGenberegning(praefiks, dag, tid){
       if (Number(r.gram)) saet("gram", Math.round(Number(r.gram)));
       if (katFelt && KATEGORIER.indexOf(r.kategori) >= 0) katFelt.value = r.kategori;
       if (S.ark && S.ark.r && r.kommentar) S.ark.r.kommentar = r.kommentar;
-      if (praefiks === "r") nyKommentar = r.kommentar || "";
+      /* Beskrivelsen er lige blevet skiftet ud, saa de gamle fodevaregruppe- og
+         indholds-tags hoerer til et andet maaltid og skal ikke folge med. */
+      if (S.ark && S.ark.r){ S.ark.r.grupper = normGrupper(r.grupper); S.ark.r.indhold = normIndhold(r.indhold); }
+      if (praefiks === "r"){
+        nyKommentar = r.kommentar || "";
+        nyGrupper = normGrupper(r.grupper);
+        nyIndhold = normIndhold(r.indhold);
+        var kv = $("r-kommentar-vis");
+        if (kv && nyKommentar){ kv.textContent = nyKommentar; kv.style.display = ""; }
+      }
 
       status.innerHTML = '<p class="grafnote" style="margin:7px 0 0">Tallene er regnet om'
         + (r.portion ? ' — regnet som ' + esc(r.portion) : "")
@@ -1729,6 +1751,12 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + '2 = en almindelig del af måltidet, 3 = udgør hovedparten af måltidet. Det bruges senere til '
     + 'at pege på fødevaregrupper der går igen, mangler, eller kun optræder i symbolske mængder '
     + 'over tid, så vurdér kun det der faktisk er i akkurat dette måltid.\n\n'
+    + 'Angiv desuden "indhold": en liste på højst 6 af de vigtigste enkeltbestanddele, hver som '
+    + 'et kort ord i grundform og ental, uden mængde, beholder eller tillægsord — skriv fødevaren '
+    + 'som den mest genkendelige overordnede betegnelse, ikke den præcise formulering, så samme '
+    + 'ting altid staves ens uanset hvordan det er beskrevet. Eksempel: "et glas vin", "glas rødvin" '
+    + 'og "vin" skal alle blive til "vin"; "en bøf" og "oksekød" bliver begge til "oksekød". '
+    + 'Vigtigste først.\n\n'
     + 'Er du i reel tvivl om noget, der flytter estimatet væsentligt — tilberedning, fedtstof, '
     + 'hvad der gemmer sig i retten, om et glas indeholder vand eller noget andet, hvor meget '
     + 'der reelt er spist — så stil op til 3 korte spørgsmål med 2-4 konkrete svarmuligheder hver. '
@@ -1751,6 +1779,7 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
     + '"grupper": {"fisk_skaldyr": 0-3, "roedt_koed": 0-3, "mejeri_aeg": 0-3, ' 
     + '"groent_blad": 0-3, "frugt_baer": 0-3, "fuldkorn_baelg": 0-3}, '
+    + '"indhold": ["kort normaliseret ord", "..."], '
     + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort sætning om det væsentligste forbehold", '
     + '"spoergsmaal": [{"tekst": "spørgsmålet", "valg": ["mulighed", "mulighed"]}]}\n\n'
     + (beskrivelse
@@ -2541,6 +2570,8 @@ function aabnRediger(dag, id){
     + '<p class="grafnote" style="margin:-8px 0 0">' + kortDato(dag)
     + (m.tid ? ' kl. ' + esc(m.tid) : "") + '</p>'
     + (m.billede ? '<img class="foto" src="' + m.billede + '" alt="" style="margin-top:14px">' : "")
+    + '<p class="overskrift" id="r-kommentar-vis" style="font-size:16px;margin:14px 0 0'
+    + (m.kommentar ? '" >' : ';display:none">') + esc(m.kommentar) + '</p>'
     + '<span class="lbl">Måltid</span>'
     + '<input id="r-navn" value="' + esc(m.navn) + '">'
     + '<div id="r-genstatus"></div>'
@@ -2616,7 +2647,8 @@ function aabnRediger(dag, id){
         kulhydrat_g: totaler.kulhydrat_g,
         fedt_g: totaler.fedt_g,
         genstande: totaler.genstande,
-        grupper: p.grupper,
+        grupper: nyGrupper !== null ? nyGrupper : p.grupper,
+        indhold: nyIndhold !== null ? nyIndhold : p.indhold,
         billede: p.billede
       }, 0);
       opdateret = ny;
@@ -2792,6 +2824,25 @@ function tegnTrends(){
     });
   }
 
+  /* indhold der gaar igen — talt paa normaliserede bestanddele, ikke raa
+     maaltidsnavne, saa "et glas vin", "glas vin" og "vin" taeller som eet */
+  var indholdTael = {};
+  a.poster.forEach(function(p){
+    (p.indhold || []).forEach(function(x){ indholdTael[x] = (indholdTael[x] || 0) + 1; });
+  });
+  var indholdTop = Object.keys(indholdTael).map(function(k){ return { navn:k, antal:indholdTael[k] }; })
+    .filter(function(x){ return x.antal >= 2; })
+    .sort(function(x, y){ return y.antal - x.antal; }).slice(0, 8);
+  if (indholdTop.length){
+    h += '<h2 class="sek">Indhold der går igen</h2>'
+      + '<p class="grafnote" style="margin-top:-4px">Talt på tværs af hvordan det er skrevet — “et glas vin” og “vin” tæller som det samme.</p>';
+    indholdTop.forEach(function(x){
+      h += '<div class="raekke" style="cursor:default"><span class="h">'
+        + '<span style="display:block;text-transform:capitalize">' + esc(x.navn) + '</span></span>'
+        + '<span class="s">' + x.antal + ' gange</span></div>';
+    });
+  }
+
   /* forslag */
   h += '<p class="gruppelabel">AI-vurdering af kosten</p>'
     + '<details class="afsnit"><summary id="sum-forslag">Lettere alternativer</summary>'
@@ -2926,11 +2977,15 @@ function byggBagudPrompt(saet){
     + 'fuldkorn/bælgfrugter/nødder. 0 = optræder slet ikke, 1 = kun som pynt eller i en lille '
     + 'mængde, 2 = en almindelig del af måltidet, 3 = udgør hovedparten. Er navnet for uspecifikt '
     + 'til at vide det — fx bare "Måltid" — sæt alle til 0 for det nummer frem for at gætte vildt.\n\n'
+    + 'Angiv desuden for hvert nummer "indhold": en liste på højst 6 vigtigste enkeltbestanddele, '
+    + 'hver som et kort ord i grundform og ental, uden mængde eller beholder, skrevet som den mest '
+    + 'genkendelige overordnede betegnelse — "et glas vin", "glas rødvin" og "vin" skal alle blive '
+    + 'til "vin" — så samme ting altid staves ens uanset formulering.\n\n'
     + 'Svar udelukkende med JSON, uden markdown, med præcis ' + saet.length + ' elementer i samme '
     + 'rækkefølge som listen:\n'
     + '{"vurderinger": [{"id": heltal — samme nummer som på listen, '
     + '"grupper": {"fisk_skaldyr": 0-3, "roedt_koed": 0-3, "mejeri_aeg": 0-3, "groent_blad": 0-3, '
-    + '"frugt_baer": 0-3, "fuldkorn_baelg": 0-3}}]}';
+    + '"frugt_baer": 0-3, "fuldkorn_baelg": 0-3}, "indhold": ["kort normaliseret ord", "..."]}]}';
 }
 
 function koerGrupperBagud(){
@@ -2948,12 +3003,13 @@ function koerGrupperBagud(){
         var kilde = saet[(Number(v.id) || 0) - 1];
         if (!kilde) return;
         pr_dag[kilde.dag] = pr_dag[kilde.dag] || {};
-        pr_dag[kilde.dag][kilde.id] = normGrupper(v.grupper);
+        pr_dag[kilde.dag][kilde.id] = { grupper:normGrupper(v.grupper), indhold:normIndhold(v.indhold) };
       });
       Object.keys(pr_dag).forEach(function(dag){
         var poster = hentDag(dag);
         poster.forEach(function(p){
-          if (pr_dag[dag][p.id]) p.grupper = pr_dag[dag][p.id];
+          var v = pr_dag[dag][p.id];
+          if (v){ p.grupper = v.grupper; p.indhold = v.indhold; }
         });
         gemDag(dag, poster);
       });
@@ -3634,6 +3690,7 @@ function tegnArk(){
       kulhydrat_g: Number($("f-kul").value) || 0,
       fedt_g: Number($("f-fedt").value) || 0,
       grupper: (a.r && a.r.grupper) || null,
+      indhold: (a.r && a.r.indhold) || [],
       billede: a.lille || null
     }, 0));
     gemDag(dag, poster);
