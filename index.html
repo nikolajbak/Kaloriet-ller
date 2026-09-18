@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 30;
+var APP_BUILD = 31;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1002,10 +1002,20 @@ function vaegtListe(){
     .map(function(d){ return { dag:d, kg:Number(v[d]) || 0 }; })
     .filter(function(x){ return x.kg > 0; });
 }
-function gemVaegt(dag, kg){
+/* Skriver kun lokalt, uden at markere til sky-synk — bruges naar en vaegt
+   allerede FINDES i skyen (fx hentet fra vaegtmaalinger), saa den ikke
+   unoedigt sendes tilbage igen. */
+function gemVaegtLokalt(dag, kg){
   var v = hentVaegte();
   if (kg > 0) v[dag] = Math.round(kg * 10) / 10; else delete v[dag];
   skriv(K_VAEGT, JSON.stringify(v));
+}
+/* Brugerens egen indtastning. Denne kaldte foer aldrig synkMaerk, saa en
+   vejning skrevet ind i appen blev aldrig sendt til skyen efter foerste
+   synk — rettet her, saa den foelger samme regel som resten af indstillinger. */
+function gemVaegt(dag, kg){
+  gemVaegtLokalt(dag, kg);
+  synkMaerk("#indst");
 }
 function gemProfil(aendring){
   S.profil = Object.assign({}, S.profil, aendring);
@@ -2511,7 +2521,7 @@ function tegnVaegt(){
   bindHoved();
   var bp = $("b-profil"); if (bp) bp.onclick = function(){ S.indst = true; tegn(); };
   var bt = $("b-brugtdee"); if (bt) bt.onclick = function(){
-    S.maal = Math.round(k.tdee); skriv(K_MAAL, String(S.maal)); tegn();
+    S.maal = Math.round(k.tdee); skriv(K_MAAL, String(S.maal)); synkMaerk("#indst"); tegn();
   };
   $("b-vejning").onclick = function(){ aabnVejning(S.iDag); };
   Array.prototype.forEach.call(document.querySelectorAll("[data-vdag]"), function(b){
@@ -4122,6 +4132,10 @@ function tegnIndstillinger(){
         skriv(K_NOEGLE, n);
       }
     }
+    /* Navn, maal og profil hoerte foer aldrig med i sky-synkroniseringen efter
+       foerste gang — kun selve dagbogen gjorde. Rettet: enhver aendring her
+       markeres nu til upload, ligesom en ny vejning eller et nyt maaltid. */
+    synkMaerk("#indst");
   }
 
   ["s-navn","s-kaek","s-maal","s-hoejde","s-alder","s-koen","s-akt","s-hensigt",
@@ -4883,6 +4897,21 @@ function synkSend(){
 
 /* Henter kun det, der er aendret siden sidst. Dage der ligger i koeen springes
    over: der er en lokal aendring, som endnu ikke er naaet frem. */
+/* Automatiske vejninger (fra Genveje/Sundhed via modtag-vaegt) fylder kun
+   dage der IKKE allerede har en vaegt lokalt — en manuel indtastning bliver
+   aldrig overskrevet stiltiende af en automatisk kilde. */
+function synkVaegteHent(){
+  var id = minId();
+  return sbRest("vaegtmaalinger?select=dato,kg&bruger_id=eq." + encodeURIComponent(id)).then(function(r){
+    var v = hentVaegte(), rort = false;
+    (r || []).forEach(function(x){
+      if (v[x.dato] != null) return;
+      gemVaegtLokalt(x.dato, Number(x.kg));
+      rort = true;
+    });
+    return rort;
+  }).catch(function(){ return false; });
+}
 function synkHent(){
   if (!session() || !navigator.onLine) return Promise.resolve(false);
   var sidst = laes(K_SYNKTID) || "1970-01-01T00:00:00Z";
@@ -4909,6 +4938,8 @@ function synkHent(){
         }
         return rort;
       }).catch(function(){ return rort; });
+  }).then(function(rort){
+    return synkVaegteHent().then(function(rort2){ return rort || rort2; });
   }).catch(function(){ return false; });
 }
 
