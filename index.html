@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 36;
+var APP_BUILD = 37;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2028,7 +2028,8 @@ function hentForslag(a){
    Et vaerktoej man aabner hver dag maa gerne vaere fraekt, ikke nedgoerende. */
 function tone(){
   var n = S.navn || "brugeren";
-  var brutal = S.kaekhed === "brutal";
+  var hudlos = S.kaekhed === "hudløs";
+  var brutal = hudlos || S.kaekhed === "brutal";
   var skarp = brutal || S.kaekhed === "skarp";
   return 'SPROG: skriv korrekt dansk med æ, ø og å. Aldrig aa, oe eller ae som erstatning.\n\n'
     + 'STEMME — dansk standup-register, tørt og observerende. Otte konkrete greb:\n'
@@ -2068,6 +2069,14 @@ function tone(){
           + 'stå i en hvilken som helst app og er derfor spildt.\n'
           + '12. GENTAG DIG ALDRIG. Du får en liste over det, du har sagt for nylig. Samme '
           + 'vits to gange er værre end ingen vits. Skift vinkel, billedsprog og opbygning.\n'
+        : '')
+    + (hudlos
+        ? '13. UDEN SPROGLIG BEGRÆNSNING. Doseringen i punkt 9 gælder ikke længere: bandeord '
+          + 'bruges lige så frit som i almindeligt dansk gadesprog — "fuck", "for satan", '
+          + '"skide-" som forstavelse — uden at tælles eller spares på. Sammenligninger og '
+          + 'billedsprog må være grafiske, absurde og ubehagelige, så længe de rammer '
+          + 'handlingen eller undskyldningen. Lad overdrivelsen gå hele vejen — stop ikke, før '
+          + 'den er blevet grotesk.\n'
         : '')
     + 'Du må drille ' + n + ' personligt: vaner, udflugter, optimistiske portionsvurderinger, '
     + 'gode forsætter der holdt en uge, og de forklaringer folk giver sig selv efter klokken 22.\n'
@@ -3985,13 +3994,14 @@ function tegnIndstillinger(){
     + '<input id="s-navn" value="' + esc(S.navn) + '" placeholder="Fornavn">'
     + '<span class="lbl">Kommentarer til måltiderne</span>'
     + '<select id="s-kaek">'
-    + [["brutal","Brutal — ingen fingre imellem"],["skarp","Skarp — kontant, må bande"],
-      ["kaek","Kæk — tør og venlig"],["fra","Ingen kommentarer"]]
+    + [["hudløs","Hudløs — fuldt Matthesen, intet filter"],["brutal","Brutal — ingen fingre imellem"],
+      ["skarp","Skarp — kontant, må bande"],["kaek","Kæk — tør og venlig"],["fra","Ingen kommentarer"]]
         .map(function(a){
           return '<option value="' + a[0] + '"' + (S.kaekhed === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
         }).join("") + '</select>'
-    + '<p class="grafnote" style="margin-top:7px">Brutal går hårdt til vaner, undskyldninger og '
-    + 'tallene på vægten. Den kommenterer ikke, hvordan du ser ud.</p>'
+    + '<p class="grafnote" style="margin-top:7px">Brutal og Hudløs går hårdt til vaner, '
+    + 'undskyldninger og tallene på vægten — Hudløs uden filter på sproget. Ingen af '
+    + 'niveauerne kommenterer, hvordan du ser ud.</p>'
     + '<span class="lbl">Dagligt mål (kalorier)</span>'
     + '<input id="s-maal" type="number" inputmode="numeric" value="' + S.maal + '">'
     + '<h3 style="margin:24px 0 0;font-size:15px">Profil</h3>'
