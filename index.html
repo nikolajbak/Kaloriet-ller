@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 37;
+var APP_BUILD = 38;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -351,7 +351,8 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail",
     K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb",
     K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_GAUTO = "kd:gemini-auto",
-    K_SYNKTID = "kd:synk-tid", K_SYNKKOE = "kd:synk-koe", K_SYNKSTAND = "kd:synk-stand";
+    K_SYNKTID = "kd:synk-tid", K_SYNKKOE = "kd:synk-koe", K_SYNKSTAND = "kd:synk-stand",
+    K_MEDICIN = "kd:medicin";
 var reserve = {};
 
 function laes(k){
@@ -874,6 +875,7 @@ var S = {
     return v;
   })(),
   get kaek(){ return this.kaekhed !== "fra"; },
+  medicin: (function(){ try { return JSON.parse(laes(K_MEDICIN) || "{}") || {}; } catch(e){ return {}; } })(),
   skaerm: "idag",
   skiftRetning: null,
   bruger: null,
@@ -2095,6 +2097,38 @@ function tone(){
           + 'sundhedsprædiken — heller ikke forklædt som en vits.');
 }
 
+/* Morgenpaamindelse om medicin/kosttilskud. Genereres KLIENT-SIDE (ikke i
+   cron-jobbet), fordi Anthropic-noeglen kun findes i browseren. Resultatet
+   (en pulje af faerdige tekster) gemmes i indstillingerne og trækkes fra
+   tilfældigt af serveren hver morgen kl. 07 — ingen API-noegle skal ligge
+   paa serveren, og ingen kald skal ske hver dag. */
+function medicinPrompt(beskrivelse, n){
+  var navn = S.navn || "brugeren";
+  return tone() + '\n\n'
+    + 'OPGAVE: Skriv ' + n + ' forskellige, korte morgenpåmindelser (hver højst 18 ord) der minder '
+    + navn + ' om at tage det følgende, i tonen beskrevet ovenfor. Det, der skal tages, er:\n'
+    + '"' + beskrivelse + '"\n\n'
+    + 'REGLER:\n'
+    + '1. Fordel forslagene, så nogle nævner ét enkelt punkt fra listen og andre nævner flere.\n'
+    + '2. Opfind ALDRIG doser, klokkeslæt eller yderligere piller/kosttilskud, der ikke står i '
+    + 'beskrivelsen. Brug kun det, der faktisk er skrevet.\n'
+    + '3. Vitsen må gå på formen, glemsomheden eller morgenrutinen — aldrig på at det er '
+    + 'ligegyldigt, eller at man lige så godt kan springe det over.\n'
+    + '4. Ingen sundhedsråd, ingen bivirkningsadvarsler, ingen opfordring til at kontakte læge — '
+    + 'kun selve påmindelsen.\n\n'
+    + 'FORMAT: svar KUN med gyldig JSON, præcis ' + n + ' strenge: {"forslag": ["...", "..."]}';
+}
+function medicinGenerer(beskrivelse){
+  return kald({ model:S.model, max_tokens:700, messages:[{ role:"user", content: medicinPrompt(beskrivelse, 10) }] })
+    .then(function(pakke){
+      if (!pakke || !pakke.forslag || !pakke.forslag.length) throw new Error("Kunne ikke generere forslag. Prøv igen.");
+      S.medicin = { aktiv:true, beskrivelse:beskrivelse, forslag:pakke.forslag };
+      skriv(K_MEDICIN, JSON.stringify(S.medicin));
+      synkMaerk("#indst");
+      return S.medicin;
+    });
+}
+
 /* De officielle danske kostraad og Sundhedsstyrelsens tilskudsanbefalinger.
    Samlet et sted, saa baade maaltidsforslag og tilskudsvurdering hviler paa
    samme grundlag i stedet for at improvisere. */
@@ -3192,6 +3226,22 @@ function tegnKonto(){
         ? '<button class="knap sek" id="konto-pushfra" style="margin-top:12px">Slå notifikationer fra</button>'
         : '<button class="knap sek" id="konto-pushtil" style="margin-top:12px">Slå notifikationer til</button>')
     + '<button class="knap sek" id="konto-ud" style="margin-top:8px">Log ud</button>'
+    + '<div style="margin-top:18px;border-top:1px solid var(--linje,#333);padding-top:14px">'
+    + '<span class="lbl">Morgenpåmindelse kl. 07 — medicin/kosttilskud</span>'
+    + (laes(K_PUSH)
+        ? ('<label style="display:flex;align-items:center;gap:8px;margin:6px 0">'
+            + '<input type="checkbox" id="konto-med-aktiv"' + (S.medicin.aktiv ? " checked" : "") + '> '
+            + 'Send mig en daglig påmindelse</label>'
+          + '<textarea id="konto-med-besk" rows="3" placeholder="Fx: Magnesium om morgenen. '
+          + 'D-vitamin. Blodtryksmedicin (Amlodipin) kl. 8 med mad.">' + esc(S.medicin.beskrivelse || "") + '</textarea>'
+          + '<button class="knap sek" id="konto-med-gen" style="margin-top:8px">'
+          + (S.medicin.forslag && S.medicin.forslag.length ? "Generér nye forslag" : "Generér påmindelser") + '</button>'
+          + (S.medicin.forslag && S.medicin.forslag.length
+              ? '<p class="grafnote" style="margin-top:6px">' + S.medicin.forslag.length + ' varianter klar, fx: '
+                + '"' + esc(S.medicin.forslag[0]) + '"</p>'
+              : ''))
+        : '<p class="grafnote" style="margin-top:6px">Kræver at notifikationer er slået til ovenfor.</p>')
+    + '</div>'
     + '<div id="konto-besked"></div>';
 
   var pt = $("konto-pushtil");
@@ -3204,6 +3254,26 @@ function tegnKonto(){
   if (pf) pf.onclick = function(){
     pf.disabled = true;
     slaaPushFra().then(function(){ tegnKonto(); skriv_besked("Notifikationer er slået fra."); });
+  };
+  var ma = $("konto-med-aktiv");
+  if (ma) ma.onchange = function(){
+    S.medicin = S.medicin || {};
+    S.medicin.aktiv = ma.checked;
+    skriv(K_MEDICIN, JSON.stringify(S.medicin));
+    synkMaerk("#indst");
+  };
+  var mg = $("konto-med-gen");
+  if (mg) mg.onclick = function(){
+    var tekst = (($("konto-med-besk") || {}).value || "").trim();
+    if (!tekst){ skriv_besked("Skriv først, hvad du tager.", true); return; }
+    mg.textContent = "Genererer …"; mg.disabled = true;
+    medicinGenerer(tekst).then(function(){
+      tegnKonto();
+      skriv_besked("Påmindelser genereret.");
+    }).catch(function(e){
+      skriv_besked(e.message, true);
+      mg.textContent = "Generér påmindelser"; mg.disabled = false;
+    });
   };
   $("konto-ud").onclick = function(){ logUd(); tegnKonto(); };
 }
@@ -4240,6 +4310,7 @@ function tegnIndstillinger(){
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
     aktivNoegle = null; aktivKode = null;
     S.navn = ""; S.kaekhed = "brutal"; S.profil = {};
+    S.medicin = {};
     S.forslag = null; S.forslagStatus = "tom";
     var o = $("ind-overlay"); if (o) o.remove();
     tegn();
@@ -4871,7 +4942,7 @@ function synkTekst(){
 }
 
 function indstPakke(){
-  return { maal:S.maal, navn:S.navn, profil:S.profil, vaegte:hentVaegte() };
+  return { maal:S.maal, navn:S.navn, profil:S.profil, vaegte:hentVaegte(), medicin:S.medicin || {} };
 }
 
 /* Alle koeede dage sendes i eet kald. Lykkes det ikke, bliver de staaende i
@@ -4948,6 +5019,7 @@ function synkHent(){
           if (d.profil){ S.profil = d.profil; skriv(K_PROFIL, JSON.stringify(d.profil)); }
           if (d.maal){ S.maal = d.maal; skriv(K_MAAL, String(d.maal)); }
           if (d.navn){ S.navn = d.navn; skriv(K_BRUGER, d.navn); }
+          if (d.medicin){ S.medicin = d.medicin; skriv(K_MEDICIN, JSON.stringify(d.medicin)); }
           rort = true;
         }
         return rort;
