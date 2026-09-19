@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 35;
+var APP_BUILD = 36;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2517,12 +2517,7 @@ function tegnVaegt(){
 
   /* Personlig Genveje-fil med egen noegle indbagt. Kun de to kendte konti har
      faaet en bygget — findes brugernavnet ikke her, springes linket over. */
-  var GENVEJ_FIL = { nikolajbak:"genvej-nikolajbak.shortcut", annepande:"genvej-annepande.shortcut" };
-  var egenGenvej = S.bruger && GENVEJ_FIL[S.bruger.brugernavn];
-  if (egenGenvej){
-    h += '<p class="fodnote"><button class="txtknap" id="b-delgenvej">Send automatisk vejning til Genveje</button> '
-      + '— åbner Del-arket, hvor du vælger Genveje. Din nøgle er allerede lagt ind.</p>';
-  }
+
 
   h += '</div><div class="bund"><div class="bundindhold">'
     + '<button class="knap" id="b-vejning">Registrér vægt</button></div></div>';
@@ -2533,25 +2528,6 @@ function tegnVaegt(){
     S.maal = Math.round(k.tdee); skriv(K_MAAL, String(S.maal)); synkMaerk("#indst"); tegn();
   };
   $("b-vejning").onclick = function(){ aabnVejning(S.iDag); };
-  var bd = $("b-delgenvej");
-  if (bd) bd.onclick = function(){
-    bd.disabled = true; var oprindelig = bd.textContent; bd.textContent = "Henter …";
-    fetch("./" + egenGenvej).then(function(r){
-      if (!r.ok) throw new Error("http " + r.status);
-      return r.blob();
-    }).then(function(blob){
-      var fil = new File([blob], egenGenvej, { type: "application/octet-stream" });
-      if (navigator.canShare && navigator.canShare({ files:[fil] })){
-        return navigator.share({ files:[fil] });
-      }
-      /* Reserve til browsere uden Del-filer (fx paa en computer) */
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = egenGenvej; a.click();
-      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
-    }).catch(function(e){
-      if (e && e.name !== "AbortError") alert("Kunne ikke hente genvejsfilen: " + e.message);
-    }).then(function(){ bd.disabled = false; bd.textContent = oprindelig; });
-  };
   Array.prototype.forEach.call(document.querySelectorAll("[data-vdag]"), function(b){
     b.onclick = function(){ aabnVejning(b.getAttribute("data-vdag")); };
   });
