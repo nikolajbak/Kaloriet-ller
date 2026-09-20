@@ -192,12 +192,6 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   text-align:center;padding:0 20px;line-height:1.35;}
 .opskrift .kilde{font-size:12px;color:var(--daempet);margin-top:5px;}
 .opskrift .kilde a{color:var(--daempet);}
-.snap{display:flex;justify-content:space-between;align-items:center;gap:12px;
-  border-bottom:1px solid var(--linje);padding:11px 2px;font-size:14px;}
-.snap .n{flex:1;min-width:0;}
-.snap .u{font-size:12px;color:var(--daempet);margin-top:2px;}
-.snap button{flex:none;background:none;border:1px solid var(--linje);border-radius:8px;
-  padding:7px 11px;font:inherit;font-size:13px;color:var(--gron);cursor:pointer;}
 .opskrift .fakta{display:flex;gap:18px;font-size:13px;color:var(--daempet);margin-top:11px;}
 .opskrift .fakta b{color:var(--blaek);font-weight:600;}
 .opskrift h4{font-size:13px;color:var(--daempet);margin:15px 0 7px;font-weight:600;}
@@ -320,7 +314,6 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <h1 class="skjul">Kaloriedagbog</h1>
 <div id="rod"></div>
 <input type="file" id="fil" accept="image/*" capture="environment" class="skjul">
-<input type="file" id="importfil" accept="application/json,.json" class="skjul">
 
 <script>
 "use strict";
@@ -330,7 +323,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 43;
+var APP_BUILD = 44;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -345,8 +338,6 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek",
     K_LAAS = "kd:laas", K_LAASTID = "kd:laastid", K_FEJL = "kd:fejl",
     K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash",
-    P_SNAP = "kd:snap:", K_EKSPORT = "kd:sidste-eksport",
-    K_SKYURL = "kd:sky-url", K_SKYTID = "kd:sky-tid", K_SKYSTAND = "kd:sky-stand",
     K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret",
     K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail",
     K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb",
@@ -620,143 +611,8 @@ function gemDagLokalt(noegle, poster){
     })));
   }
 }
-/* ================= Sikkerhedskopier =================
-   Automatiske oejebliksbilleder i browserens eget lager. De redder mod fejlklik og
-   fejl i appen, men ikke mod at lageret ryddes eller telefonen gaar tabt — dertil
-   skal filen ud af telefonen. Billeder gemmes ikke med, da de fylder alt. */
-
-var MAKS_SNAP = 6;
-
-function snapNoegler(){
-  return alleNoegler().filter(function(k){ return k.indexOf(P_SNAP) === 0; })
-    .sort(function(a, b){ return Number(a.slice(P_SNAP.length)) - Number(b.slice(P_SNAP.length)); });
-}
-function snapListe(){
-  return snapNoegler().map(function(k){
-    var d = null;
-    try { d = JSON.parse(laes(k) || "null"); } catch(e){}
-    if (!d) return null;
-    var dage = Object.keys(d.dage || {});
-    var maaltider = dage.reduce(function(a, n){ return a + (d.dage[n] || []).length; }, 0);
-    return { noegle:k, tid:Number(k.slice(P_SNAP.length)), aarsag:d.aarsag || "",
-             dage:dage.length, maaltider:maaltider, vejninger:Object.keys(d.vaegte || {}).length };
-  }).filter(Boolean).reverse();
-}
-
-/* Naar der ryddes ud, fjernes den kopi der ligger taettest paa sin nabo i tid.
-   Saa beholdes automatisk baade en helt frisk og nogle aeldre. */
-function ryddSnaps(){
-  var n = snapNoegler();
-  while (n.length > MAKS_SNAP){
-    var bedst = 1, mindst = Infinity;
-    for (var i = 1; i < n.length - 1; i++){
-      var afstand = Number(n[i+1].slice(P_SNAP.length)) - Number(n[i-1].slice(P_SNAP.length));
-      if (afstand < mindst){ mindst = afstand; bedst = i; }
-    }
-    fjern(n[bedst]);
-    n.splice(bedst, 1);
-  }
-}
-function tagSnap(aarsag, tvunget){
-  var n = snapNoegler();
-  var nyeste = n.length ? Number(n[n.length-1].slice(P_SNAP.length)) : 0;
-  if (!tvunget && Date.now() - nyeste < 20 * 3600 * 1000) return false;
-
-  var dage = {}, antal = 0;
-  dagNoegler().forEach(function(k){
-    var d = k.slice(P_DAG.length);
-    dage[d] = hentDag(d).map(function(p){
-      var kopi = Object.assign({}, p);
-      delete kopi.billede;
-      return kopi;
-    });
-    antal += dage[d].length;
-  });
-  if (!antal && !tvunget) return false;
-
-  var pakke = { v:SKEMA, aarsag:aarsag || "", maal:S.maal, navn:S.navn,
-                profil:S.profil, vaegte:hentVaegte(), dage:dage };
-  var svar = skriv(P_SNAP + Date.now(), JSON.stringify(pakke));
-  if (svar === "fuld"){
-    var gamle = snapNoegler();
-    if (gamle.length){ fjern(gamle[0]); return tagSnap(aarsag, tvunget); }
-    return false;
-  }
-  ryddSnaps();
-  return true;
-}
-function gendanSnap(noegle){
-  var d;
-  try { d = JSON.parse(laes(noegle) || "null"); } catch(e){ return false; }
-  if (!d || !d.dage) return false;
-  tagSnap("før gendannelse", true);
-  dagNoegler().forEach(fjern);
-  Object.keys(d.dage).forEach(function(n){ gemDag(n, (d.dage[n] || []).map(normaliser)); });
-  if (d.vaegte) skriv(K_VAEGT, JSON.stringify(d.vaegte));
-  if (d.profil){ S.profil = d.profil; skriv(K_PROFIL, JSON.stringify(d.profil)); }
-  if (d.maal){ S.maal = d.maal; skriv(K_MAAL, String(d.maal)); }
-  if (d.navn){ S.navn = d.navn; skriv(K_BRUGER, d.navn); }
-  return true;
-}
-/* Hele dagbogen som en pakke — bruges baade til filen og til afsendelsen */
-function backuppakke(){
-  var ud = { type:"kaloriedagbog", skema:SKEMA, tid:new Date().toISOString(),
-             maal:S.maal, navn:S.navn, profil:S.profil, vaegte:hentVaegte(), dage:{} };
-  dageMedData().forEach(function(n){
-    ud.dage[n] = hentDag(n).map(function(p){
-      var k = Object.assign({}, p); delete k.billede; return k;
-    });
-  });
-  return ud;
-}
-
-/* Automatisk kopi ud af telefonen. Safari kan ikke skrive en fil af sig selv —
-   Apple understoetter ikke File System Access API — saa kopien sendes i stedet
-   til en adresse, brugeren selv opretter. */
-function sendTilSky(tvunget){
-  var url = laes(K_SKYURL);
-  if (!url) return Promise.resolve(null);
-  var sidst = Number(laes(K_SKYTID)) || 0;
-  if (!tvunget && Date.now() - sidst < 20 * 3600 * 1000) return Promise.resolve(null);
-
-  var krop = JSON.stringify(backuppakke());
-  function noter(stand){
-    skriv(K_SKYTID, String(Date.now()));
-    skriv(K_SKYSTAND, stand);
-    return stand;
-  }
-  /* Foerst et almindeligt kald, saa svaret kan laeses. Svarer modtageren uden
-     CORS-hoveder, sendes det i blinde bagefter — det naar frem, men kan ikke bekraeftes. */
-  return fetch(url, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:krop })
-    .then(function(r){ return noter(r.ok ? "bekraeftet" : "afvist"); })
-    .catch(function(){
-      return fetch(url, { method:"POST", mode:"no-cors",
-                          headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:krop })
-        .then(function(){ return noter("ubekraeftet"); })
-        .catch(function(){ return noter("fejlet"); });
-    });
-}
-function skyTekst(){
-  if (!laes(K_SKYURL)) return "";
-  var stand = laes(K_SKYSTAND), t = Number(laes(K_SKYTID)) || 0;
-  if (!t) return "Endnu ikke sendt.";
-  var d = new Date(t);
-  var naar = d.toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + " kl. "
-           + d.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"});
-  if (stand === "bekraeftet") return "Sendt og bekræftet " + naar + ".";
-  if (stand === "ubekraeftet") return "Sendt " + naar + ", men modtageren svarer ikke tilbage. Tjek mappen den første gang.";
-  if (stand === "afvist") return "Modtageren afviste kopien " + naar + ".";
-  return "Afsendelsen fejlede " + naar + ".";
-}
-
-function dageSidenEksport(){
-  var t = Number(laes(K_EKSPORT)) || 0;
-  return t ? Math.floor((Date.now() - t) / 86400000) : null;
-}
-
 function migrer(){
   var fra = Number(laes(K_SKEMA)) || 1;
-  if (fra !== SKEMA) tagSnap("før opdatering af dataformat", true);
   if (fra < 5){
     dagNoegler().forEach(function(k){
       var n = k.slice(P_DAG.length);
@@ -2121,20 +1977,6 @@ function medicinGem(slot, aktiv, klokkeslaet, beskrivelse){
   skriv(K_MEDICIN, JSON.stringify(S.medicin));
   synkMaerk("#indst");
 }
-function medicinForhaandsvisning(beskrivelse){
-  var navn = S.navn || "brugeren";
-  var p = tone() + '\n\n'
-    + 'OPGAVE: Skriv ÉN kort påmindelse (højst 18 ord) der minder ' + navn
-    + ' om at tage det følgende, i tonen beskrevet ovenfor:\n"' + beskrivelse + '"\n\n'
-    + 'REGLER: opfind ALDRIG doser, klokkeslæt eller yderligere piller/kosttilskud, der ikke '
-    + 'står i beskrivelsen. Ingen sundhedsråd, ingen bivirkningsadvarsler — kun selve påmindelsen.\n\n'
-    + 'FORMAT: svar KUN med gyldig JSON: {"tekst": "..."}';
-  return kald({ model:S.model, max_tokens:200, messages:[{ role:"user", content: p }] })
-    .then(function(pakke){
-      if (!pakke || !pakke.tekst) throw new Error("Kunne ikke generere en forhåndsvisning. Prøv igen.");
-      return pakke.tekst;
-    });
-}
 
 /* De officielle danske kostraad og Sundhedsstyrelsens tilskudsanbefalinger.
    Samlet et sted, saa baade maaltidsforslag og tilskudsvurdering hviler paa
@@ -3132,10 +2974,8 @@ function medicinSlotKort(slot, titel){
         : '<span class="raekke u" style="padding:0">kl. ' + esc(tid) + '</span>')
     + '</label>'
     + (s.aktiv
-        ? ('<textarea id="konto-med-' + slot + '-besk" rows="2" style="margin-top:10px" placeholder="Fx: Magnesium, D-vitamin">'
-            + esc(s.beskrivelse || "") + '</textarea>'
-          + '<button type="button" class="mini" id="konto-med-' + slot + '-preview">Se eksempel</button>'
-          + '<div id="konto-med-' + slot + '-eksempel"></div>')
+        ? '<textarea id="konto-med-' + slot + '-besk" rows="2" style="margin-top:10px" placeholder="Fx: Magnesium, D-vitamin">'
+          + esc(s.beskrivelse || "") + '</textarea>'
         : '')
     + '</div>';
 }
@@ -3289,20 +3129,6 @@ function tegnKonto(){
     };
     if (mb) mb.onchange = function(){
       medicinGem(slot, ma.checked, (mt || {}).value, mb.value);
-    };
-    var mp = $("konto-med-" + slot + "-preview");
-    if (mp) mp.onclick = function(){
-      var tekst = ((mb || {}).value || "").trim();
-      if (!tekst){ skriv_besked("Skriv først, hvad du tager.", true); return; }
-      mp.textContent = "Genererer …"; mp.disabled = true;
-      medicinForhaandsvisning(tekst).then(function(eksempel){
-        var e = $("konto-med-" + slot + "-eksempel");
-        if (e) e.innerHTML = '<p class="kom">"' + esc(eksempel) + '"</p>';
-        mp.textContent = "Se eksempel"; mp.disabled = false;
-      }).catch(function(e){
-        skriv_besked(e.message, true);
-        mp.textContent = "Se eksempel"; mp.disabled = false;
-      });
     };
   });
   $("konto-ud").onclick = function(){ logUd(); tegnKonto(); };
@@ -3970,20 +3796,6 @@ function lukArk(){
 }
 
 /* --- Indstillinger --- */
-function snapHtml(){
-  var liste = snapListe();
-  if (!liste.length) return '<div class="tom" style="padding:14px 16px">Der er ikke taget nogen kopi endnu.</div>';
-  return liste.map(function(x){
-    var d = new Date(x.tid);
-    return '<div class="snap"><span class="n">'
-      + d.toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + " kl. "
-      + d.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"})
-      + '<span class="u">' + x.dage + ' dage · ' + x.maaltider + ' måltider · '
-      + x.vejninger + ' vejninger' + (x.aarsag ? ' · ' + esc(x.aarsag) : "") + '</span></span>'
-      + '<button data-snap="' + esc(x.noegle) + '">Gendan</button></div>';
-  }).join("");
-}
-
 /* <details> lukker uden animation af sig selv — browseren river indholdet ud med det
    samme. Derfor styres hoejden herfra, saa den folder lige saa blodt sammen som ud. */
 function bindFoldning(rod){
@@ -4155,32 +3967,6 @@ function tegnIndstillinger(){
     + '<span class="lbl">Unsplash-nøgle til billeder (valgfri — der ligger en i appen)</span>'
     + '<input id="s-unsplash" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Uændret">'
     + '<div class="note">' + esc(synkTekst()) + ' Nøglen bliver liggende på telefonen ved opdateringer — du skal kun taste den igen, hvis appen flytter til en ny adresse.</div>'
-    + '<div class="tjek"><input type="checkbox" id="s-medn"><label for="s-medn">Tag nøglen med i sikkerhedskopien, så en ny telefon er klar med det samme</label></div>'
-
-    + '</div></details>'
-    + '<details class="afsnit"><summary>Sikkerhedskopier</summary><div>'
-    + '<p class="grafnote" style="margin:6px 0 10px">Appen tager selv en kopi hver dag og altid før '
-    + 'noget slettes eller dataformatet ændres. Kopierne ligger i browseren og indeholder tal, '
-    + 'ikke billeder. Ryddes browserens data, eller mistes telefonen, ryger de med — så gem en '
-    + 'fil ud af telefonen en gang imellem.</p>'
-    + snapHtml()
-    + (function(){
-        var d = dageSidenEksport();
-        if (d === null) return '<div class="note">Du har aldrig gemt en kopi ud af telefonen.</div>';
-        if (d >= 30) return '<div class="note">Seneste kopi ud af telefonen er ' + d + ' dage gammel.</div>';
-        return '<p class="grafnote">Seneste kopi ud af telefonen: for ' + d + ' dage siden.</p>';
-      })()
-    + '<span class="lbl">Adresse til automatisk kopi (valgfri)</span>'
-    + '<input id="s-skyurl" autocomplete="off" autocapitalize="off" spellcheck="false" '
-    + 'value="' + esc(laes(K_SKYURL) || "") + '" placeholder="https://script.google.com/...">'
-    + (laes(K_SKYURL)
-        ? '<p class="grafnote" style="margin-top:7px">' + esc(skyTekst()) + '</p>'
-          + '<button class="knap sek" id="s-skynu" style="margin-top:8px">Send kopi nu</button>'
-        : '<p class="grafnote" style="margin-top:7px">Sættes der en adresse ind, sender appen selv '
-          + 'en kopi én gang i døgnet. Uden adresse skal filen gemmes manuelt.</p>')
-    + '<button class="knap sek" id="s-eksport" style="margin-top:8px">Gem fil i Filer-appen</button>'
-    + '<button class="knap sek" id="s-import" style="margin-top:8px">Indlæs sikkerhedskopi</button>'
-    + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data</button>'
     + '</div></details>'
     + '<details class="afsnit"><summary>Sikkerhed</summary><div>'
     + '<p class="grafnote" style="margin:6px 0 0">Koden krypterer din API-nøgle. Uden den ligger '
@@ -4201,6 +3987,7 @@ function tegnIndstillinger(){
     + '<div class="bundfelt">'
     + '<button class="knap" id="s-gem">Gem</button>'
     + '<button class="knap sek" id="s-opdater" style="margin-top:8px">Søg efter opdatering</button>'
+    + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data på denne telefon</button>'
     + '<p class="fodnote" style="text-align:center;margin-top:12px">Version ' + APP_VERSION
     + ' (build ' + APP_BUILD + ') · ' + forbrugDenneMaaned() + ' analyser denne måned</p>'
     + '</div></div></div>';
@@ -4228,11 +4015,6 @@ function tegnIndstillinger(){
     S.maal = Number($("s-maal").value) || 0;
     S.model = $("s-model").value;
     skriv(K_MAAL, String(S.maal)); skriv(K_MODEL, S.model);
-    var su = $("s-skyurl");
-    if (su){
-      var v = su.value.trim();
-      if (v) skriv(K_SKYURL, v); else fjern(K_SKYURL);
-    }
     var us = $("s-unsplash").value.trim();
     if (us) skriv(K_UNSPLASH, us);
     var uv = $("s-udbyder"); if (uv) skriv(K_UDBYDER, uv.value);
@@ -4264,43 +4046,6 @@ function tegnIndstillinger(){
     gemFelter();
     luk();
   };
-  $("s-eksport").onclick = function(){
-    var ud = backuppakke();
-    if ($("s-medn").checked){
-      if (harLaas()) ud.laas = laasPakke();      /* stadig beskyttet af koden */
-      else ud.noegle = aktivNoegle || laes(K_NOEGLE) || "";
-    }
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(ud)], {type:"application/json"}));
-    a.download = "kaloriedagbog-" + S.iDag + ".json";
-    a.click();
-    skriv(K_EKSPORT, String(Date.now()));
-    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
-  };
-  $("s-import").onclick = function(){ tagSnap("før indlæsning af kopi", true); $("importfil").click(); };
-  var sn = $("s-skynu"); if (sn) sn.onclick = function(){
-    sn.textContent = "Sender …"; sn.disabled = true;
-    sendTilSky(true).then(function(){
-      sn.textContent = "Sendt"; 
-      setTimeout(function(){ if (S.indst) tegnIndstillinger(); }, 900);
-    });
-  };
-  Array.prototype.forEach.call(document.querySelectorAll("[data-snap]"), function(b){
-    b.onclick = function(){
-      var n = b.getAttribute("data-snap");
-      if (!confirm("Gendan denne kopi?\n\nDagbogen bliver erstattet af kopiens indhold. "
-        + "Der tages en kopi af det nuværende først, så det kan fortrydes.")) return;
-      if (gendanSnap(n)){
-        S.indst = false;
-        var o = $("ind-overlay"); if (o) o.remove();
-        nulstilAfledt();
-        tegn();
-        alert("Kopien er gendannet.");
-      } else {
-        alert("Kopien kunne ikke læses.");
-      }
-    };
-  });
   bindFoldning($("ind-overlay"));
   bindTraekNed("ind-overlay", luk);
   tegnKonto();
@@ -4330,13 +4075,11 @@ function tegnIndstillinger(){
     });
   };
   $("s-nulstil").onclick = function(){
-    if (!confirm("Slet alle måltider og indstillinger på denne telefon?\n\n"
-      + "Der bliver taget en sikkerhedskopi først, så det kan fortrydes under Sikkerhedskopier.")) return;
-    tagSnap("før alt blev slettet", true);
-    var beholdt = {};
-    snapNoegler().forEach(function(k){ beholdt[k] = laes(k); });
+    var kanHentes = session();
+    if (!confirm(kanHentes
+      ? "Slet alle måltider og indstillinger på denne telefon?\n\nDu er logget ind, så det, der er synkroniseret til din konto, hentes automatisk ned igen, når du logger ind på denne eller en anden telefon bagefter."
+      : "Slet alle måltider og indstillinger på denne telefon?\n\nDu er ikke logget ind, så intet er sikret andre steder — dette kan ikke fortrydes.")) return;
     alleNoegler().filter(function(k){ return k.indexOf("kd:") === 0; }).forEach(fjern);
-    Object.keys(beholdt).forEach(function(k){ skriv(k, beholdt[k]); });
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
     aktivNoegle = null; aktivKode = null;
     S.navn = ""; S.kaekhed = "brutal"; S.profil = {};
@@ -4871,36 +4614,6 @@ $("fil").onchange = function(e){
   });
 };
 
-$("importfil").onchange = function(e){
-  var file = e.target.files && e.target.files[0];
-  e.target.value = "";
-  if (!file) return;
-  var fr = new FileReader();
-  fr.onload = function(){
-    try {
-      var d = JSON.parse(fr.result);
-      if (!d || !d.dage) throw new Error("format");
-      Object.keys(d.dage).forEach(function(k){
-        if (!hentDag(k).length) gemDag(k, (d.dage[k] || []).map(normaliser));
-      });
-      if (d.maal){ S.maal = d.maal; skriv(K_MAAL, String(d.maal)); }
-      if (d.navn && !laes(K_BRUGER)){ S.navn = d.navn; skriv(K_BRUGER, d.navn); }
-      if (d.profil) gemProfil(d.profil);
-      if (d.vaegte){
-        var v = hentVaegte();
-        Object.keys(d.vaegte).forEach(function(k){ if (!v[k]) v[k] = d.vaegte[k]; });
-        skriv(K_VAEGT, JSON.stringify(v));
-      }
-      if (d.noegle && !laes(K_NOEGLE) && !harLaas()) skriv(K_NOEGLE, d.noegle);
-      if (d.laas && !harLaas() && !laes(K_NOEGLE)) skriv(K_LAAS, JSON.stringify(d.laas));
-      S.indst = false;
-      var o = $("ind-overlay"); if (o) o.remove();
-      tegn();
-      alert("Sikkerhedskopien er indlæst.");
-    } catch(err){ alert("Filen kunne ikke læses som en sikkerhedskopi."); }
-  };
-  fr.readAsText(file);
-};
 
 var skjultSiden = 0;
 document.addEventListener("visibilitychange", function(){
@@ -5081,8 +4794,6 @@ document.addEventListener("visibilitychange", function(){
 });
 
 migrer();
-tagSnap("dagligt", false);
-sendTilSky(false);
 visForbindelse();
 if (!harLaas()) aktivNoegle = laes(K_NOEGLE);
 tegn();
