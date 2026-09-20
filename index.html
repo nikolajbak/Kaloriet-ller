@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 41;
+var APP_BUILD = 42;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -3117,21 +3117,24 @@ function tegnTilskud(a){
 }
 
 /* --- Kontoafsnittet i indstillinger --- */
-function medicinSlotHtml(slot, titel){
+function medicinSlotRad(slot, label){
   var s = (S.medicin && S.medicin[slot]) || { aktiv:false, klokkeslaet: slot === "aften" ? "20:00" : "07:00", beskrivelse:"" };
+  return '<div style="margin-top:10px">'
+    + '<label style="display:flex;align-items:center;gap:8px">'
+    + '<input type="checkbox" id="konto-med-' + slot + '-aktiv"' + (s.aktiv ? " checked" : "") + '> '
+    + label + ' kl. '
+    + '<input type="time" id="konto-med-' + slot + '-tid" value="' + esc(s.klokkeslaet) + '" style="width:auto"></label>'
+    + '<textarea id="konto-med-' + slot + '-besk" rows="2" style="margin-top:4px" placeholder="Fx: Magnesium, D-vitamin">'
+    + esc(s.beskrivelse || "") + '</textarea>'
+    + '<button class="knap sek" id="konto-med-' + slot + '-preview" style="margin-top:4px;font-size:13px">Eksempel</button>'
+    + '<div id="konto-med-' + slot + '-eksempel"></div>'
+    + '</div>';
+}
+function medicinBlok(){
   return '<div style="margin-top:18px;border-top:1px solid var(--linje,#333);padding-top:14px">'
-    + '<span class="lbl">' + titel + '</span>'
+    + '<span class="lbl">Medicin/kosttilskud-påmindelser</span>'
     + (laes(K_PUSH)
-        ? ('<label style="display:flex;align-items:center;gap:8px;margin:6px 0">'
-            + '<input type="checkbox" id="konto-med-' + slot + '-aktiv"' + (s.aktiv ? " checked" : "") + '> '
-            + 'Send mig en daglig påmindelse kl. '
-            + '<input type="time" id="konto-med-' + slot + '-tid" value="' + esc(s.klokkeslaet) + '" style="width:auto"></label>'
-          + '<textarea id="konto-med-' + slot + '-besk" rows="3" placeholder="Fx: Magnesium. D-vitamin. '
-          + 'Blodtryksmedicin (Amlodipin) med mad.">' + esc(s.beskrivelse || "") + '</textarea>'
-          + '<p class="grafnote" style="margin-top:6px">Gemmes automatisk. Selve teksten skrives friskt hver gang '
-          + 'ud fra ugedag, årstid og dagbogen — den lyder ikke ens to dage i træk.</p>'
-          + '<button class="knap sek" id="konto-med-' + slot + '-preview" style="margin-top:8px">Se et eksempel nu</button>'
-          + '<div id="konto-med-' + slot + '-eksempel"></div>')
+        ? (medicinSlotRad("morgen", "Morgen") + medicinSlotRad("aften", "Aften"))
         : '<p class="grafnote" style="margin-top:6px">Kræver at notifikationer er slået til ovenfor.</p>')
     + '</div>';
 }
@@ -3251,8 +3254,7 @@ function tegnKonto(){
         ? '<button class="knap sek" id="konto-pushfra" style="margin-top:12px">Slå notifikationer fra</button>'
         : '<button class="knap sek" id="konto-pushtil" style="margin-top:12px">Slå notifikationer til</button>')
     + '<button class="knap sek" id="konto-ud" style="margin-top:8px">Log ud</button>'
-    + medicinSlotHtml("morgen", "Morgenpåmindelse — medicin/kosttilskud")
-    + medicinSlotHtml("aften", "Aftenpåmindelse — medicin/kosttilskud")
+    + medicinBlok()
     + '<div id="konto-besked"></div>';
 
   var pt = $("konto-pushtil");
