@@ -323,7 +323,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 44;
+var APP_BUILD = 45;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -726,7 +726,7 @@ var S = {
   profil: (function(){ try { return JSON.parse(laes(K_PROFIL) || "{}") || {}; } catch(e){ return {}; } })(),
   kaekhed: (function(){
     var v = laes(K_KAEK);
-    if (v === null || v === "1") return "brutal";  /* standard, og den gamle afkrydsning slaaet til */
+    if (v === null || v === "1") return "hudløs";  /* standard, og den gamle afkrydsning slaaet til */
     if (v === "0") return "fra";
     return v;
   })(),
@@ -1467,7 +1467,8 @@ function forslagsregler(dag){
     + 'Feltet nyt_navn skal være det navn, registreringen bør have, hvis forslaget bliver fulgt — '
     + 'altså en beskrivelse af hvad der så reelt blev spist. Er retten "Pasta med flødesovs" og '
     + 'forslaget er at lade sovsen stå, er nyt_navn "Pasta uden flødesovs". Feltet ros er en kort '
-    + 'kæk bemærkning, der kun bliver vist, hvis forslaget faktisk bliver fulgt.';
+    + 'bemærkning i den tone der er fastlagt andetsteds i denne besked, der kun bliver vist, hvis '
+    + 'forslaget faktisk bliver fulgt.';
 }
 
 /* Status regnes lokalt. Det er ren aritmetik mod dagens budget, så det er både
@@ -1586,10 +1587,10 @@ function hentPersonlighed(r, dag, tid, antal){
     + forslagsregler(dag) + '\n\n'
     + (S.kaek ? tone() + '\nGREB DENNE GANG: ' + naesteGreb() + '\n\n' : '')
     + 'Svar udelukkende med JSON, uden markdown:\n{'
-    + (S.kaek ? '"kommentar": "en kæk bemærkning på max 15 ord til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
+    + (S.kaek ? '"kommentar": "en bemærkning i den tone der er fastlagt ovenfor, max 15 ord, til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
     + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, '
     + '"note": "kort hvordan, max 12 ord", "nyt_navn": "hvad måltidet så hedder", '
-    + '"ros": "kæk kvittering på max 15 ord"}]}\n'
+    + '"ros": "kvittering i samme tone, max 15 ord"}]}\n'
     + 'Har du ingen forslag, sættes alternativer til en tom liste.';
   return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
 }
@@ -1755,12 +1756,13 @@ function hentSpiseforslag(){
     + 'hovedingredienserne i navnet, så det er til at forstå uden at åbne opskriften. '
     + 'Ingen retter der bare er "salat" eller "en sandwich" — vær konkret om hvad der er i.\n'
     + naesteVinkel() + '\n\n'
+    + (S.kaek ? tone() + '\n\n' : '')
     + 'VIGTIGT: foreslå aldrig at springe et måltid over, at faste resten af dagen eller at gå '
     + 'sulten i seng. Er der lidt eller ingenting tilbage af budgettet, så foreslå noget mættende '
     + 'og let alligevel, og skriv roligt at en enkelt dag ikke afgør noget. Ingen skræmmekampagne '
     + 'og ingen moralisering.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
-    + '{"linje": "en kort sætning om hvor dagen står, max 16 ord", '
+    + '{' + (S.kaek ? '"linje": "en sætning i tonen ovenfor om hvor dagen står, max 16 ord", ' : '')
     + '"forslag": [{"ret": "hvad", "hvornaar": "fx frokost eller aftensmad", "kcal": heltal, '
     + '"hvorfor": "kort begrundelse, max 14 ord"}]}';
 
@@ -1869,8 +1871,9 @@ function billedKredit(b){
 
 /* Vurdering af kosten over tid og eventuelle tilskud. Bygger paa hvad der er
    registreret, som er kalorier og kategorier — ikke maalinger af naeringsstoffer. */
-/* Forslag til lettere alternativer. Tonen er kaek, men gaar altid paa maden
-   og aldrig paa personen — det er skrevet ind i selve instruktionen. */
+/* Forslag til lettere alternativer. Bruger samme tone() som resten af appen,
+   og gaar altid paa maden, aldrig paa personen — det er skrevet ind i selve
+   instruktionen (se tone()'s GRAENSER). */
 function hentForslag(a){
   var emner = a.toppe.slice(0,4).map(function(t){
     return "- " + t.navn + " (" + Math.round(t.kcal) + " kcal, kategori " + t.kategori + ")";
@@ -1883,12 +1886,12 @@ function hentForslag(a){
     + 'Snit pr. dag: ' + Math.round(a.snit) + ' kcal. Dagligt mål: ' + S.maal + ' kcal.\n\n'
     + 'Giv 3-4 konkrete, lettere alternativer til de tungeste poster. Alternativerne skal være '
     + 'realistisk dansk hverdagsmad, ikke asketiske. Anslå hvor mange kalorier der spares.\n\n'
-    + tone() + '\n\n'
+    + (S.kaek ? tone() + '\n\n' : '')
     + 'Alternativerne er tilbud, ikke domme.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
-    + '{"overskrift": "en kæk linje på max 14 ord til ' + (S.navn || "brugeren") + ' om hvad der fylder", '
+    + '{' + (S.kaek ? '"overskrift": "en linje i tonen ovenfor, max 14 ord, til ' + (S.navn || "brugeren") + ' om hvad der fylder", ' : '')
     + '"forslag": [{"fra": "retten der er tung", "til": "det lettere alternativ", '
-    + '"spar": heltal kalorier sparet, "kommentar": "kæk bemærkning på max 20 ord"}]}';
+    + '"spar": heltal kalorier sparet' + (S.kaek ? ', "kommentar": "bemærkning i samme tone, max 20 ord"' : '') + '}]}';
 
   return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
 }
@@ -4082,7 +4085,7 @@ function tegnIndstillinger(){
     alleNoegler().filter(function(k){ return k.indexOf("kd:") === 0; }).forEach(fjern);
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
     aktivNoegle = null; aktivKode = null;
-    S.navn = ""; S.kaekhed = "brutal"; S.profil = {};
+    S.navn = ""; S.kaekhed = "hudløs"; S.profil = {};
     S.medicin = {};
     S.forslag = null; S.forslagStatus = "tom";
     var o = $("ind-overlay"); if (o) o.remove();
