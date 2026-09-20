@@ -323,7 +323,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 45;
+var APP_BUILD = 46;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1589,8 +1589,8 @@ function hentPersonlighed(r, dag, tid, antal){
     + 'Svar udelukkende med JSON, uden markdown:\n{'
     + (S.kaek ? '"kommentar": "en bemærkning i den tone der er fastlagt ovenfor, max 15 ord, til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
     + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, '
-    + '"note": "kort hvordan, max 12 ord", "nyt_navn": "hvad måltidet så hedder", '
-    + '"ros": "kvittering i samme tone, max 15 ord"}]}\n'
+    + '"note": "kort hvordan, max 12 ord", "nyt_navn": "hvad måltidet så hedder"'
+    + (S.kaek ? ', "ros": "kvittering i samme tone, max 15 ord"' : '') + '}]}\n'
     + 'Har du ingen forslag, sættes alternativer til en tom liste.';
   return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
 }
