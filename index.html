@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 40;
+var APP_BUILD = 41;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -875,7 +875,19 @@ var S = {
     return v;
   })(),
   get kaek(){ return this.kaekhed !== "fra"; },
-  medicin: (function(){ try { return JSON.parse(laes(K_MEDICIN) || "{}") || {}; } catch(e){ return {}; } })(),
+  medicin: (function(){
+    var m;
+    try { m = JSON.parse(laes(K_MEDICIN) || "{}") || {}; } catch(e){ m = {}; }
+    if (!m.morgen && !m.aften){
+      // Migrering fra tidligere flad form { aktiv, beskrivelse } -> morgen-slot
+      m = m.aktiv || m.beskrivelse
+        ? { morgen: { aktiv: !!m.aktiv, klokkeslaet: "07:00", beskrivelse: m.beskrivelse || "" },
+            aften:  { aktiv: false, klokkeslaet: "20:00", beskrivelse: "" } }
+        : { morgen: { aktiv: false, klokkeslaet: "07:00", beskrivelse: "" },
+            aften:  { aktiv: false, klokkeslaet: "20:00", beskrivelse: "" } };
+    }
+    return m;
+  })(),
   skaerm: "idag",
   skiftRetning: null,
   bruger: null,
@@ -2097,20 +2109,22 @@ function tone(){
           + 'sundhedsprædiken — heller ikke forklædt som en vits.');
 }
 
-/* Morgenpaamindelse om medicin/kosttilskud. Selve teksten genereres IKKE
-   her laengere — serveren (medicin-paamindelse edge function) genererer den
-   friskt hver morgen kl. 07 via Gemini, ud fra ugedag, aarstid og dagbogen,
-   saa den ikke lyder ens fra dag til dag. Klienten gemmer kun aktiv/beskrivelse
-   og tilbyder en valgfri forhaandsvisning, saa man kan se stilen med det samme. */
-function medicinGem(aktiv, beskrivelse){
-  S.medicin = { aktiv: !!aktiv, beskrivelse: beskrivelse || "" };
+/* Paamindelse om medicin/kosttilskud, med et morgen- og et aften-slot, hver
+   med eget klokkeslaet. Selve teksten genereres IKKE her laengere — serveren
+   (medicin-paamindelse edge function) genererer den friskt hver gang, via
+   Gemini, ud fra ugedag, aarstid og dagbogen, saa den ikke lyder ens fra dag
+   til dag. Klienten gemmer kun aktiv/klokkeslaet/beskrivelse pr. slot og
+   tilbyder en valgfri forhaandsvisning, saa man kan se stilen med det samme. */
+function medicinGem(slot, aktiv, klokkeslaet, beskrivelse){
+  S.medicin = S.medicin || {};
+  S.medicin[slot] = { aktiv: !!aktiv, klokkeslaet: klokkeslaet || (slot === "aften" ? "20:00" : "07:00"), beskrivelse: beskrivelse || "" };
   skriv(K_MEDICIN, JSON.stringify(S.medicin));
   synkMaerk("#indst");
 }
 function medicinForhaandsvisning(beskrivelse){
   var navn = S.navn || "brugeren";
   var p = tone() + '\n\n'
-    + 'OPGAVE: Skriv ÉN kort morgenpåmindelse (højst 18 ord) der minder ' + navn
+    + 'OPGAVE: Skriv ÉN kort påmindelse (højst 18 ord) der minder ' + navn
     + ' om at tage det følgende, i tonen beskrevet ovenfor:\n"' + beskrivelse + '"\n\n'
     + 'REGLER: opfind ALDRIG doser, klokkeslæt eller yderligere piller/kosttilskud, der ikke '
     + 'står i beskrivelsen. Ingen sundhedsråd, ingen bivirkningsadvarsler — kun selve påmindelsen.\n\n'
@@ -3103,6 +3117,24 @@ function tegnTilskud(a){
 }
 
 /* --- Kontoafsnittet i indstillinger --- */
+function medicinSlotHtml(slot, titel){
+  var s = (S.medicin && S.medicin[slot]) || { aktiv:false, klokkeslaet: slot === "aften" ? "20:00" : "07:00", beskrivelse:"" };
+  return '<div style="margin-top:18px;border-top:1px solid var(--linje,#333);padding-top:14px">'
+    + '<span class="lbl">' + titel + '</span>'
+    + (laes(K_PUSH)
+        ? ('<label style="display:flex;align-items:center;gap:8px;margin:6px 0">'
+            + '<input type="checkbox" id="konto-med-' + slot + '-aktiv"' + (s.aktiv ? " checked" : "") + '> '
+            + 'Send mig en daglig påmindelse kl. '
+            + '<input type="time" id="konto-med-' + slot + '-tid" value="' + esc(s.klokkeslaet) + '" style="width:auto"></label>'
+          + '<textarea id="konto-med-' + slot + '-besk" rows="3" placeholder="Fx: Magnesium. D-vitamin. '
+          + 'Blodtryksmedicin (Amlodipin) med mad.">' + esc(s.beskrivelse || "") + '</textarea>'
+          + '<p class="grafnote" style="margin-top:6px">Gemmes automatisk. Selve teksten skrives friskt hver gang '
+          + 'ud fra ugedag, årstid og dagbogen — den lyder ikke ens to dage i træk.</p>'
+          + '<button class="knap sek" id="konto-med-' + slot + '-preview" style="margin-top:8px">Se et eksempel nu</button>'
+          + '<div id="konto-med-' + slot + '-eksempel"></div>')
+        : '<p class="grafnote" style="margin-top:6px">Kræver at notifikationer er slået til ovenfor.</p>')
+    + '</div>';
+}
 function tegnKonto(){
   var boks = $("kontoboks");
   if (!boks) return;
@@ -3219,20 +3251,8 @@ function tegnKonto(){
         ? '<button class="knap sek" id="konto-pushfra" style="margin-top:12px">Slå notifikationer fra</button>'
         : '<button class="knap sek" id="konto-pushtil" style="margin-top:12px">Slå notifikationer til</button>')
     + '<button class="knap sek" id="konto-ud" style="margin-top:8px">Log ud</button>'
-    + '<div style="margin-top:18px;border-top:1px solid var(--linje,#333);padding-top:14px">'
-    + '<span class="lbl">Morgenpåmindelse kl. 07 — medicin/kosttilskud</span>'
-    + (laes(K_PUSH)
-        ? ('<label style="display:flex;align-items:center;gap:8px;margin:6px 0">'
-            + '<input type="checkbox" id="konto-med-aktiv"' + (S.medicin.aktiv ? " checked" : "") + '> '
-            + 'Send mig en daglig påmindelse</label>'
-          + '<textarea id="konto-med-besk" rows="3" placeholder="Fx: Magnesium om morgenen. '
-          + 'D-vitamin. Blodtryksmedicin (Amlodipin) kl. 8 med mad.">' + esc(S.medicin.beskrivelse || "") + '</textarea>'
-          + '<p class="grafnote" style="margin-top:6px">Gemmes automatisk. Selve teksten skrives friskt hver morgen '
-          + 'ud fra ugedag, årstid og dagbogen — den lyder ikke ens to dage i træk.</p>'
-          + '<button class="knap sek" id="konto-med-preview" style="margin-top:8px">Se et eksempel nu</button>'
-          + '<div id="konto-med-eksempel"></div>')
-        : '<p class="grafnote" style="margin-top:6px">Kræver at notifikationer er slået til ovenfor.</p>')
-    + '</div>'
+    + medicinSlotHtml("morgen", "Morgenpåmindelse — medicin/kosttilskud")
+    + medicinSlotHtml("aften", "Aftenpåmindelse — medicin/kosttilskud")
     + '<div id="konto-besked"></div>';
 
   var pt = $("konto-pushtil");
@@ -3246,28 +3266,34 @@ function tegnKonto(){
     pf.disabled = true;
     slaaPushFra().then(function(){ tegnKonto(); skriv_besked("Notifikationer er slået fra."); });
   };
-  var ma = $("konto-med-aktiv");
-  if (ma) ma.onchange = function(){
-    medicinGem(ma.checked, ($("konto-med-besk") || {}).value || "");
-  };
-  var mb = $("konto-med-besk");
-  if (mb) mb.onchange = function(){
-    medicinGem((($("konto-med-aktiv") || {}).checked), mb.value);
-  };
-  var mp = $("konto-med-preview");
-  if (mp) mp.onclick = function(){
-    var tekst = (($("konto-med-besk") || {}).value || "").trim();
-    if (!tekst){ skriv_besked("Skriv først, hvad du tager.", true); return; }
-    mp.textContent = "Genererer …"; mp.disabled = true;
-    medicinForhaandsvisning(tekst).then(function(eksempel){
-      var e = $("konto-med-eksempel");
-      if (e) e.innerHTML = '<p class="grafnote" style="margin-top:6px">"' + esc(eksempel) + '"</p>';
-      mp.textContent = "Se et eksempel nu"; mp.disabled = false;
-    }).catch(function(e){
-      skriv_besked(e.message, true);
-      mp.textContent = "Se et eksempel nu"; mp.disabled = false;
-    });
-  };
+  ["morgen", "aften"].forEach(function(slot){
+    var ma = $("konto-med-" + slot + "-aktiv");
+    var mt = $("konto-med-" + slot + "-tid");
+    var mb = $("konto-med-" + slot + "-besk");
+    if (ma) ma.onchange = function(){
+      medicinGem(slot, ma.checked, (mt || {}).value, (mb || {}).value);
+    };
+    if (mt) mt.onchange = function(){
+      medicinGem(slot, (ma || {}).checked, mt.value, (mb || {}).value);
+    };
+    if (mb) mb.onchange = function(){
+      medicinGem(slot, (ma || {}).checked, (mt || {}).value, mb.value);
+    };
+    var mp = $("konto-med-" + slot + "-preview");
+    if (mp) mp.onclick = function(){
+      var tekst = ((mb || {}).value || "").trim();
+      if (!tekst){ skriv_besked("Skriv først, hvad du tager.", true); return; }
+      mp.textContent = "Genererer …"; mp.disabled = true;
+      medicinForhaandsvisning(tekst).then(function(eksempel){
+        var e = $("konto-med-" + slot + "-eksempel");
+        if (e) e.innerHTML = '<p class="grafnote" style="margin-top:6px">"' + esc(eksempel) + '"</p>';
+        mp.textContent = "Se et eksempel nu"; mp.disabled = false;
+      }).catch(function(e){
+        skriv_besked(e.message, true);
+        mp.textContent = "Se et eksempel nu"; mp.disabled = false;
+      });
+    };
+  });
   $("konto-ud").onclick = function(){ logUd(); tegnKonto(); };
 }
 
