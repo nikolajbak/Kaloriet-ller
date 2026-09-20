@@ -330,7 +330,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 42;
+var APP_BUILD = 43;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -3117,26 +3117,33 @@ function tegnTilskud(a){
 }
 
 /* --- Kontoafsnittet i indstillinger --- */
-function medicinSlotRad(slot, label){
+function medicinSlotKort(slot, titel){
   var s = (S.medicin && S.medicin[slot]) || { aktiv:false, klokkeslaet: slot === "aften" ? "20:00" : "07:00", beskrivelse:"" };
-  return '<div style="margin-top:10px">'
-    + '<label style="display:flex;align-items:center;gap:8px">'
-    + '<input type="checkbox" id="konto-med-' + slot + '-aktiv"' + (s.aktiv ? " checked" : "") + '> '
-    + label + ' kl. '
-    + '<input type="time" id="konto-med-' + slot + '-tid" value="' + esc(s.klokkeslaet) + '" style="width:auto"></label>'
-    + '<textarea id="konto-med-' + slot + '-besk" rows="2" style="margin-top:4px" placeholder="Fx: Magnesium, D-vitamin">'
-    + esc(s.beskrivelse || "") + '</textarea>'
-    + '<button class="knap sek" id="konto-med-' + slot + '-preview" style="margin-top:4px;font-size:13px">Eksempel</button>'
-    + '<div id="konto-med-' + slot + '-eksempel"></div>'
+  var tid = s.klokkeslaet || (slot === "aften" ? "20:00" : "07:00");
+  return '<div class="kort">'
+    + '<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer">'
+    +   '<span style="display:flex;align-items:center;gap:11px">'
+    +     '<input type="checkbox" id="konto-med-' + slot + '-aktiv" style="width:auto;flex:none;transform:scale(1.25);margin:0"'
+    +     (s.aktiv ? " checked" : "") + '>'
+    +     '<span style="font-weight:600">' + titel + '</span>'
+    +   '</span>'
+    +   (s.aktiv
+        ? '<input type="time" id="konto-med-' + slot + '-tid" value="' + esc(tid) + '" style="width:auto;flex:none">'
+        : '<span class="raekke u" style="padding:0">kl. ' + esc(tid) + '</span>')
+    + '</label>'
+    + (s.aktiv
+        ? ('<textarea id="konto-med-' + slot + '-besk" rows="2" style="margin-top:10px" placeholder="Fx: Magnesium, D-vitamin">'
+            + esc(s.beskrivelse || "") + '</textarea>'
+          + '<button type="button" class="mini" id="konto-med-' + slot + '-preview">Se eksempel</button>'
+          + '<div id="konto-med-' + slot + '-eksempel"></div>')
+        : '')
     + '</div>';
 }
 function medicinBlok(){
-  return '<div style="margin-top:18px;border-top:1px solid var(--linje,#333);padding-top:14px">'
-    + '<span class="lbl">Medicin/kosttilskud-påmindelser</span>'
+  return '<div class="gruppelabel">Medicin/kosttilskud-påmindelser</div>'
     + (laes(K_PUSH)
-        ? (medicinSlotRad("morgen", "Morgen") + medicinSlotRad("aften", "Aften"))
-        : '<p class="grafnote" style="margin-top:6px">Kræver at notifikationer er slået til ovenfor.</p>')
-    + '</div>';
+        ? (medicinSlotKort("morgen", "Morgenpåmindelse") + medicinSlotKort("aften", "Aftenpåmindelse"))
+        : '<p class="grafnote">Kræver at notifikationer er slået til ovenfor.</p>');
 }
 function tegnKonto(){
   var boks = $("kontoboks");
@@ -3272,14 +3279,16 @@ function tegnKonto(){
     var ma = $("konto-med-" + slot + "-aktiv");
     var mt = $("konto-med-" + slot + "-tid");
     var mb = $("konto-med-" + slot + "-besk");
+    var gemt = (S.medicin && S.medicin[slot]) || {};
     if (ma) ma.onchange = function(){
-      medicinGem(slot, ma.checked, (mt || {}).value, (mb || {}).value);
+      medicinGem(slot, ma.checked, (mt || {}).value || gemt.klokkeslaet, (mb || {}).value || gemt.beskrivelse);
+      tegnKonto(); // felterne folder ud/ind, så panelet skal gentegnes
     };
     if (mt) mt.onchange = function(){
-      medicinGem(slot, (ma || {}).checked, mt.value, (mb || {}).value);
+      medicinGem(slot, ma.checked, mt.value, (mb || {}).value);
     };
     if (mb) mb.onchange = function(){
-      medicinGem(slot, (ma || {}).checked, (mt || {}).value, mb.value);
+      medicinGem(slot, ma.checked, (mt || {}).value, mb.value);
     };
     var mp = $("konto-med-" + slot + "-preview");
     if (mp) mp.onclick = function(){
@@ -3288,11 +3297,11 @@ function tegnKonto(){
       mp.textContent = "Genererer …"; mp.disabled = true;
       medicinForhaandsvisning(tekst).then(function(eksempel){
         var e = $("konto-med-" + slot + "-eksempel");
-        if (e) e.innerHTML = '<p class="grafnote" style="margin-top:6px">"' + esc(eksempel) + '"</p>';
-        mp.textContent = "Se et eksempel nu"; mp.disabled = false;
+        if (e) e.innerHTML = '<p class="kom">"' + esc(eksempel) + '"</p>';
+        mp.textContent = "Se eksempel"; mp.disabled = false;
       }).catch(function(e){
         skriv_besked(e.message, true);
-        mp.textContent = "Se et eksempel nu"; mp.disabled = false;
+        mp.textContent = "Se eksempel"; mp.disabled = false;
       });
     };
   });
