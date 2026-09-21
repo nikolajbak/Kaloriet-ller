@@ -114,13 +114,19 @@ self.addEventListener("push", function (e) {
   } catch (fejl) {
     try { d.body = e.data.text(); } catch (f2) {}
   }
+  /* Selve teksten bygges ind i url'en, saa appen ved tryk paa notifikationen
+     kan vise den fulde paamindelse — uden det er der intet sted at laese den
+     igen, naar systemets egen notifikationsboble er lukket. */
+  var basis = d.url && d.url !== "./" ? d.url : "./";
+  var maal = basis + (basis.indexOf("?") === -1 ? "?" : "&")
+    + "paamindelse=" + encodeURIComponent(d.body) + "&titel=" + encodeURIComponent(d.title);
   e.waitUntil(
     self.registration.showNotification(d.title, {
       body: d.body,
       tag: d.tag,
       icon: "./icon-192.png",
       badge: "./icon-192.png",
-      data: { url: d.url },
+      data: { url: maal },
       renotify: true
     })
   );
@@ -133,6 +139,9 @@ self.addEventListener("notificationclick", function (e) {
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (vinduer) {
       for (var i = 0; i < vinduer.length; i++) {
         if (vinduer[i].url.indexOf(self.location.origin) === 0 && "focus" in vinduer[i]) {
+          /* Vinduet er allerede aabent — focus() alene navigerer ikke, saa
+             appen faar besked direkte og viser paamindelsen selv. */
+          vinduer[i].postMessage({ type: "paamindelse", maal: maal });
           return vinduer[i].focus();
         }
       }
