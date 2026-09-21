@@ -107,6 +107,30 @@ self.addEventListener("message", function (e) {
    Push. iOS leverer kun til hjemmeskærms-apps, og kun når der er
    en synlig besked — der findes ingen stille push.
    ------------------------------------------------------------ */
+
+/* Gemmer den seneste paamindelse i en lille lokal database, laesbar baade
+   herfra og fra selve appen. Noedvendigt fordi iOS/WebKit har en kendt,
+   uloest fejl (WebKit bug 263687): naar appen er helt lukket og en
+   notifikation trykkes, navigerer clients.openWindow(url) IKKE til den
+   givne adresse — appen aabner altid til forsiden, og url'ens indhold
+   (her: selve paamindelsesteksten) gaar tabt. IndexedDB er upaavirket af
+   den fejl, fordi appen laeser den selv ved opstart, uanset hvilken
+   adresse den faktisk blev aabnet paa. */
+function gemPaamindelseLokalt(titel, tekst) {
+  return new Promise(function (resolve) {
+    var aabn = indexedDB.open("kaloriedagbog-db", 1);
+    aabn.onupgradeneeded = function (e) { e.target.result.createObjectStore("paamindelser"); };
+    aabn.onsuccess = function (e) {
+      var db = e.target.result;
+      var tx = db.transaction("paamindelser", "readwrite");
+      tx.objectStore("paamindelser").put({ titel: titel, tekst: tekst, tid: Date.now() }, "seneste");
+      tx.oncomplete = function () { resolve(); };
+      tx.onerror = function () { resolve(); };
+    };
+    aabn.onerror = function () { resolve(); };
+  });
+}
+
 self.addEventListener("push", function (e) {
   var d = { title: "Kaloriedagbog", body: "", url: "./", tag: "kaloriedagbog" };
   try {
@@ -114,21 +138,24 @@ self.addEventListener("push", function (e) {
   } catch (fejl) {
     try { d.body = e.data.text(); } catch (f2) {}
   }
-  /* Selve teksten bygges ind i url'en, saa appen ved tryk paa notifikationen
-     kan vise den fulde paamindelse — uden det er der intet sted at laese den
-     igen, naar systemets egen notifikationsboble er lukket. */
+  /* Teksten bygges ogsaa ind i url'en — virker fint paa desktop/Android og
+     i det tilfaelde hvor appen allerede er aaben paa iOS. IndexedDB er
+     sikkerhedsnettet for den iOS-koldstart, hvor url'en gaar tabt. */
   var basis = d.url && d.url !== "./" ? d.url : "./";
   var maal = basis + (basis.indexOf("?") === -1 ? "?" : "&")
     + "paamindelse=" + encodeURIComponent(d.body) + "&titel=" + encodeURIComponent(d.title);
   e.waitUntil(
-    self.registration.showNotification(d.title, {
-      body: d.body,
-      tag: d.tag,
-      icon: "./icon-192.png",
-      badge: "./icon-192.png",
-      data: { url: maal },
-      renotify: true
-    })
+    Promise.all([
+      gemPaamindelseLokalt(d.title, d.body),
+      self.registration.showNotification(d.title, {
+        body: d.body,
+        tag: d.tag,
+        icon: "./icon-192.png",
+        badge: "./icon-192.png",
+        data: { url: maal },
+        renotify: true
+      })
+    ])
   );
 });
 
