@@ -121,7 +121,7 @@ self.addEventListener("push", function (e) {
       icon: "./icon-192.png",
       badge: "./icon-192.png",
       data: { url: d.url },
-      renotify: false
+      renotify: true
     })
   );
 });
