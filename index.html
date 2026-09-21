@@ -323,7 +323,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 46;
+var APP_BUILD = 49;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -4642,10 +4642,43 @@ if ("serviceWorker" in navigator){
 /* Genveje fra hjemmeskaermen: tryk og hold paa ikonet */
 function haandterGenvej(){
   var m = location.search.match(/[?&]handling=([a-z]+)/);
-  if (!m) return;
-  history.replaceState(null, "", location.pathname);
-  if (m[1] === "maaltid"){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); }
-  if (m[1] === "vaegt"){ S.skaerm = "vaegt"; tegn(); aabnVejning(S.iDag); }
+  if (m){
+    history.replaceState(null, "", location.pathname);
+    if (m[1] === "maaltid"){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); }
+    if (m[1] === "vaegt"){ S.skaerm = "vaegt"; tegn(); aabnVejning(S.iDag); }
+  }
+  var p = new URLSearchParams(location.search);
+  if (p.has("paamindelse")){
+    var tekst = p.get("paamindelse"), titel = p.get("titel") || "Påmindelse";
+    history.replaceState(null, "", location.pathname);
+    if (tekst) visPaamindelseOverlay(titel, tekst);
+  }
+}
+
+/* Fuld visning af en push-notifikation, tilgaengelig baade fra URL'en
+   (appen var lukket) og en besked fra service workeren (appen var allerede
+   aaben, hvor et vindue kun bliver fokuseret, ikke navigeret). */
+function visPaamindelseOverlay(titel, tekst){
+  var h = '<div class="overlay" id="paa-overlay"><div class="panel">'
+    + '<h3>' + esc(titel || "Påmindelse") + '</h3>'
+    + '<p class="overskrift" style="margin-top:10px">' + esc(tekst) + '</p>'
+    + '<button class="knap sek" id="paa-luk" style="margin-top:16px">Luk</button></div></div>';
+  var gl = $("paa-overlay"); if (gl) gl.remove();
+  document.body.insertAdjacentHTML("beforeend", h);
+  function luk(){ lukBlodt("paa-overlay"); }
+  $("paa-overlay").onclick = function(e){ if (e.target.id === "paa-overlay") luk(); };
+  bindTraekNed("paa-overlay", luk);
+  $("paa-luk").onclick = luk;
+}
+if (navigator.serviceWorker){
+  navigator.serviceWorker.addEventListener("message", function(e){
+    if (!e.data || e.data.type !== "paamindelse" || !e.data.maal) return;
+    try {
+      var u = new URL(e.data.maal, location.origin);
+      var tekst = u.searchParams.get("paamindelse");
+      if (tekst) visPaamindelseOverlay(u.searchParams.get("titel") || "Påmindelse", tekst);
+    } catch(fejl){}
+  });
 }
 
 /* Naar forbindelsen falder ud, kan dagbogen stadig laeses og udfyldes i haanden */
