@@ -323,7 +323,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 49;
+var APP_BUILD = 51;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -4653,17 +4653,45 @@ function haandterGenvej(){
     history.replaceState(null, "", location.pathname);
     if (tekst) visPaamindelseOverlay(titel, tekst);
   }
+  hentGemtPaamindelse().then(function(v){ if (v && v.tekst) visPaamindelseOverlay(v.titel, v.tekst); });
+}
+
+/* Laeser den paamindelse, service workeren gemte ved selve push-modtagelsen
+   (se sw.js). Noedvendigt fordi iOS/WebKit ved koldstart ikke navigerer til
+   den adresse, notifikationen egentlig peger paa (kendt, uloest WebKit-fejl)
+   — url-parametrene ovenfor virker derfor kun paa desktop/Android og naar
+   appen allerede var aaben. IndexedDB laeses her uafhaengigt af, hvilken
+   adresse appen rent faktisk blev aabnet paa. Slettes efter visning, saa
+   den ikke dukker op igen ved naeste almindelige opstart. */
+function hentGemtPaamindelse(){
+  return new Promise(function(resolve){
+    if (!window.indexedDB){ resolve(null); return; }
+    var aabn = indexedDB.open("kaloriedagbog-db", 1);
+    aabn.onupgradeneeded = function(e){ e.target.result.createObjectStore("paamindelser"); };
+    aabn.onsuccess = function(e){
+      var db = e.target.result;
+      var tx = db.transaction("paamindelser", "readwrite");
+      var hent = tx.objectStore("paamindelser").get("seneste");
+      hent.onsuccess = function(){
+        var v = hent.result;
+        if (v) tx.objectStore("paamindelser").delete("seneste");
+        resolve(v || null);
+      };
+      hent.onerror = function(){ resolve(null); };
+    };
+    aabn.onerror = function(){ resolve(null); };
+  });
 }
 
 /* Fuld visning af en push-notifikation, tilgaengelig baade fra URL'en
    (appen var lukket) og en besked fra service workeren (appen var allerede
    aaben, hvor et vindue kun bliver fokuseret, ikke navigeret). */
 function visPaamindelseOverlay(titel, tekst){
+  if ($("paa-overlay")) return; // vis aldrig to gange oveni hinanden
   var h = '<div class="overlay" id="paa-overlay"><div class="panel">'
     + '<h3>' + esc(titel || "Påmindelse") + '</h3>'
     + '<p class="overskrift" style="margin-top:10px">' + esc(tekst) + '</p>'
     + '<button class="knap sek" id="paa-luk" style="margin-top:16px">Luk</button></div></div>';
-  var gl = $("paa-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
   function luk(){ lukBlodt("paa-overlay"); }
   $("paa-overlay").onclick = function(e){ if (e.target.id === "paa-overlay") luk(); };
