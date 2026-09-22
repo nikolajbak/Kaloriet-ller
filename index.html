@@ -323,7 +323,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 51;
+var APP_BUILD = 52;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1313,7 +1313,8 @@ function geminiKald(krop){
     contents: [{ parts: dele }],
     generationConfig: {
       maxOutputTokens: Number(krop.max_tokens) || 1200,
-      responseMimeType: "application/json"
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingBudget: 0 }
     }
   });
 
@@ -1443,8 +1444,12 @@ function dagskontekst(dag, tid){
     + 'Et stort måltid midt på dagen med rigelig plads tilbage er fint. Det samme måltid oven i en dag, '
     + 'der allerede er fyldt, er noget andet. Sæt status til "godt", når måltidet passer godt ind eller '
     + 'er et fornuftigt valg, "fint" når det er hverken eller, og "tungt" når det bruger en stor del af '
-    + 'det, der var tilbage. Er budgettet allerede overskredet, så vær saglig og fremadrettet frem for '
-    + 'bebrejdende — dagen er som den er, og i morgen er en ny.\n\n'
+    + 'det, der var tilbage. '
+    + (S.kaekhed === "brutal" || S.kaekhed === "hudløs"
+        ? 'Er budgettet allerede overskredet, er det ikke noget at pakke ind — sig det ligeud, i den '
+          + 'tone der er fastlagt andetsteds i denne besked.\n\n'
+        : 'Er budgettet allerede overskredet, så vær saglig og fremadrettet frem for '
+          + 'bebrejdende — dagen er som den er, og i morgen er en ny.\n\n')
     ;
 }
 
