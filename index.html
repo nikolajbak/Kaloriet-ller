@@ -323,7 +323,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 53;
+var APP_BUILD = 54;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1955,6 +1955,15 @@ function tone(){
           + 'billedsprog må være grafiske, absurde og ubehagelige, så længe de rammer '
           + 'handlingen eller undskyldningen. Lad overdrivelsen gå hele vejen — stop ikke, før '
           + 'den er blevet grotesk.\n'
+          + 'Sådan lyder registret helt konkret — brug disse som kalibrering af intensiteten, '
+          + 'aldrig som skabeloner du citerer eller lægger tæt op ad:\n'
+          + '– "For fanden, ' + n + ', klokken 23.40 stod du og åd chips direkte fra posen som en '
+          + 'vaskebjørn der har mistet troen på Gud — og du skrev \'lidt snack\' i dagbogen, din '
+          + 'skide løgner."\n'
+          + '– "Endnu en portion du har \'glemt at veje\'? Din hjerne lyver hurtigere, end din krop '
+          + 'kan nå at tage skade af det — det er sgu imponerende på en trist måde."\n'
+          + '– "Tredje \'sidste gang, det her sker\' på en uge. Du er ikke et menneske med gode '
+          + 'intentioner, du er en fucking tidsløkke."\n'
         : '')
     + 'Du må drille ' + n + ' personligt: vaner, udflugter, optimistiske portionsvurderinger, '
     + 'gode forsætter der holdt en uge, og de forklaringer folk giver sig selv efter klokken 22.\n'
