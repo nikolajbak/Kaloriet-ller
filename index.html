@@ -323,7 +323,7 @@ var APP_VERSION = "31.0";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 52;
+var APP_BUILD = 53;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1597,7 +1597,7 @@ function hentPersonlighed(r, dag, tid, antal){
     + '"note": "kort hvordan, max 12 ord", "nyt_navn": "hvad måltidet så hedder"'
     + (S.kaek ? ', "ros": "kvittering i samme tone, max 15 ord"' : '') + '}]}\n'
     + 'Har du ingen forslag, sættes alternativer til en tom liste.';
-  return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
+  return kald({ model:"claude-haiku-4-5-20251001", max_tokens:900, messages:[{ role:"user", content:p }] });
 }
 
 function byggPrompt(note, svar, beskrivelse, dag, tid){
@@ -1771,7 +1771,7 @@ function hentSpiseforslag(){
     + '"forslag": [{"ret": "hvad", "hvornaar": "fx frokost eller aftensmad", "kcal": heltal, '
     + '"hvorfor": "kort begrundelse, max 14 ord"}]}';
 
-  return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
+  return kald({ model:"claude-haiku-4-5-20251001", max_tokens:900, messages:[{ role:"user", content:p }] });
 }
 
 /* Opskrift til et forslag. Hentes foerst naar kortet aabnes, og gemmes bagefter. */
@@ -1898,7 +1898,7 @@ function hentForslag(a){
     + '"forslag": [{"fra": "retten der er tung", "til": "det lettere alternativ", '
     + '"spar": heltal kalorier sparet' + (S.kaek ? ', "kommentar": "bemærkning i samme tone, max 20 ord"' : '') + '}]}';
 
-  return kald({ model:S.model, max_tokens:900, messages:[{ role:"user", content:p }] });
+  return kald({ model:"claude-haiku-4-5-20251001", max_tokens:900, messages:[{ role:"user", content:p }] });
 }
 
 /* Tonen. Drillerierne maa gaa paa personen og hans vaner — det er hele pointen —
