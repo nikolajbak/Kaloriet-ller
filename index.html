@@ -318,12 +318,12 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 <script>
 "use strict";
 
-var APP_VERSION = "31.0";
+var APP_VERSION = "31.1";
 /* Loebenummer for den udgivelses-raekke der byggede denne fil — svarer til
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 54;
+var APP_BUILD = 55;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1309,8 +1309,21 @@ function geminiKald(krop){
     }
   });
 
+  /* Tonen ligger i krop.system og skal sendes som systemInstruction. Klistret
+     ind i brugerbeskeden bliver den vaegtet som almindelig kontekst og taber til
+     de saglige afsnit omkring sig; i systemfeltet staar den over dem.
+     safetySettings loeftes til BLOCK_ONLY_HIGH, fordi standardfilteret laeser
+     drilleri rettet mod brugeren selv som chikane og sender en daemper
+     tilbage — det er brugerens eget valgte niveau, ikke en fremmed der hakkes paa. */
   var krop2 = JSON.stringify({
     contents: [{ parts: dele }],
+    systemInstruction: krop.system ? { parts: [{ text: krop.system }] } : undefined,
+    safetySettings: [
+      { category:"HARM_CATEGORY_HARASSMENT",        threshold:"BLOCK_ONLY_HIGH" },
+      { category:"HARM_CATEGORY_HATE_SPEECH",       threshold:"BLOCK_ONLY_HIGH" },
+      { category:"HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold:"BLOCK_ONLY_HIGH" },
+      { category:"HARM_CATEGORY_DANGEROUS_CONTENT", threshold:"BLOCK_ONLY_HIGH" }
+    ],
     generationConfig: {
       maxOutputTokens: Number(krop.max_tokens) || 1200,
       responseMimeType: "application/json",
@@ -1447,7 +1460,7 @@ function dagskontekst(dag, tid){
     + 'det, der var tilbage. '
     + (S.kaekhed === "brutal" || S.kaekhed === "hudløs"
         ? 'Er budgettet allerede overskredet, er det ikke noget at pakke ind — sig det ligeud, i den '
-          + 'tone der er fastlagt andetsteds i denne besked.\n\n'
+          + 'tone der er fastlagt i systembeskeden.\n\n'
         : 'Er budgettet allerede overskredet, så vær saglig og fremadrettet frem for '
           + 'bebrejdende — dagen er som den er, og i morgen er en ny.\n\n')
     ;
@@ -1472,7 +1485,7 @@ function forslagsregler(dag){
     + 'Feltet nyt_navn skal være det navn, registreringen bør have, hvis forslaget bliver fulgt — '
     + 'altså en beskrivelse af hvad der så reelt blev spist. Er retten "Pasta med flødesovs" og '
     + 'forslaget er at lade sovsen stå, er nyt_navn "Pasta uden flødesovs". Feltet ros er en kort '
-    + 'bemærkning i den tone der er fastlagt andetsteds i denne besked, der kun bliver vist, hvis '
+    + 'bemærkning i den tone der er fastlagt i systembeskeden, der kun bliver vist, hvis '
     + 'forslaget faktisk bliver fulgt.';
 }
 
@@ -1576,6 +1589,37 @@ function kommentarKontekst(dag){
   return ud.join("\n");
 }
 
+/* Hvor lang en kommentar maa vaere. Registret i tone() forlanger fire saetninger
+   med rytme og en eskalation — det kan ikke lade sig goere paa 15 ord, og modellen
+   loeste konflikten ved at droppe formen og skrive en neutral enlinjer. Graensen
+   foelger derfor niveauet, og paa de haarde niveauer er der ogsaa et gulv: uden
+   et minimum falder svaret tilbage i den korte, pæne form af sig selv. */
+function ordgraense(){
+  return S.kaekhed === "hudløs" ? 35
+       : S.kaekhed === "brutal" ? 28
+       : S.kaekhed === "skarp"  ? 20 : 15;
+}
+function ordkrav(){
+  var m = ordgraense();
+  return m >= 25 ? ("mindst " + (m - 14) + " og højst " + m + " ord") : ("max " + m + " ord");
+}
+
+/* De tre kald hvor tonen er hele pointen, samlet et sted. To ting goeres
+   anderledes end i resten af appen:
+   1) tonen sendes som system og ikke som en del af brugerbeskeden. Begge
+      udbydere foelger en persona i systemfeltet markant taettere end den samme
+      tekst begravet midt i en lang saglig besked — og beskeden her er lang og
+      saglig, med flere afsnit der aktivt daemper.
+   2) der bruges S.model og ikke den billigste model. Register, rytme og
+      overdrivelse er sproglig finmotorik; den lille model regresserer mod det
+      hoeflige uanset hvor praecis instruktionen er. Kaldet er rent tekst, saa
+      forskellen i pris er broekdele af en oere pr. maaltid. */
+function tonekald(p, max){
+  var krop = { model:S.model, max_tokens: max || 900, messages:[{ role:"user", content:p }] };
+  if (S.kaek) krop.system = tone();
+  return kald(krop);
+}
+
 /* Anden fase: kommentar og forslag. Rent tekstkald uden foto, og det sættes i gang
    i det øjeblik tallene er på skærmen, så brugeren ikke venter på det. */
 function hentPersonlighed(r, dag, tid, antal){
@@ -1590,14 +1634,14 @@ function hentPersonlighed(r, dag, tid, antal){
     + dagskontekst(dag, tid) + '\n\n'
     + kommentarKontekst(dag) + '\n\n'
     + forslagsregler(dag) + '\n\n'
-    + (S.kaek ? tone() + '\nGREB DENNE GANG: ' + naesteGreb() + '\n\n' : '')
+    + (S.kaek ? 'GREB DENNE GANG: ' + naesteGreb() + '\n\n' : '')
     + 'Svar udelukkende med JSON, uden markdown:\n{'
-    + (S.kaek ? '"kommentar": "en bemærkning i den tone der er fastlagt ovenfor, max 15 ord, til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
+    + (S.kaek ? '"kommentar": "en bemærkning i tonen fra systembeskeden, ' + ordkrav() + ', til ' + (S.navn || "brugeren") + ' om lige dette måltid", ' : '')
     + '"alternativer": [{"til": "det lettere valg", "naar": "nu"/"naeste", "spar": heltal kalorier, '
     + '"note": "kort hvordan, max 12 ord", "nyt_navn": "hvad måltidet så hedder"'
-    + (S.kaek ? ', "ros": "kvittering i samme tone, max 15 ord"' : '') + '}]}\n'
+    + (S.kaek ? ', "ros": "kvittering i samme tone, ' + ordkrav() + '"' : '') + '}]}\n'
     + 'Har du ingen forslag, sættes alternativer til en tom liste.';
-  return kald({ model:"claude-haiku-4-5-20251001", max_tokens:900, messages:[{ role:"user", content:p }] });
+  return tonekald(p);
 }
 
 function byggPrompt(note, svar, beskrivelse, dag, tid){
@@ -1761,17 +1805,16 @@ function hentSpiseforslag(){
     + 'hovedingredienserne i navnet, så det er til at forstå uden at åbne opskriften. '
     + 'Ingen retter der bare er "salat" eller "en sandwich" — vær konkret om hvad der er i.\n'
     + naesteVinkel() + '\n\n'
-    + (S.kaek ? tone() + '\n\n' : '')
     + 'VIGTIGT: foreslå aldrig at springe et måltid over, at faste resten af dagen eller at gå '
     + 'sulten i seng. Er der lidt eller ingenting tilbage af budgettet, så foreslå noget mættende '
     + 'og let alligevel, og skriv roligt at en enkelt dag ikke afgør noget. Ingen skræmmekampagne '
     + 'og ingen moralisering.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
-    + '{' + (S.kaek ? '"linje": "en sætning i tonen ovenfor om hvor dagen står, max 16 ord", ' : '')
+    + '{' + (S.kaek ? '"linje": "en sætning i tonen fra systembeskeden om hvor dagen står, ' + ordkrav() + '", ' : '')
     + '"forslag": [{"ret": "hvad", "hvornaar": "fx frokost eller aftensmad", "kcal": heltal, '
     + '"hvorfor": "kort begrundelse, max 14 ord"}]}';
 
-  return kald({ model:"claude-haiku-4-5-20251001", max_tokens:900, messages:[{ role:"user", content:p }] });
+  return tonekald(p);
 }
 
 /* Opskrift til et forslag. Hentes foerst naar kortet aabnes, og gemmes bagefter. */
@@ -1891,14 +1934,13 @@ function hentForslag(a){
     + 'Snit pr. dag: ' + Math.round(a.snit) + ' kcal. Dagligt mål: ' + S.maal + ' kcal.\n\n'
     + 'Giv 3-4 konkrete, lettere alternativer til de tungeste poster. Alternativerne skal være '
     + 'realistisk dansk hverdagsmad, ikke asketiske. Anslå hvor mange kalorier der spares.\n\n'
-    + (S.kaek ? tone() + '\n\n' : '')
     + 'Alternativerne er tilbud, ikke domme.\n\n'
     + 'Svar udelukkende med JSON, uden markdown:\n'
-    + '{' + (S.kaek ? '"overskrift": "en linje i tonen ovenfor, max 14 ord, til ' + (S.navn || "brugeren") + ' om hvad der fylder", ' : '')
+    + '{' + (S.kaek ? '"overskrift": "en linje i tonen fra systembeskeden, ' + ordkrav() + ', til ' + (S.navn || "brugeren") + ' om hvad der fylder", ' : '')
     + '"forslag": [{"fra": "retten der er tung", "til": "det lettere alternativ", '
-    + '"spar": heltal kalorier sparet' + (S.kaek ? ', "kommentar": "bemærkning i samme tone, max 20 ord"' : '') + '}]}';
+    + '"spar": heltal kalorier sparet' + (S.kaek ? ', "kommentar": "bemærkning i samme tone, ' + ordkrav() + '"' : '') + '}]}';
 
-  return kald({ model:"claude-haiku-4-5-20251001", max_tokens:900, messages:[{ role:"user", content:p }] });
+  return tonekald(p);
 }
 
 /* Tonen. Drillerierne maa gaa paa personen og hans vaner — det er hele pointen —
@@ -1964,6 +2006,9 @@ function tone(){
           + 'kan nå at tage skade af det — det er sgu imponerende på en trist måde."\n'
           + '– "Tredje \'sidste gang, det her sker\' på en uge. Du er ikke et menneske med gode '
           + 'intentioner, du er en fucking tidsløkke."\n'
+          + '14. BRUG PLADSEN. Du får et ordinterval, ikke et loft du skal ned under. En kort, '
+          + 'pæn enlinjer er en fejl her: rytmen i punkt 2 og eskalationen i punkt 3 skal kunne '
+          + 'høres i svaret. Skriv ikke en afdæmpet udgave af det, der står ovenfor — skriv det.\n'
         : '')
     + 'Du må drille ' + n + ' personligt: vaner, udflugter, optimistiske portionsvurderinger, '
     + 'gode forsætter der holdt en uge, og de forklaringer folk giver sig selv efter klokken 22.\n'
