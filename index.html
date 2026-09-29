@@ -59,6 +59,7 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
   display:flex;align-items:center;justify-content:flex-end;gap:8px;
   padding-right:22px;font-size:15px;font-weight:600;}
 .slettebag svg{width:19px;height:19px;}
+.post.analyserer{opacity:.55;}
 .post{display:flex;gap:12px;align-items:center;background:var(--kort);
   border:1px solid var(--linje);border-radius:12px;padding:10px;
   position:relative;touch-action:pan-y;
@@ -329,7 +330,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 58;
+var APP_BUILD = 59;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2251,6 +2252,20 @@ function tegnHoved(){
     h += '<div class="tom">Ingen måltider endnu. Tag et billede af det første, så regner appen resten ud.</div>';
   } else {
     poster.forEach(function(p){
+      if (p.analyserer){
+        h += '<div class="postrum">'
+          + '<div class="slettebag" aria-hidden="true">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
+          + 'stroke-linecap="round"><path d="M5 7h14 M10 7V5h4v2 M7 7l1 13h8l1-13 M10 11v6 M14 11v6"/></svg>'
+          + 'Slet</div>'
+          + '<div class="post analyserer" data-glid="' + esc(p.id) + '">'
+          + (p.billede ? '<img src="' + p.billede + '" alt="">'
+                       : '<div class="tom-foto">' + kategoriIkon("Andet") + '</div>')
+          + '<div class="txt"><div class="navn">Analyserer…</div>'
+          + '<div class="meta">' + esc(p.tid) + '</div></div>'
+          + '<div class="kcal">…</div></div></div>';
+        return;
+      }
       h += '<div class="postrum">'
         + '<div class="slettebag" aria-hidden="true">'
         + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
@@ -3853,17 +3868,17 @@ function visResultat(a, r){
   tegnArk();
 }
 
-/* Bygger og gemmer en post direkte fra analysens egne tal, uden om
-   redigeringsarket — bruges kun ved automatisk registrering, hvor der
-   ingen felter er at laese fra. Speejler feltopbygningen i b-gem ovenfor. */
+/* Bygger den faerdige post direkte fra analysens egne tal, uden om
+   redigeringsarket, og opdaterer den midlertidige "Analyserer…"-post PAA
+   PLADS i listen — id'et er det samme, saa den erstattes i stedet for at
+   dukke op som en ny post et andet sted. */
 function autoGemResultat(a, r){
   var dag = a.dag || maalDag();
   var tid = a.tid || standardTid(dag);
   var antal = a.antal || 1;
   var navn = (r.navn || "Måltid").trim().slice(0,60) || "Måltid";
-  var id = String(Date.now());
-  var poster = hentDag(dag);
-  poster.push(normaliser({
+  var id = a.auto;
+  var post = normaliser({
     id: id, tid: tid, navn: navn, kategori: r.kategori || "Andet",
     portion: r.portion || "", kommentar: r.kommentar || "",
     portioner: antal, gram: Number(r.gram) || 0,
@@ -3877,7 +3892,11 @@ function autoGemResultat(a, r){
     kulhydrat_g: Number(r.kulhydrat_g) || 0, fedt_g: Number(r.fedt_g) || 0,
     grupper: r.grupper || null, indhold: r.indhold || [],
     billede: a.lille || null
-  }, 0));
+  }, 0);
+  var poster = hentDag(dag);
+  var i = -1, j;
+  for (j = 0; j < poster.length; j++) if (poster[j].id === id) i = j;
+  if (i >= 0) poster[i] = post; else poster.push(post);
   gemDag(dag, poster);
   S.maalDag = null;
   nulstilAfledt();
@@ -3902,9 +3921,13 @@ function visRegistreretToast(dag, id, navn){
 
 /* Automatisk registrering kunne ikke fuldfoeres (intet mad genkendt, eller
    analysen fejlede) — der er ingen til at svare paa noget undervejs, saa
-   billedet gemmes ikke, men tilbydes til manuel opfoelgning i stedet for at
-   forsvinde sporloest. */
-function visAutoregFejl(stor, lille, besked){
+   den midlertidige "Analyserer…"-post fjernes fra listen igen, og billedet
+   tilbydes til manuel opfoelgning i stedet for at forsvinde sporloest. */
+function visAutoregFejl(id, dag, stor, lille, besked){
+  var poster = hentDag(dag).filter(function(p){ return p.id !== id; });
+  gemDag(dag, poster);
+  nulstilAfledt();
+  tegn();
   var gl = $("reg-toast"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend",
     '<div class="toast" id="reg-toast"><span>' + esc(besked) + '</span>'
@@ -3929,7 +3952,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
     var basis = { stor:stor, lille:lille, note:note, beskrivelse:beskrivelse,
                   dag:dag, tid:tid, antal:antal, auto:auto };
     if (!r.er_mad){
-      if (auto){ visAutoregFejl(stor, lille, "Det lignede ikke mad eller drikke."); return; }
+      if (auto){ visAutoregFejl(auto, dag, stor, lille, "Det lignede ikke mad eller drikke."); return; }
       S.ark = Object.assign({ status:"fejl", besked: beskrivelse
         ? "Det lyder ikke som mad eller drikke. Prøv en anden formulering, eller indtast tallene selv."
         : "Der ser ikke ud til at være mad på billedet. Tag et nyt, eller indtast tallene selv." }, basis);
@@ -3947,7 +3970,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
     }
     visResultat(basis, r);
   }).catch(function(err){
-    if (auto){ visAutoregFejl(stor, lille, (err && err.message) || "Analysen gik i stå."); return; }
+    if (auto){ visAutoregFejl(auto, dag, stor, lille, (err && err.message) || "Analysen gik i stå."); return; }
     S.ark = { status:"fejl", stor:stor, lille:lille, note:note, beskrivelse:beskrivelse,
       dag:dag, tid:tid, antal:antal,
       besked:(err && err.message) || "Analysen gik i stå. Prøv igen, eller indtast tallene selv." };
@@ -4780,7 +4803,19 @@ $("fil").onchange = function(e){
   if (!S.autoreg){ S.ark = { status:"klargoer" }; tegnArk(); }
   Promise.all([ skalerFil(file, 1100, 0.82), skalerFil(file, 170, 0.6) ]).then(function(r){
     if (S.autoreg){
-      kaldAnalyse(r[0], r[1], "", null, null, maalDag(), standardTid(maalDag()), 1, true);
+      var dag = maalDag(), tid = standardTid(dag), midlId = String(Date.now());
+      var poster = hentDag(dag);
+      poster.push({
+        id: midlId, tid: tid, navn: "Analyserer…", kategori: "Andet", portion:"", kommentar:"",
+        portioner: 1, gram: 0,
+        pr_portion: { kalorier:0, protein_g:0, kulhydrat_g:0, fedt_g:0, genstande:0 },
+        genstande: 0, kalorier: 0, protein_g: 0, kulhydrat_g: 0, fedt_g: 0,
+        grupper: null, indhold: [], billede: r[1] || null, analyserer: true
+      });
+      gemDag(dag, poster);
+      nulstilAfledt();
+      tegn();
+      kaldAnalyse(r[0], r[1], "", null, null, dag, tid, 1, midlId);
     } else {
       S.ark = { status:"valgt", stor:r[0], lille:r[1], note:"" }; tegnArk();
     }
