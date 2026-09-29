@@ -227,6 +227,12 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .fortryd button{flex:none;background:none;border:none;color:#9FD3BE;font:inherit;
   font-size:14px;font-weight:600;padding:4px 2px;cursor:pointer;
   text-decoration:underline;text-underline-offset:3px;}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));
+  z-index:42;background:var(--blaek);color:var(--papir);border-radius:12px;padding:14px 16px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);font-size:14px;}
+.toast button{flex:none;background:none;border:1px solid rgba(232,233,227,.4);border-radius:8px;
+  padding:6px 12px;color:var(--papir);font:inherit;font-size:13px;cursor:pointer;}
 .offline{position:fixed;left:0;right:0;top:0;z-index:41;background:#4A554F;color:#F1F3EE;
   padding:calc(9px + env(safe-area-inset-top)) 14px 10px;font-size:13px;text-align:center;
   animation:falddown .26s ease-out;}
@@ -323,7 +329,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 57;
+var APP_BUILD = 58;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -338,7 +344,7 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_PROFIL = "kd:profil", K_VAEGT = "kd:vaegte", K_TJEK = "kd:sidste-tjek",
     K_LAAS = "kd:laas", K_LAASTID = "kd:laastid", K_FEJL = "kd:fejl",
     K_FORBRUG = "kd:forbrug", K_SPISE = "kd:spiseforslag", P_OPSKRIFT = "kd:opskrift:", K_UNSPLASH = "kd:unsplash",
-    K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret",
+    K_SETE = "kd:sete-retter", K_VINKEL = "kd:vinkel", K_FEJRET = "kd:fejret", K_AUTOREG = "kd:auto-reg",
     K_SESSION = "kd:session", K_PROFIL_ID = "kd:profil-id", K_PUSH = "kd:push", K_MAIL = "kd:mail",
     K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb",
     K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_GAUTO = "kd:gemini-auto",
@@ -731,6 +737,7 @@ var S = {
     return v;
   })(),
   get kaek(){ return this.kaekhed !== "fra"; },
+  autoreg: laes(K_AUTOREG) === "1",
   medicin: (function(){
     var m;
     try { m = JSON.parse(laes(K_MEDICIN) || "{}") || {}; } catch(e){ m = {}; }
@@ -3834,26 +3841,103 @@ function startPersonlighed(){
 }
 
 function visResultat(a, r){
+  if (a.auto){
+    var gemt = autoGemResultat(a, r);
+    S.ark = null;
+    tegn();
+    visRegistreretToast(gemt.dag, gemt.id, gemt.navn);
+    return;
+  }
   S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note,
             beskrivelse:a.beskrivelse, dag:a.dag, tid:a.tid, antal:a.antal, r:r };
   tegnArk();
 }
-function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal){
+
+/* Bygger og gemmer en post direkte fra analysens egne tal, uden om
+   redigeringsarket — bruges kun ved automatisk registrering, hvor der
+   ingen felter er at laese fra. Speejler feltopbygningen i b-gem ovenfor. */
+function autoGemResultat(a, r){
+  var dag = a.dag || maalDag();
+  var tid = a.tid || standardTid(dag);
+  var antal = a.antal || 1;
+  var navn = (r.navn || "Måltid").trim().slice(0,60) || "Måltid";
+  var id = String(Date.now());
+  var poster = hentDag(dag);
+  poster.push(normaliser({
+    id: id, tid: tid, navn: navn, kategori: r.kategori || "Andet",
+    portion: r.portion || "", kommentar: r.kommentar || "",
+    portioner: antal, gram: Number(r.gram) || 0,
+    pr_portion: prPortion({
+      kalorier: Number(r.kalorier) || 0, protein_g: Number(r.protein_g) || 0,
+      kulhydrat_g: Number(r.kulhydrat_g) || 0, fedt_g: Number(r.fedt_g) || 0,
+      genstande: Number(r.genstande) || 0
+    }, antal),
+    genstande: Number(r.genstande) || 0,
+    kalorier: Number(r.kalorier) || 0, protein_g: Number(r.protein_g) || 0,
+    kulhydrat_g: Number(r.kulhydrat_g) || 0, fedt_g: Number(r.fedt_g) || 0,
+    grupper: r.grupper || null, indhold: r.indhold || [],
+    billede: a.lille || null
+  }, 0));
+  gemDag(dag, poster);
+  S.maalDag = null;
+  nulstilAfledt();
+  return { dag:dag, id:id, navn:navn };
+}
+
+/* Vises 60 sekunder efter automatisk registrering, saa man kan naa at rette
+   noget uden at skulle bekraefte hvert eneste maaltid foerst. */
+function visRegistreretToast(dag, id, navn){
+  var gl = $("reg-toast"); if (gl) gl.remove();
+  document.body.insertAdjacentHTML("beforeend",
+    '<div class="toast" id="reg-toast"><span>Tilføjet: ' + esc(navn) + '</span>'
+    + '<button id="reg-toast-ret">Ret</button></div>');
+  var t = $("reg-toast");
+  var udloeb = setTimeout(function(){ if ($("reg-toast") === t) t.remove(); }, 60000);
+  $("reg-toast-ret").onclick = function(){
+    clearTimeout(udloeb);
+    if (t) t.remove();
+    aabnRediger(dag, id);
+  };
+}
+
+/* Automatisk registrering kunne ikke fuldfoeres (intet mad genkendt, eller
+   analysen fejlede) — der er ingen til at svare paa noget undervejs, saa
+   billedet gemmes ikke, men tilbydes til manuel opfoelgning i stedet for at
+   forsvinde sporloest. */
+function visAutoregFejl(stor, lille, besked){
+  var gl = $("reg-toast"); if (gl) gl.remove();
+  document.body.insertAdjacentHTML("beforeend",
+    '<div class="toast" id="reg-toast"><span>' + esc(besked) + '</span>'
+    + '<button id="reg-toast-ret">Prøv selv</button></div>');
+  var t = $("reg-toast");
+  setTimeout(function(){ if ($("reg-toast") === t) t.remove(); }, 60000);
+  $("reg-toast-ret").onclick = function(){
+    if (t) t.remove();
+    S.ark = { status:"valgt", stor:stor, lille:lille, note:"" };
+    tegnArk();
+  };
+}
+function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto){
   dag = dag || maalDag();
   tid = tid || standardTid(dag);
-  S.ark = { status:"analyserer", stor:stor, lille:lille, note:note,
-            beskrivelse:beskrivelse, dag:dag, tid:tid, antal:antal };
-  tegnArk();
+  if (!auto){
+    S.ark = { status:"analyserer", stor:stor, lille:lille, note:note,
+              beskrivelse:beskrivelse, dag:dag, tid:tid, antal:antal };
+    tegnArk();
+  }
   analyser(stor, note, svar, beskrivelse, dag, tid).then(function(r){
     var basis = { stor:stor, lille:lille, note:note, beskrivelse:beskrivelse,
-                  dag:dag, tid:tid, antal:antal };
+                  dag:dag, tid:tid, antal:antal, auto:auto };
     if (!r.er_mad){
+      if (auto){ visAutoregFejl(stor, lille, "Det lignede ikke mad eller drikke."); return; }
       S.ark = Object.assign({ status:"fejl", besked: beskrivelse
         ? "Det lyder ikke som mad eller drikke. Prøv en anden formulering, eller indtast tallene selv."
         : "Der ser ikke ud til at være mad på billedet. Tag et nyt, eller indtast tallene selv." }, basis);
       tegnArk(); return;
     }
-    var sp = Array.isArray(r.spoergsmaal) ? r.spoergsmaal.filter(function(x){
+    /* I auto-tilstand er der ingen til at svare paa afklarende spoergsmaal —
+       de springes over, og modellens bedste gaet bruges i stedet. */
+    var sp = (!auto && Array.isArray(r.spoergsmaal)) ? r.spoergsmaal.filter(function(x){
       return x && x.tekst && Array.isArray(x.valg) && x.valg.length;
     }).slice(0,3) : [];
     if (sp.length && !svar){
@@ -3863,6 +3947,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal){
     }
     visResultat(basis, r);
   }).catch(function(err){
+    if (auto){ visAutoregFejl(stor, lille, (err && err.message) || "Analysen gik i stå."); return; }
     S.ark = { status:"fejl", stor:stor, lille:lille, note:note, beskrivelse:beskrivelse,
       dag:dag, tid:tid, antal:antal,
       besked:(err && err.message) || "Analysen gik i stå. Prøv igen, eller indtast tallene selv." };
@@ -4022,6 +4107,10 @@ function tegnIndstillinger(){
     + '<span class="lbl">Målvægt i kilo (valgfri)</span>'
     + '<input id="s-mvaegt" type="text" inputmode="decimal" value="' + (S.profil.maalvaegt || "") + '" placeholder="fx 78,0">'
     + '</div></details>'
+    + '<div class="tjek"><input type="checkbox" id="s-autoreg"' + (S.autoreg ? " checked" : "") + '>'
+    + '<label for="s-autoreg">Registrér måltider automatisk efter analyse, uden at spørge først</label></div>'
+    + '<p class="grafnote" style="margin-top:4px">Du får 60 sekunder til at rette det bagefter, hvis noget er forkert. '
+    + 'Kan ikke skelne mellem tvivlsomme og sikre gæt, når intet spørges om undervejs.</p>'
     + '<details class="afsnit"><summary>Nøgler og model</summary><div>'
     + '<span class="lbl">Udbyder</span><select id="s-udbyder">'
     + [["claude","Claude — betalt, bedst til dansk"],
@@ -4121,6 +4210,8 @@ function tegnIndstillinger(){
   });
   var uds = $("s-udbyder");
   if (uds) uds.onchange = function(){ gemFelter(); tegnIndstillinger(); };
+  var ar = $("s-autoreg");
+  if (ar) ar.onchange = function(){ S.autoreg = ar.checked; skriv(K_AUTOREG, ar.checked ? "1" : "0"); };
 
   $("s-gem").onclick = function(){
     gemFelter();
@@ -4686,9 +4777,13 @@ $("fil").onchange = function(e){
   var file = e.target.files && e.target.files[0];
   e.target.value = "";
   if (!file) return;
-  S.ark = { status:"klargoer" }; tegnArk();
+  if (!S.autoreg){ S.ark = { status:"klargoer" }; tegnArk(); }
   Promise.all([ skalerFil(file, 1100, 0.82), skalerFil(file, 170, 0.6) ]).then(function(r){
-    S.ark = { status:"valgt", stor:r[0], lille:r[1], note:"" }; tegnArk();
+    if (S.autoreg){
+      kaldAnalyse(r[0], r[1], "", null, null, maalDag(), standardTid(maalDag()), 1, true);
+    } else {
+      S.ark = { status:"valgt", stor:r[0], lille:r[1], note:"" }; tegnArk();
+    }
   }).catch(function(){
     S.ark = { status:"fejl", besked:"Billedet kunne ikke åbnes. Prøv et andet." }; tegnArk();
   });
