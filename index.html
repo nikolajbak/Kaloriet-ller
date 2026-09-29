@@ -323,7 +323,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 55;
+var APP_BUILD = 56;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1315,28 +1315,41 @@ function geminiKald(krop){
      safetySettings loeftes til BLOCK_ONLY_HIGH, fordi standardfilteret laeser
      drilleri rettet mod brugeren selv som chikane og sender en daemper
      tilbage — det er brugerens eget valgte niveau, ikke en fremmed der hakkes paa. */
-  var krop2 = JSON.stringify({
-    contents: [{ parts: dele }],
-    systemInstruction: krop.system ? { parts: [{ text: krop.system }] } : undefined,
-    safetySettings: [
-      { category:"HARM_CATEGORY_HARASSMENT",        threshold:"BLOCK_ONLY_HIGH" },
-      { category:"HARM_CATEGORY_HATE_SPEECH",       threshold:"BLOCK_ONLY_HIGH" },
-      { category:"HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold:"BLOCK_ONLY_HIGH" },
-      { category:"HARM_CATEGORY_DANGEROUS_CONTENT", threshold:"BLOCK_ONLY_HIGH" }
-    ],
-    generationConfig: {
+  /* thinkingConfig findes kun fra Gemini 3.x og frem. Sendes det til en
+     aeldre model — som fallback-kaeden rammer, naar de nyeste 3.x-modeller
+     er overbelastede (503) — afviser den aeldre model sandsynligvis feltet
+     med en fatal fejl, der IKKE er 429/500/503/404, og kaeden doer der i
+     stedet for at proeve videre. Derfor bygges kroppen per model, ikke \u00e9n
+     gang for det hele. */
+  function taenkningOk(model){
+    var m = model.match(/^gemini-(\d+(?:\.\d+)?)-/);
+    return !!m && parseFloat(m[1]) >= 3;
+  }
+  function byggKrop(model){
+    var conf = {
       maxOutputTokens: Number(krop.max_tokens) || 1200,
-      responseMimeType: "application/json",
-      thinkingConfig: { thinkingBudget: 0 }
-    }
-  });
+      responseMimeType: "application/json"
+    };
+    if (taenkningOk(model)) conf.thinkingConfig = { thinkingBudget: 0 };
+    return JSON.stringify({
+      contents: [{ parts: dele }],
+      systemInstruction: krop.system ? { parts: [{ text: krop.system }] } : undefined,
+      safetySettings: [
+        { category:"HARM_CATEGORY_HARASSMENT",        threshold:"BLOCK_ONLY_HIGH" },
+        { category:"HARM_CATEGORY_HATE_SPEECH",       threshold:"BLOCK_ONLY_HIGH" },
+        { category:"HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold:"BLOCK_ONLY_HIGH" },
+        { category:"HARM_CATEGORY_DANGEROUS_CONTENT", threshold:"BLOCK_ONLY_HIGH" }
+      ],
+      generationConfig: conf
+    });
+  }
 
   function etKald(model){
     return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
         + encodeURIComponent(model) + ":generateContent", {
       method: "POST",
       headers: { "Content-Type":"application/json", "x-goog-api-key": noegle },
-      body: krop2
+      body: byggKrop(model)
     }).then(function(r){
       return r.json().catch(function(){ return {}; }).then(function(d){
         if (!r.ok){
@@ -1363,7 +1376,7 @@ function geminiKald(krop){
       var mellem = (s === 429 || s === 500 || s === 503);
       if (mellem && forsoeg < 2)
         return gVent(forsoeg === 0 ? 1500 : 4000).then(function(){ return proev(liste, i, forsoeg + 1); });
-      if ((mellem || s === 404) && i + 1 < liste.length)
+      if ((mellem || s === 404 || s === 400) && i + 1 < liste.length)
         return proev(liste, i + 1, 0);
       if (s === 404) skriv(K_GAUTO, "");
       throw e;
