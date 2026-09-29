@@ -228,6 +228,18 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .fortryd button{flex:none;background:none;border:none;color:#9FD3BE;font:inherit;
   font-size:14px;font-weight:600;padding:4px 2px;cursor:pointer;
   text-decoration:underline;text-underline-offset:3px;}
+.kamera-lag{position:fixed;inset:0;z-index:50;background:#000;display:flex;
+  align-items:center;justify-content:center;overflow:hidden;}
+.kamera-lag video{width:100%;height:100%;object-fit:cover;}
+.kamera-status{position:absolute;left:0;right:0;bottom:calc(96px + env(safe-area-inset-bottom,0px));
+  text-align:center;color:#fff;font-size:15px;font-weight:600;
+  text-shadow:0 1px 4px rgba(0,0,0,.6);padding:0 24px;}
+.kamera-manuel{position:absolute;left:24px;right:24px;bottom:calc(32px + env(safe-area-inset-bottom,0px));
+  background:var(--gron);color:#fff;border:none;border-radius:12px;padding:14px;
+  font:inherit;font-size:15px;font-weight:600;cursor:pointer;}
+.kamera-luk{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:16px;
+  width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;
+  border:none;font-size:18px;line-height:1;cursor:pointer;}
 .toast{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));
   z-index:42;background:var(--blaek);color:var(--papir);border-radius:12px;padding:14px 16px;
   display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -330,7 +342,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 59;
+var APP_BUILD = 60;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2292,7 +2304,7 @@ function tegnHoved(){
   $("rod").innerHTML = h;
   bindHoved();
   $("b-maal").onclick = function(){ S.indst = true; tegn(); };
-  $("b-foto").onclick = function(){ $("fil").click(); };
+  $("b-foto").onclick = function(){ if (S.autoreg) startKamera(); else $("fil").click(); };
   $("b-skriv").onclick = function(){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); };
   tegnSpiseforslag();
   bindRediger();
@@ -4796,29 +4808,163 @@ function skalerFil(file, maks, kvalitet){
   });
 }
 
+/* Delt indgang til automatisk registrering — bruges baade af den almindelige
+   filvaelger (native kamera) og det nye live-kamera nedenfor, saa der kun er
+   ét sted der bygger den midlertidige "Analyserer…"-post. */
+function startAutoAnalyse(stor, lille){
+  var dag = maalDag(), tid = standardTid(dag), midlId = String(Date.now());
+  var poster = hentDag(dag);
+  poster.push({
+    id: midlId, tid: tid, navn: "Analyserer…", kategori: "Andet", portion:"", kommentar:"",
+    portioner: 1, gram: 0,
+    pr_portion: { kalorier:0, protein_g:0, kulhydrat_g:0, fedt_g:0, genstande:0 },
+    genstande: 0, kalorier: 0, protein_g: 0, kulhydrat_g: 0, fedt_g: 0,
+    grupper: null, indhold: [], billede: lille || null, analyserer: true
+  });
+  gemDag(dag, poster);
+  nulstilAfledt();
+  tegn();
+  kaldAnalyse(stor, lille, "", null, null, dag, tid, 1, midlId);
+}
+
+/* ---------- Live-kamera til automatisk registrering ----------
+   Det indbyggede kamera (input[type=file][capture]) viser altid sin egen
+   "Brug foto"-bekraeftelse — der findes ingen vej udenom den fra websiden.
+   Skal et billede bruges helt uden tryk, skal appen selv styre kameraet
+   (getUserMedia) og selv afgoere, hvornaar billedet er godt nok. Det
+   afgoeres her af to lokale, øjeblikkelige maal — ingen ekstern model:
+   1) kantenergi som mål for skarphed (et sløret billede har svage kanter)
+   2) forskel mellem paa hinanden foelgende billeder som mål for bevaegelse
+   Begge beregnes paa et lille 96x72-billede for hastighedens skyld. */
+
+function graaskala(ctx, w, h){
+  var data = ctx.getImageData(0, 0, w, h).data;
+  var ud = new Uint8ClampedArray(w * h);
+  for (var i = 0, j = 0; i < data.length; i += 4, j++){
+    ud[j] = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114) | 0;
+  }
+  return ud;
+}
+function kantEnergi(g, w, h){
+  var sum = 0, n = 0, y, x, i;
+  for (y = 1; y < h - 1; y++){
+    for (x = 1; x < w - 1; x++){
+      i = y * w + x;
+      sum += Math.abs(g[i+1] - g[i-1]) + Math.abs(g[i+w] - g[i-w]);
+      n++;
+    }
+  }
+  return n ? sum / n : 0;
+}
+function frameForskel(a, b){
+  var sum = 0, i;
+  for (i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return a.length ? sum / a.length : 0;
+}
+
+function lukKamera(){
+  var lag = $("kamera-lag");
+  if (!lag) return;
+  var video = $("kamera-video");
+  if (video && video.srcObject) video.srcObject.getTracks().forEach(function(t){ t.stop(); });
+  lag.remove();
+}
+
+function fangLiveBillede(video, faerdig){
+  var vw = video.videoWidth || 1280, vh = video.videoHeight || 960;
+  function skaleret(maks, kval){
+    var c = document.createElement("canvas");
+    var s = Math.min(1, maks / Math.max(vw, vh));
+    c.width = Math.max(1, Math.round(vw * s));
+    c.height = Math.max(1, Math.round(vh * s));
+    c.getContext("2d").drawImage(video, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", kval);
+  }
+  var stor = skaleret(1100, 0.82), lille = skaleret(170, 0.6);
+  lukKamera();
+  faerdig(stor, lille);
+}
+
+function startKameraLoop(video, statusEl){
+  var sW = 96, sH = 72;
+  var sC = document.createElement("canvas");
+  sC.width = sW; sC.height = sH;
+  var sctx = sC.getContext("2d", { willReadFrequently: true });
+  var MIN_SKARPHED = 9, MAKS_BEVAEGELSE = 4, STABIL_KRAV = 3;
+  var forrige = null, stabil = 0, fanget = false, forsoeg = 0;
+
+  function vis(t){ if (statusEl) statusEl.textContent = t; }
+
+  function tick(){
+    if (fanget || !$("kamera-lag")) return;
+    if (video.readyState < 2){ setTimeout(tick, 150); return; }
+    forsoeg++;
+    sctx.drawImage(video, 0, 0, sW, sH);
+    var g = graaskala(sctx, sW, sH);
+    var skarphed = kantEnergi(g, sW, sH);
+    var bevaegelse = forrige ? frameForskel(g, forrige) : 999;
+    forrige = g;
+
+    if (skarphed >= MIN_SKARPHED && bevaegelse <= MAKS_BEVAEGELSE){
+      stabil++;
+      vis(stabil >= STABIL_KRAV ? "Fanger billede …" : "Holder stille — et øjeblik …");
+    } else {
+      stabil = 0;
+      vis(skarphed < MIN_SKARPHED ? "Ret kameraet mod maden" : "Hold telefonen stille …");
+    }
+
+    /* Efter ca. 6 sekunder uden et stabilt, skarpt billede vises en manuel
+       knap som sikkerhedsnet — daarlig belysning eller rystet hånd skal
+       ikke laase brugeren fast i et evigt loop. */
+    if (forsoeg === 40){
+      var mk = $("kamera-manuel");
+      if (mk) mk.classList.remove("skjul");
+    }
+    if (stabil >= STABIL_KRAV){
+      fanget = true;
+      fangLiveBillede(video, startAutoAnalyse);
+      return;
+    }
+    setTimeout(tick, 150);
+  }
+  tick();
+}
+
+function startKamera(){
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    $("fil").click(); return;
+  }
+  document.body.insertAdjacentHTML("beforeend",
+    '<div class="kamera-lag" id="kamera-lag">'
+    + '<video id="kamera-video" autoplay playsinline muted></video>'
+    + '<div class="kamera-status" id="kamera-status">Retter ind …</div>'
+    + '<button class="kamera-manuel skjul" id="kamera-manuel">Tag billede nu</button>'
+    + '<button class="kamera-luk" id="kamera-luk" aria-label="Annullér">✕</button>'
+    + '</div>');
+  var video = $("kamera-video"), status = $("kamera-status");
+  $("kamera-luk").onclick = lukKamera;
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+    .then(function(stream){
+      if (!$("kamera-lag")){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+      video.srcObject = stream;
+      $("kamera-manuel").onclick = function(){ fangLiveBillede(video, startAutoAnalyse); };
+      startKameraLoop(video, status);
+    })
+    .catch(function(){
+      lukKamera();
+      $("fil").click();
+    });
+}
+
 $("fil").onchange = function(e){
   var file = e.target.files && e.target.files[0];
   e.target.value = "";
   if (!file) return;
   if (!S.autoreg){ S.ark = { status:"klargoer" }; tegnArk(); }
   Promise.all([ skalerFil(file, 1100, 0.82), skalerFil(file, 170, 0.6) ]).then(function(r){
-    if (S.autoreg){
-      var dag = maalDag(), tid = standardTid(dag), midlId = String(Date.now());
-      var poster = hentDag(dag);
-      poster.push({
-        id: midlId, tid: tid, navn: "Analyserer…", kategori: "Andet", portion:"", kommentar:"",
-        portioner: 1, gram: 0,
-        pr_portion: { kalorier:0, protein_g:0, kulhydrat_g:0, fedt_g:0, genstande:0 },
-        genstande: 0, kalorier: 0, protein_g: 0, kulhydrat_g: 0, fedt_g: 0,
-        grupper: null, indhold: [], billede: r[1] || null, analyserer: true
-      });
-      gemDag(dag, poster);
-      nulstilAfledt();
-      tegn();
-      kaldAnalyse(r[0], r[1], "", null, null, dag, tid, 1, midlId);
-    } else {
-      S.ark = { status:"valgt", stor:r[0], lille:r[1], note:"" }; tegnArk();
-    }
+    if (S.autoreg) startAutoAnalyse(r[0], r[1]);
+    else { S.ark = { status:"valgt", stor:r[0], lille:r[1], note:"" }; tegnArk(); }
   }).catch(function(){
     S.ark = { status:"fejl", besked:"Billedet kunne ikke åbnes. Prøv et andet." }; tegnArk();
   });
