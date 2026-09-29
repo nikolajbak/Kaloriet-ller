@@ -323,7 +323,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 56;
+var APP_BUILD = 57;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1373,12 +1373,17 @@ function geminiKald(krop){
   function proev(liste, i, forsoeg){
     return etKald(liste[i]).catch(function(e){
       var s = e.status || 0;
-      var mellem = (s === 429 || s === 500 || s === 503);
+      /* s===0 daekker rene netvaerksfejl — fetch() der aldrig fik et svar
+         overhovedet (iOS' "Load failed"), ikke en HTTP-fejlkode. De er lige
+         saa ofte forbigaaende som en 503, og skal behandles saadan i stedet
+         for at give op efter forste forsoeg. */
+      var mellem = (s === 429 || s === 500 || s === 503 || s === 0);
       if (mellem && forsoeg < 2)
         return gVent(forsoeg === 0 ? 1500 : 4000).then(function(){ return proev(liste, i, forsoeg + 1); });
       if ((mellem || s === 404 || s === 400) && i + 1 < liste.length)
         return proev(liste, i + 1, 0);
       if (s === 404) skriv(K_GAUTO, "");
+      if (s === 0) throw new Error("Mistede forbindelsen til Gemini undervejs. Tjek din internetforbindelse og prøv igen.");
       throw e;
     });
   }
