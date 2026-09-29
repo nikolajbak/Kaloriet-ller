@@ -229,8 +229,18 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   font-size:14px;font-weight:600;padding:4px 2px;cursor:pointer;
   text-decoration:underline;text-underline-offset:3px;}
 .kamera-lag{position:fixed;inset:0;z-index:50;background:#000;display:flex;
-  align-items:center;justify-content:center;overflow:hidden;}
-.kamera-lag video{width:100%;height:100%;object-fit:cover;}
+  align-items:center;justify-content:center;overflow:hidden;
+  opacity:0;transition:opacity .32s ease;}
+.kamera-lag.aaben{opacity:1;}
+.kamera-lag.lukker{opacity:0;}
+.kamera-lag video{width:100%;height:100%;object-fit:cover;
+  transition:filter .32s ease,transform .32s ease;}
+.kamera-lag.lukker video{filter:blur(6px);transform:scale(1.03);}
+.kamera-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;
+  z-index:2;transition:opacity .1s ease-out;}
+.kamera-flash.til{opacity:.92;transition:opacity .04s ease-in;}
+.kamera-status,.kamera-manuel,.kamera-luk{transition:opacity .22s ease;}
+.kamera-lag.lukker .kamera-status,.kamera-lag.lukker .kamera-manuel,.kamera-lag.lukker .kamera-luk{opacity:0;}
 .kamera-status{position:absolute;left:0;right:0;bottom:calc(96px + env(safe-area-inset-bottom,0px));
   text-align:center;color:#fff;font-size:15px;font-weight:600;
   text-shadow:0 1px 4px rgba(0,0,0,.6);padding:0 24px;}
@@ -342,7 +352,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 60;
+var APP_BUILD = 61;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -4870,6 +4880,31 @@ function lukKamera(){
   lag.remove();
 }
 
+/* Blodt luk: laegger "lukker"-klassen (toner ud, let slor+zoom paa videoen,
+   jf. CSS), og fjerner foerst selve laget fra DOM'et NAAR overgangen er
+   faerdig — saa der aldrig er et haardt klip eller et tomt mellemrum. */
+function lukKameraBloedt(){
+  var lag = $("kamera-lag");
+  if (!lag){ lukKamera(); return; }
+  lag.classList.add("lukker");
+  setTimeout(lukKamera, 340);
+}
+
+/* Kort, tydeligt lukkerblink i det oejeblik billedet tages — samme signal
+   som et rigtigt kamera giver, saa det er utvetydigt at noget lige er
+   sket, foer visningen toner over i den allerede opdaterede liste. */
+function visLukkerblink(){
+  var lag = $("kamera-lag");
+  if (!lag) return;
+  var f = document.createElement("div");
+  f.className = "kamera-flash";
+  lag.appendChild(f);
+  requestAnimationFrame(function(){
+    f.classList.add("til");
+    setTimeout(function(){ f.classList.remove("til"); }, 90);
+  });
+}
+
 function fangLiveBillede(video, faerdig){
   var vw = video.videoWidth || 1280, vh = video.videoHeight || 960;
   function skaleret(maks, kval){
@@ -4881,8 +4916,11 @@ function fangLiveBillede(video, faerdig){
     return c.toDataURL("image/jpeg", kval);
   }
   var stor = skaleret(1100, 0.82), lille = skaleret(170, 0.6);
-  lukKamera();
+  visLukkerblink();
+  /* Listen opdateres MENS kameraet stadig daekker skaermen, saa den
+     allerede ligger klar, naar kameraet et oejeblik efter toner vaek. */
   faerdig(stor, lille);
+  lukKameraBloedt();
 }
 
 function startKameraLoop(video, statusEl){
@@ -4941,8 +4979,10 @@ function startKamera(){
     + '<button class="kamera-manuel skjul" id="kamera-manuel">Tag billede nu</button>'
     + '<button class="kamera-luk" id="kamera-luk" aria-label="Annullér">✕</button>'
     + '</div>');
+  var lag = $("kamera-lag");
+  requestAnimationFrame(function(){ lag.classList.add("aaben"); });
   var video = $("kamera-video"), status = $("kamera-status");
-  $("kamera-luk").onclick = lukKamera;
+  $("kamera-luk").onclick = lukKameraBloedt;
 
   navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
     .then(function(stream){
