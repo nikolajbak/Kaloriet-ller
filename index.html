@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 68;
+var APP_BUILD = 69;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -5059,8 +5059,23 @@ function frigivKamera(){
 }
 function hentKameraStroem(){
   frigivKamera();
-  return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
-    .then(function(st){ kameraStroem = st; return st; });
+  /* Fast 4:3-opløsning fra start: uden krav starter iOS på en lille standardstrøm
+     og skifter siden til en anden opløsning/beskæring, hvilket ses som et
+     ryk ind i billedet. 4:3 er sensorens fulde synsfelt (16:9 beskærer). */
+  return navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" },
+               width: { ideal: 1280 }, height: { ideal: 960 }, aspectRatio: { ideal: 4/3 } },
+      audio: false })
+    .then(function(st){
+      kameraStroem = st;
+      /* Sæt evt. kamerazoom til laveste (bredeste) værdi, hvis enheden udstiller det */
+      try {
+        var t = st.getVideoTracks()[0], c = t.getCapabilities && t.getCapabilities();
+        if (c && c.zoom && typeof c.zoom.min === "number")
+          t.applyConstraints({ advanced: [{ zoom: c.zoom.min }] }).catch(function(){});
+      } catch(f){}
+      return st;
+    });
 }
 document.addEventListener("visibilitychange", function(){
   if (document.visibilityState === "hidden"){ lukKamera(); frigivKamera(); }
@@ -5212,7 +5227,7 @@ function startKamera(){
   hentKameraStroem()
     .then(function(stream){
       if (!$("kamera-lag")){ frigivKamera(); return; }
-      video.onplaying = function(){ video.classList.add("klar"); };
+      video.onplaying = function(){ setTimeout(function(){ video.classList.add("klar"); }, 250); };
       video.srcObject = stream;
       var manuelt = function(){ fangLiveBillede(video, startAutoAnalyse); };
       $("kamera-manuel").onclick = manuelt;
