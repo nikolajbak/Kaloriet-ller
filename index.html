@@ -252,7 +252,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   border-radius .55s ease,box-shadow .55s ease;}
 .kamera-lag.lukker{opacity:0;}
 .kamera-lag video{width:100%;height:100%;object-fit:cover;opacity:0;
-  transition:filter .32s ease,opacity .28s ease;}
+  transition:filter .32s ease,opacity .45s ease;}
 .kamera-lag video.klar{opacity:1;}
 .kamera-lag.lukker video{filter:blur(6px);}
 .kamera-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;
@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 69;
+var APP_BUILD = 70;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -5227,7 +5227,16 @@ function startKamera(){
   hentKameraStroem()
     .then(function(stream){
       if (!$("kamera-lag")){ frigivKamera(); return; }
-      video.onplaying = function(){ setTimeout(function(){ video.classList.add("klar"); }, 250); };
+      /* Vis først videoen, naar strømmen har sat sig: hver gang iOS skifter
+         opløsning/beskæring (resize-event) nulstilles ventetiden, højst 2,5 s. */
+      var visTimer = null, start = Date.now();
+      function planVis(){
+        clearTimeout(visTimer);
+        visTimer = setTimeout(function(){ video.classList.add("klar"); },
+          Date.now() - start > 2500 ? 0 : 500);
+      }
+      video.onplaying = planVis;
+      video.onresize = function(){ if (!video.classList.contains("klar")) planVis(); };
       video.srcObject = stream;
       var manuelt = function(){ fangLiveBillede(video, startAutoAnalyse); };
       $("kamera-manuel").onclick = manuelt;
