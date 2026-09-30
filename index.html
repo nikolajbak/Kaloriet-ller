@@ -240,9 +240,9 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   text-decoration:underline;text-underline-offset:3px;}
 .kamera-lag{position:fixed;inset:0;z-index:50;background:#000;display:flex;
   align-items:center;justify-content:center;overflow:hidden;
-  opacity:0;transform:scale(1.035);
-  transition:opacity .34s ease,transform .42s cubic-bezier(.22,.7,.3,1),background-color .3s ease;}
-.kamera-lag.aaben{opacity:1;transform:none;}
+  opacity:0;
+  transition:opacity .34s ease,background-color .3s ease;}
+.kamera-lag.aaben{opacity:1;}
 .kamera-lag.flyver{background-color:transparent;}
 .kamera-lag.flyver video{opacity:0;}
 .kamera-lag.flyver .kamera-status,.kamera-lag.flyver .kamera-manuel,.kamera-lag.flyver .kamera-luk{opacity:0;}
@@ -250,11 +250,11 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   transition:left .55s cubic-bezier(.4,.1,.2,1),top .55s cubic-bezier(.4,.1,.2,1),
   width .55s cubic-bezier(.4,.1,.2,1),height .55s cubic-bezier(.4,.1,.2,1),
   border-radius .55s ease,box-shadow .55s ease;}
-.kamera-lag.lukker{opacity:0;transform:scale(1.02);}
+.kamera-lag.lukker{opacity:0;}
 .kamera-lag video{width:100%;height:100%;object-fit:cover;opacity:0;
-  transition:filter .32s ease,transform .32s ease,opacity .28s ease;}
+  transition:filter .32s ease,opacity .28s ease;}
 .kamera-lag video.klar{opacity:1;}
-.kamera-lag.lukker video{filter:blur(6px);transform:scale(1.03);}
+.kamera-lag.lukker video{filter:blur(6px);}
 .kamera-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;
   z-index:2;transition:opacity .1s ease-out;}
 .kamera-flash.til{opacity:.92;transition:opacity .04s ease-in;}
@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 67;
+var APP_BUILD = 68;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
