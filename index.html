@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 71;
+var APP_BUILD = 72;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -3970,8 +3970,21 @@ function startPersonlighed(){
 
 function visResultat(a, r){
   if (a.auto){
+    /* Kommentaren hentes i baggrunden og saettes paa posten, naar den er klar.
+       Kaldet startes FOER posten gemmes, saa dagens budget i prompten er
+       "foer dette maaltid", som i den manuelle vej. */
+    var kom = S.kaek ? hentPersonlighed(r, a.dag, a.tid, a.antal || 1) : null;
     var gemt = autoGemResultat(a, r);
     delete ventende[gemt.id];
+    if (kom) kom.then(function(t){
+      if (!t || !t.kommentar) return;
+      var poster = hentDag(gemt.dag), fundet = false;
+      poster.forEach(function(x){ if (x.id === gemt.id){ x.kommentar = String(t.kommentar); fundet = true; } });
+      if (!fundet) return;
+      gemDag(gemt.dag, poster);
+      notérKommentar(t.kommentar);
+      if (!S.ark && !S.indst && S.skaerm === "idag") tegn();
+    }).catch(function(){});
     var aaben = !!$("overlay");
     S.ark = null; S.nyPost = gemt.id;
     if (aaben) lukBlodt("overlay", tegn); else tegn();
