@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 63;
+var APP_BUILD = 64;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -1344,6 +1344,29 @@ function gListe(){
 
 function gVent(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
 
+/* Et netvaerkskald der ALTID afgoeres: efter `ms` afbrydes det og afvises med
+   timeout=true. Uden dette kan et kald, hvis forbindelse iOS har kappet i
+   baggrunden, hænge for evigt uden hverken svar eller fejl. `lav` faar en
+   AbortSignal og returnerer selve kalds-løftet (inkl. laesning af svarkroppen). */
+function medTid(ms, lav){
+  var ac = typeof AbortController === "function" ? new AbortController() : null;
+  var t;
+  var ur = new Promise(function(_, afvis){
+    t = setTimeout(function(){
+      if (ac) try { ac.abort(); } catch(f){}
+      var e = new Error("Analysen tog for lang tid. Tjek forbindelsen og prøv igen.");
+      e.timeout = true;
+      afvis(e);
+    }, ms);
+  });
+  var kald = lav(ac ? ac.signal : undefined);
+  var ret = Promise.race([kald, ur]);
+  var ryd = function(){ clearTimeout(t); };
+  ret.then(ryd, ryd);
+  return ret;
+}
+var KALD_TIDSGRAENSE = 45000;
+
 function geminiKald(krop){
   var noegle = laes(K_GNOEGLE) || "";
   if (!noegle) return Promise.reject(new Error("Der mangler en Gemini-n\u00f8gle under Indstillinger."));
@@ -1394,9 +1417,11 @@ function geminiKald(krop){
   }
 
   function etKald(model){
-    return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
+    return medTid(KALD_TIDSGRAENSE, function(signal){
+     return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
         + encodeURIComponent(model) + ":generateContent", {
       method: "POST",
+      signal: signal,
       headers: { "Content-Type":"application/json", "x-goog-api-key": noegle },
       body: byggKrop(model)
     }).then(function(r){
@@ -1413,6 +1438,7 @@ function geminiKald(krop){
         return { content: [{ type:"text", text: tekst }],
                  stop_reason: k && k.finishReason === "MAX_TOKENS" ? "max_tokens" : "end_turn" };
       });
+    });
     });
   }
 
@@ -1445,8 +1471,9 @@ function kald(krop, andetForsoeg){
   var svarLoefte = udbyder() === "gemini"
     ? geminiKald(krop).then(function(d){ return { ok:true, status:200, data:d }; })
         .catch(function(e){ return { ok:false, fejl:e }; })
-    : fetch("https://api.anthropic.com/v1/messages", {
+    : medTid(KALD_TIDSGRAENSE, function(signal){ return fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
+        signal: signal,
         headers: {
           "content-type": "application/json",
           "x-api-key": aktivNoegle || laes(K_NOEGLE) || "",
@@ -1457,7 +1484,7 @@ function kald(krop, andetForsoeg){
       }).then(function(r){
         return r.json().catch(function(){ return {}; })
           .then(function(d){ return { ok:r.ok, status:r.status, data:d }; });
-      });
+      }); });
 
   return svarLoefte.then(function(svar){
     if (svar.fejl) throw svar.fejl;
@@ -1791,7 +1818,12 @@ function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
     indhold.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } });
   }
   indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse, dag, tid) });
-  return kald({ model:S.model, max_tokens:2400, messages:[{ role:"user", content:indhold }] });
+  var krop = { model:S.model, max_tokens:2400, messages:[{ role:"user", content:indhold }] };
+  /* Et kald, der hang eller tabte forbindelsen, proeves én gang til, foer der gives op */
+  return kald(krop).catch(function(e){
+    if (e && (e.timeout || e instanceof TypeError)) return kald(krop);
+    throw e;
+  });
 }
 
 /* Retter appen allerede har foreslaaet. Uden den her liste kommer de samme
@@ -4875,7 +4907,21 @@ function laasTid(){
 
 /* ================= Haendelser ================= */
 
-function skalerFil(file, maks, kvalitet){
+/* Miniaturen vises baade som 52 px raekke-billede (paa 3x-skaerme ca. 156 px)
+   og stort i ret-arket, saa 170 px var alt for lidt. 420 px lang led giver
+   skarpt billede begge steder; WebP (hvis browseren kan skrive det) holder
+   den paa ca. 10-15 kB pr. maaltid, ellers JPEG paa ca. 20-25 kB. */
+var TUMBNAIL_MAKS = 420, TUMBNAIL_KVAL = 0.72;
+function tilBillede(c, kvalitet, tumb){
+  if (tumb){
+    try {
+      var w = c.toDataURL("image/webp", kvalitet);
+      if (w.indexOf("data:image/webp") === 0) return w;
+    } catch(f){}
+  }
+  return c.toDataURL("image/jpeg", kvalitet);
+}
+function skalerFil(file, maks, kvalitet, tumb){
   return new Promise(function(ok, fejl){
     var fr = new FileReader();
     fr.onerror = function(){ fejl(new Error("laesefejl")); };
@@ -4887,7 +4933,7 @@ function skalerFil(file, maks, kvalitet){
         var c = document.createElement("canvas");
         c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
         c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        ok(c.toDataURL("image/jpeg", kvalitet));
+        ok(tilBillede(c, kvalitet, tumb));
       };
       img.src = fr.result;
     };
@@ -5020,15 +5066,15 @@ function visLukkerblink(){
 
 function fangLiveBillede(video, faerdig){
   var vw = video.videoWidth || 1280, vh = video.videoHeight || 960;
-  function skaleret(maks, kval){
+  function skaleret(maks, kval, tumb){
     var c = document.createElement("canvas");
     var s = Math.min(1, maks / Math.max(vw, vh));
     c.width = Math.max(1, Math.round(vw * s));
     c.height = Math.max(1, Math.round(vh * s));
     c.getContext("2d").drawImage(video, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", kval);
+    return tilBillede(c, kval, tumb);
   }
-  var stor = skaleret(1100, 0.82), lille = skaleret(170, 0.6);
+  var stor = skaleret(1100, 0.82), lille = skaleret(TUMBNAIL_MAKS, TUMBNAIL_KVAL, true);
   visLukkerblink();
   /* Listen opdateres MENS kameraet stadig daekker skaermen, saa den
      allerede ligger klar, naar billedet flyver ned til den. */
@@ -5146,7 +5192,7 @@ $("fil").onchange = function(e){
   e.target.value = "";
   if (!file) return;
   if (!S.autoreg){ S.ark = { status:"klargoer" }; tegnArk(); }
-  Promise.all([ skalerFil(file, 1100, 0.82), skalerFil(file, 170, 0.6) ]).then(function(r){
+  Promise.all([ skalerFil(file, 1100, 0.82), skalerFil(file, TUMBNAIL_MAKS, TUMBNAIL_KVAL, true) ]).then(function(r){
     if (S.autoreg) startAutoAnalyse(r[0], r[1]);
     else { S.ark = { status:"valgt", stor:r[0], lille:r[1], note:"" }; tegnArk(); }
   }).catch(function(){
