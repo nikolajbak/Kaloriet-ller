@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 65;
+var APP_BUILD = 66;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -461,7 +461,7 @@ function normaliser(p, i){
     pr = {};
     Object.keys(tal).forEach(function(k){ pr[k] = tal[k] / ant; });
   }
-  return {
+  var ud = {
     grupper: normGrupper(p.grupper),
     indhold: normIndhold(p.indhold),
     id: String(p.id != null ? p.id : "gl" + i),
@@ -486,6 +486,14 @@ function normaliser(p, i){
     fedt_g: tal.fedt_g,
     billede: typeof p.billede === "string" ? p.billede : null
   };
+  /* Midlertidige poster (analyse i gang / venter paa svar / fejlet) skal
+     beholde deres status, ellers ser de ud som almindelige poster. */
+  if (p.analyserer === true){
+    ud.analyserer = true;
+    ud.status = p.status === "spoergsmaal" || p.status === "fejl" ? p.status : "analyserer";
+    ud.fejlTekst = typeof p.fejlTekst === "string" ? p.fejlTekst : "";
+  }
+  return ud;
 }
 
 /* Faelles opfoersel for portionsfeltet i begge ark: aendres antallet, skaleres de
