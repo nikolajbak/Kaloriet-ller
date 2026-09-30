@@ -233,8 +233,9 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   opacity:0;transition:opacity .32s ease;}
 .kamera-lag.aaben{opacity:1;}
 .kamera-lag.lukker{opacity:0;}
-.kamera-lag video{width:100%;height:100%;object-fit:cover;
-  transition:filter .32s ease,transform .32s ease;}
+.kamera-lag video{width:100%;height:100%;object-fit:cover;opacity:0;
+  transition:filter .32s ease,transform .32s ease,opacity .28s ease;}
+.kamera-lag video.klar{opacity:1;}
 .kamera-lag.lukker video{filter:blur(6px);transform:scale(1.03);}
 .kamera-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;
   z-index:2;transition:opacity .1s ease-out;}
@@ -352,7 +353,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 61;
+var APP_BUILD = 62;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -4872,11 +4873,45 @@ function frameForskel(a, b){
   return a.length ? sum / a.length : 0;
 }
 
+/* Kamerastrømmen genbruges. iOS spoerger om kameraadgang hver gang en
+   PWA beder om en ny strøm, saa vi henter den kun én gang og "parkerer" den
+   imellem billeder: sporene slaas fra (kameraet slukker, indikatoren
+   forsvinder), men strømmen er stadig gyldig og kan tændes igen uden ny
+   tilladelse. Efter KAMERA_PARK_MS uden brug — eller naar appen skjules —
+   frigives den helt. */
+var KAMERA_PARK_MS = 120000;
+var kameraStroem = null, kameraParkTimer = null;
+
+function frigivKamera(){
+  clearTimeout(kameraParkTimer); kameraParkTimer = null;
+  if (kameraStroem){ kameraStroem.getTracks().forEach(function(t){ t.stop(); }); kameraStroem = null; }
+}
+function parkerKamera(){
+  if (!kameraStroem) return;
+  kameraStroem.getTracks().forEach(function(t){ t.enabled = false; });
+  clearTimeout(kameraParkTimer);
+  kameraParkTimer = setTimeout(frigivKamera, KAMERA_PARK_MS);
+}
+function hentKameraStroem(){
+  clearTimeout(kameraParkTimer); kameraParkTimer = null;
+  if (kameraStroem && kameraStroem.getVideoTracks().some(function(t){ return t.readyState === "live"; })){
+    kameraStroem.getTracks().forEach(function(t){ t.enabled = true; });
+    return Promise.resolve(kameraStroem);
+  }
+  kameraStroem = null;
+  return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+    .then(function(st){ kameraStroem = st; return st; });
+}
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden"){ lukKamera(); frigivKamera(); }
+});
+
 function lukKamera(){
   var lag = $("kamera-lag");
   if (!lag) return;
   var video = $("kamera-video");
-  if (video && video.srcObject) video.srcObject.getTracks().forEach(function(t){ t.stop(); });
+  if (video) video.srcObject = null;
+  parkerKamera();
   lag.remove();
 }
 
@@ -4984,11 +5019,14 @@ function startKamera(){
   var video = $("kamera-video"), status = $("kamera-status");
   $("kamera-luk").onclick = lukKameraBloedt;
 
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+  hentKameraStroem()
     .then(function(stream){
-      if (!$("kamera-lag")){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+      if (!$("kamera-lag")){ parkerKamera(); return; }
+      video.onplaying = function(){ video.classList.add("klar"); };
       video.srcObject = stream;
-      $("kamera-manuel").onclick = function(){ fangLiveBillede(video, startAutoAnalyse); };
+      var manuelt = function(){ fangLiveBillede(video, startAutoAnalyse); };
+      $("kamera-manuel").onclick = manuelt;
+      video.onclick = manuelt;
       startKameraLoop(video, status);
     })
     .catch(function(){
