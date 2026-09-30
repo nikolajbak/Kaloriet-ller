@@ -59,7 +59,17 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
   display:flex;align-items:center;justify-content:flex-end;gap:8px;
   padding-right:22px;font-size:15px;font-weight:600;}
 .slettebag svg{width:19px;height:19px;}
-.post.analyserer{opacity:.55;}
+.post.vent{cursor:pointer;}
+.post.ny{animation:nyPost 1.6s ease-out;}
+@keyframes nyPost{0%{box-shadow:0 0 0 0 rgba(90,120,100,.55);}100%{box-shadow:0 0 0 12px rgba(90,120,100,0);}}
+.post .thumb{position:relative;width:52px;height:52px;flex:none;}
+.post .thumb img,.post .thumb .tom-foto{width:100%;height:100%;}
+.post .skjold{position:absolute;inset:0;border-radius:8px;background:rgba(20,26,22,.52);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px;}
+.spin{width:22px;height:22px;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;
+  border-radius:50%;animation:drej .8s linear infinite;}
+@keyframes drej{to{transform:rotate(360deg)}}
+.post .meta .tm{font-variant-numeric:tabular-nums;}
 .post{display:flex;gap:12px;align-items:center;background:var(--kort);
   border:1px solid var(--linje);border-radius:12px;padding:10px;
   position:relative;touch-action:pan-y;
@@ -230,9 +240,17 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   text-decoration:underline;text-underline-offset:3px;}
 .kamera-lag{position:fixed;inset:0;z-index:50;background:#000;display:flex;
   align-items:center;justify-content:center;overflow:hidden;
-  opacity:0;transition:opacity .32s ease;}
-.kamera-lag.aaben{opacity:1;}
-.kamera-lag.lukker{opacity:0;}
+  opacity:0;transform:scale(1.035);
+  transition:opacity .34s ease,transform .42s cubic-bezier(.22,.7,.3,1),background-color .3s ease;}
+.kamera-lag.aaben{opacity:1;transform:none;}
+.kamera-lag.flyver{background-color:transparent;}
+.kamera-lag.flyver video{opacity:0;}
+.kamera-lag.flyver .kamera-status,.kamera-lag.flyver .kamera-manuel,.kamera-lag.flyver .kamera-luk{opacity:0;}
+.kamera-still{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:3;
+  transition:left .55s cubic-bezier(.4,.1,.2,1),top .55s cubic-bezier(.4,.1,.2,1),
+  width .55s cubic-bezier(.4,.1,.2,1),height .55s cubic-bezier(.4,.1,.2,1),
+  border-radius .55s ease,box-shadow .55s ease;}
+.kamera-lag.lukker{opacity:0;transform:scale(1.02);}
 .kamera-lag video{width:100%;height:100%;object-fit:cover;opacity:0;
   transition:filter .32s ease,transform .32s ease,opacity .28s ease;}
 .kamera-lag video.klar{opacity:1;}
@@ -353,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 62;
+var APP_BUILD = 63;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2250,6 +2268,7 @@ function animerSkift(){
 /* --- I dag --- */
 function tegnHoved(){
   var poster = hentDag(S.iDag);
+  var nyId = S.nyPost; S.nyPost = null;
   var sum = poster.reduce(function(a,p){
     return { kcal:a.kcal+p.kalorier, pro:a.pro+p.protein_g, kul:a.kul+p.kulhydrat_g, fedt:a.fedt+p.fedt_g };
   }, {kcal:0,pro:0,kul:0,fedt:0});
@@ -2276,17 +2295,27 @@ function tegnHoved(){
   } else {
     poster.forEach(function(p){
       if (p.analyserer){
+        var st = p.status || "analyserer";
+        if (st === "analyserer" && !ventende[p.id]) st = "fejl";
+        var navnTxt = st === "spoergsmaal" ? "Har et spørgsmål" : st === "fejl" ? "Kunne ikke læses" : "Analyserer…";
+        var metaTxt = st === "spoergsmaal" ? "Tryk for at svare"
+          : st === "fejl" ? esc(ventende[p.id] ? (p.fejlTekst || "Prøv selv") + " · tryk for at prøve selv" : "Afbrudt · stryg for at slette")
+          : esc(p.tid) + ' · <span class="tm" data-timer="' + esc(p.id) + '">0 s</span>';
+        var glyf = st === "spoergsmaal" ? "?" : st === "fejl" ? "!" : '<span class="spin"></span>';
         h += '<div class="postrum">'
           + '<div class="slettebag" aria-hidden="true">'
           + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
           + 'stroke-linecap="round"><path d="M5 7h14 M10 7V5h4v2 M7 7l1 13h8l1-13 M10 11v6 M14 11v6"/></svg>'
           + 'Slet</div>'
-          + '<div class="post analyserer" data-glid="' + esc(p.id) + '">'
+          + '<div class="post analyserer' + (st !== "analyserer" ? " vent" : "") + '" data-glid="' + esc(p.id) + '"'
+          + (st !== "analyserer" ? ' data-vent="' + esc(p.id) + '"' : "") + '>'
+          + '<div class="thumb">'
           + (p.billede ? '<img src="' + p.billede + '" alt="">'
                        : '<div class="tom-foto">' + kategoriIkon("Andet") + '</div>')
-          + '<div class="txt"><div class="navn">Analyserer…</div>'
-          + '<div class="meta">' + esc(p.tid) + '</div></div>'
-          + '<div class="kcal">…</div></div></div>';
+          + '<div class="skjold">' + glyf + '</div></div>'
+          + '<div class="txt"><div class="navn">' + navnTxt + '</div>'
+          + '<div class="meta">' + metaTxt + '</div></div>'
+          + '<div class="kcal">' + (st === "analyserer" ? "…" : "") + '</div></div></div>';
         return;
       }
       h += '<div class="postrum">'
@@ -2294,7 +2323,7 @@ function tegnHoved(){
         + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
         + 'stroke-linecap="round"><path d="M5 7h14 M10 7V5h4v2 M7 7l1 13h8l1-13 M10 11v6 M14 11v6"/></svg>'
         + 'Slet</div>'
-        + '<div class="post" data-glid="' + esc(p.id) + '">'
+        + '<div class="post' + (nyId === p.id ? " ny" : "") + '" data-glid="' + esc(p.id) + '">'
         + (p.billede ? '<img src="' + p.billede + '" alt="">'
                      : '<div class="tom-foto" title="' + esc(p.kategori) + '">' + kategoriIkon(p.kategori) + '</div>')
         + '<div class="txt" role="button" tabindex="0" aria-label="Ret ' + esc(p.navn) + '" data-red="' + esc(S.iDag) + '|' + esc(p.id) + '"><div class="navn">' + esc(p.navn) + '</div>'
@@ -2320,6 +2349,10 @@ function tegnHoved(){
   tegnSpiseforslag();
   bindRediger();
   bindStryg();
+  Array.prototype.forEach.call(document.querySelectorAll("[data-vent]"), function(el){
+    el.onclick = function(){ aabnVentende(el.getAttribute("data-vent")); };
+  });
+  if (document.querySelector("[data-timer]")) startTimere();
 }
 
 /* --- Forslag til resten af dagen --- */
@@ -3719,7 +3752,12 @@ function tegnArk(){
       if (a.svar[i] && a.svar[i] !== "Ved ikke") svar.push({ q: sp.tekst, a: a.svar[i] });
     });
     if (!svar.length){ visResultat(a, a.r); return; }
-    kaldAnalyse(a.stor, a.lille, a.note, svar, a.beskrivelse, a.dag, a.tid, a.antal);
+    if (a.auto){
+      var av = ventende[a.auto]; if (av) av.sp = null;
+      saetPostStatus(a.auto, a.dag, "analyserer");
+      lukArk();
+    }
+    kaldAnalyse(a.stor, a.lille, a.note, svar, a.beskrivelse, a.dag, a.tid, a.antal, a.auto);
   };
   var bsp = $("b-spring"); if (bsp) bsp.onclick = function(){ visResultat(a, a.r); };
   function opdaterBudget(){
@@ -3881,9 +3919,12 @@ function startPersonlighed(){
 function visResultat(a, r){
   if (a.auto){
     var gemt = autoGemResultat(a, r);
-    S.ark = null;
-    tegn();
-    visRegistreretToast(gemt.dag, gemt.id, gemt.navn);
+    delete ventende[gemt.id];
+    var aaben = !!$("overlay");
+    S.ark = null; S.nyPost = gemt.id;
+    if (aaben) lukBlodt("overlay", tegn); else tegn();
+    if (r.usikkerhed === "hoej")
+      notificerAnalyse(gemt.id, "Usikkert estimat: " + gemt.navn, r.note || "Tjek tallene og ret dem, hvis de er skæve.");
     return;
   }
   S.ark = { status:"resultat", stor:a.stor, lille:a.lille, note:a.note,
@@ -3926,43 +3967,72 @@ function autoGemResultat(a, r){
   return { dag:dag, id:id, navn:navn };
 }
 
-/* Vises 60 sekunder efter automatisk registrering, saa man kan naa at rette
-   noget uden at skulle bekraefte hvert eneste maaltid foerst. */
-function visRegistreretToast(dag, id, navn){
-  var gl = $("reg-toast"); if (gl) gl.remove();
-  document.body.insertAdjacentHTML("beforeend",
-    '<div class="toast" id="reg-toast"><span>Tilføjet: ' + esc(navn) + '</span>'
-    + '<button id="reg-toast-ret">Ret</button></div>');
-  var t = $("reg-toast");
-  var udloeb = setTimeout(function(){ if ($("reg-toast") === t) t.remove(); }, 60000);
-  $("reg-toast-ret").onclick = function(){
-    clearTimeout(udloeb);
-    if (t) t.remove();
-    aabnRediger(dag, id);
-  };
+/* Poster der venter paa noget (analyse, svar eller fejl) — id -> det der skal
+   til for at fortsaette. Kun i hukommelsen; efter en genstart vises de som
+   "afbrudt" og kan slettes. */
+var ventende = {};
+
+function saetPostStatus(id, dag, status, tekst){
+  var poster = hentDag(dag);
+  poster.forEach(function(p){
+    if (p.id === id){ p.status = status; p.fejlTekst = tekst || ""; p.analyserer = true; }
+  });
+  gemDag(dag, poster);
+  tegn();
 }
 
-/* Automatisk registrering kunne ikke fuldfoeres (intet mad genkendt, eller
-   analysen fejlede) — der er ingen til at svare paa noget undervejs, saa
-   den midlertidige "Analyserer…"-post fjernes fra listen igen, og billedet
-   tilbydes til manuel opfoelgning i stedet for at forsvinde sporloest. */
-function visAutoregFejl(id, dag, stor, lille, besked){
-  var poster = hentDag(dag).filter(function(p){ return p.id !== id; });
-  gemDag(dag, poster);
-  nulstilAfledt();
-  tegn();
-  var gl = $("reg-toast"); if (gl) gl.remove();
-  document.body.insertAdjacentHTML("beforeend",
-    '<div class="toast" id="reg-toast"><span>' + esc(besked) + '</span>'
-    + '<button id="reg-toast-ret">Prøv selv</button></div>');
-  var t = $("reg-toast");
-  setTimeout(function(){ if ($("reg-toast") === t) t.remove(); }, 60000);
-  $("reg-toast-ret").onclick = function(){
-    if (t) t.remove();
-    S.ark = { status:"valgt", stor:stor, lille:lille, note:"" };
-    tegnArk();
-  };
+function notificerAnalyse(id, titel, tekst){
+  if (!(document.hidden || $("kamera-lag"))) return;
+  if (!("Notification" in window) || Notification.permission !== "granted" || !navigator.serviceWorker) return;
+  navigator.serviceWorker.ready.then(function(reg){
+    reg.showNotification(titel, {
+      body: tekst, tag: "analyse-" + id, icon: "./icon-192.png", badge: "./icon-192.png",
+      data: { url: "./" }, renotify: true
+    });
+  }).catch(function(){});
 }
+
+/* Automatisk registrering kunne ikke fuldfoeres. Posten bliver liggende i
+   listen med et overlay, saa billedet ikke forsvinder sporloest — tryk paa
+   den for at proeve selv. */
+function visAutoregFejl(id, dag, stor, lille, besked){
+  ventende[id] = { stor: stor, lille: lille };
+  saetPostStatus(id, dag, "fejl", besked);
+  notificerAnalyse(id, "Kunne ikke læse måltidet", besked);
+}
+
+function aabnVentende(id){
+  var dag = S.iDag, v = ventende[id], p = null;
+  hentDag(dag).forEach(function(x){ if (x.id === id) p = x; });
+  if (!p || p.status === "analyserer" && v) return;
+  function fjern(){
+    gemDag(dag, hentDag(dag).filter(function(x){ return x.id !== id; }));
+    nulstilAfledt();
+  }
+  if (p.status === "spoergsmaal" && v && v.sp){
+    S.ark = Object.assign({ status:"spoergsmaal", spoergsmaal:v.sp, svar:{}, r:v.r }, v.basis);
+    tegnArk(); return;
+  }
+  fjern();
+  delete ventende[id];
+  if (v && v.stor){ S.ark = { status:"valgt", stor:v.stor, lille:v.lille, note:"" }; tegnArk(); }
+  else tegn();
+}
+
+var analyseTimer = null;
+function opdaterTimere(){
+  var els = document.querySelectorAll("[data-timer]");
+  if (!els.length){ clearInterval(analyseTimer); analyseTimer = null; return; }
+  Array.prototype.forEach.call(els, function(e){
+    var sek = Math.max(0, Math.round((Date.now() - Number(e.getAttribute("data-timer"))) / 1000));
+    e.textContent = sek + " s";
+  });
+}
+function startTimere(){
+  if (!analyseTimer) analyseTimer = setInterval(opdaterTimere, 1000);
+  opdaterTimere();
+}
+
 function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto){
   dag = dag || maalDag();
   tid = tid || standardTid(dag);
@@ -3981,11 +4051,17 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
         : "Der ser ikke ud til at være mad på billedet. Tag et nyt, eller indtast tallene selv." }, basis);
       tegnArk(); return;
     }
-    /* I auto-tilstand er der ingen til at svare paa afklarende spoergsmaal —
-       de springes over, og modellens bedste gaet bruges i stedet. */
-    var sp = (!auto && Array.isArray(r.spoergsmaal)) ? r.spoergsmaal.filter(function(x){
+    /* I auto-tilstand staar posten og venter paa svar i listen, og der sendes
+       en notifikation, hvis appen ikke er i forgrunden. */
+    var sp = Array.isArray(r.spoergsmaal) ? r.spoergsmaal.filter(function(x){
       return x && x.tekst && Array.isArray(x.valg) && x.valg.length;
     }).slice(0,3) : [];
+    if (auto && sp.length && !svar){
+      ventende[auto] = { stor:stor, lille:lille, basis:basis, r:r, sp:sp };
+      saetPostStatus(auto, dag, "spoergsmaal");
+      notificerAnalyse(auto, "Et spørgsmål om dit måltid", sp[0].tekst);
+      return;
+    }
     if (sp.length && !svar){
       S.ark = Object.assign({ status:"spoergsmaal", spoergsmaal:sp, svar:{}, r:r }, basis);
       /* portionsantallet foelger med gennem runden */
@@ -4824,6 +4900,7 @@ function skalerFil(file, maks, kvalitet){
    ét sted der bygger den midlertidige "Analyserer…"-post. */
 function startAutoAnalyse(stor, lille){
   var dag = maalDag(), tid = standardTid(dag), midlId = String(Date.now());
+  ventende[midlId] = { stor: stor, lille: lille };
   var poster = hentDag(dag);
   poster.push({
     id: midlId, tid: tid, navn: "Analyserer…", kategori: "Andet", portion:"", kommentar:"",
@@ -4836,6 +4913,7 @@ function startAutoAnalyse(stor, lille){
   nulstilAfledt();
   tegn();
   kaldAnalyse(stor, lille, "", null, null, dag, tid, 1, midlId);
+  return midlId;
 }
 
 /* ---------- Live-kamera til automatisk registrering ----------
@@ -4953,9 +5031,37 @@ function fangLiveBillede(video, faerdig){
   var stor = skaleret(1100, 0.82), lille = skaleret(170, 0.6);
   visLukkerblink();
   /* Listen opdateres MENS kameraet stadig daekker skaermen, saa den
-     allerede ligger klar, naar kameraet et oejeblik efter toner vaek. */
-  faerdig(stor, lille);
-  lukKameraBloedt();
+     allerede ligger klar, naar billedet flyver ned til den. */
+  var id = faerdig(stor, lille);
+  flyTilListe(stor, id);
+}
+
+/* Det tagne billede fryses og flyver ned i sin plads i listen, mens kameraet
+   toner væk bag det — i stedet for et klip mellem to skærme. */
+function flyTilListe(stor, id){
+  var lag = $("kamera-lag");
+  if (!lag) return;
+  var rum = id ? document.querySelector('[data-glid="' + id + '"]') : null;
+  var maal = rum ? rum.querySelector("img") : null;
+  if (!maal){ lukKameraBloedt(); return; }
+  if (rum.scrollIntoView) rum.scrollIntoView({ block: "center" });
+  var still = document.createElement("img");
+  still.className = "kamera-still"; still.src = stor; still.alt = "";
+  lag.appendChild(still);
+  maal.style.visibility = "hidden";
+  setTimeout(function(){
+    lag.classList.add("flyver");
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){
+      var r = maal.getBoundingClientRect();
+      still.style.left = r.left + "px"; still.style.top = r.top + "px";
+      still.style.width = r.width + "px"; still.style.height = r.height + "px";
+      still.style.borderRadius = "8px";
+    }); });
+  }, 110);
+  setTimeout(function(){
+    maal.style.visibility = "";
+    lukKamera();
+  }, 760);
 }
 
 function startKameraLoop(video, statusEl){
