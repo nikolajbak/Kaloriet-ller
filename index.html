@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 64;
+var APP_BUILD = 65;
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -4997,32 +4997,18 @@ function frameForskel(a, b){
   return a.length ? sum / a.length : 0;
 }
 
-/* Kamerastrømmen genbruges. iOS spoerger om kameraadgang hver gang en
-   PWA beder om en ny strøm, saa vi henter den kun én gang og "parkerer" den
-   imellem billeder: sporene slaas fra (kameraet slukker, indikatoren
-   forsvinder), men strømmen er stadig gyldig og kan tændes igen uden ny
-   tilladelse. Efter KAMERA_PARK_MS uden brug — eller naar appen skjules —
-   frigives den helt. */
-var KAMERA_PARK_MS = 120000;
-var kameraStroem = null, kameraParkTimer = null;
+/* Kameraet slukkes ALTID med det samme, det ikke skal bruges: alle spor
+   stoppes, saa iPhonens roede optage-indikator forsvinder. Tidligere blev
+   strømmen "parkeret" (spor slaaet fra, men ikke stoppet) for at undgaa
+   ny tilladelsesdialog — men iOS holder indikatoren tændt, saa længe sporene
+   findes, uanset om de er slaaet fra. */
+var kameraStroem = null;
 
 function frigivKamera(){
-  clearTimeout(kameraParkTimer); kameraParkTimer = null;
   if (kameraStroem){ kameraStroem.getTracks().forEach(function(t){ t.stop(); }); kameraStroem = null; }
 }
-function parkerKamera(){
-  if (!kameraStroem) return;
-  kameraStroem.getTracks().forEach(function(t){ t.enabled = false; });
-  clearTimeout(kameraParkTimer);
-  kameraParkTimer = setTimeout(frigivKamera, KAMERA_PARK_MS);
-}
 function hentKameraStroem(){
-  clearTimeout(kameraParkTimer); kameraParkTimer = null;
-  if (kameraStroem && kameraStroem.getVideoTracks().some(function(t){ return t.readyState === "live"; })){
-    kameraStroem.getTracks().forEach(function(t){ t.enabled = true; });
-    return Promise.resolve(kameraStroem);
-  }
-  kameraStroem = null;
+  frigivKamera();
   return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
     .then(function(st){ kameraStroem = st; return st; });
 }
@@ -5035,7 +5021,7 @@ function lukKamera(){
   if (!lag) return;
   var video = $("kamera-video");
   if (video) video.srcObject = null;
-  parkerKamera();
+  frigivKamera();
   lag.remove();
 }
 
@@ -5045,6 +5031,7 @@ function lukKamera(){
 function lukKameraBloedt(){
   var lag = $("kamera-lag");
   if (!lag){ lukKamera(); return; }
+  frigivKamera();
   lag.classList.add("lukker");
   setTimeout(lukKamera, 340);
 }
@@ -5075,6 +5062,7 @@ function fangLiveBillede(video, faerdig){
     return tilBillede(c, kval, tumb);
   }
   var stor = skaleret(1100, 0.82), lille = skaleret(TUMBNAIL_MAKS, TUMBNAIL_KVAL, true);
+  frigivKamera();
   visLukkerblink();
   /* Listen opdateres MENS kameraet stadig daekker skaermen, saa den
      allerede ligger klar, naar billedet flyver ned til den. */
@@ -5173,7 +5161,7 @@ function startKamera(){
 
   hentKameraStroem()
     .then(function(stream){
-      if (!$("kamera-lag")){ parkerKamera(); return; }
+      if (!$("kamera-lag")){ frigivKamera(); return; }
       video.onplaying = function(){ video.classList.add("klar"); };
       video.srcObject = stream;
       var manuelt = function(){ fangLiveBillede(video, startAutoAnalyse); };
