@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 70;
+var APP_BUILD = 71;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1806,19 +1806,19 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
   }
   t += '\n\nSvar udelukkende med et JSON-objekt, uden markdown og uden indledning:\n'
     + '{"er_mad": true/false, "navn": "kort dansk navn", "kategori": "en af kategorierne", '
-    + '"portion": "kort beskrivelse af den mængde du har regnet med", '
+    + '"portion": "den mængde du har regnet med, højst 6 ord", '
     + '"gram": heltal — anslået vægt af ÉN portion i gram, alt medregnet, 0 hvis det slet ikke kan vurderes, '
     + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
     + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
     + '"grupper": {"fisk_skaldyr": 0-3, "roedt_koed": 0-3, "mejeri_aeg": 0-3, ' 
     + '"groent_blad": 0-3, "frugt_baer": 0-3, "fuldkorn_baelg": 0-3}, '
     + '"indhold": ["kort normaliseret ord", "..."], '
-    + '"usikkerhed": "lav"/"middel"/"hoej", "note": "en kort sætning om det væsentligste forbehold", '
-    + '"spoergsmaal": [{"tekst": "spørgsmålet", "valg": ["mulighed", "mulighed"]}]}\n\n'
+    + '"usikkerhed": "lav"/"middel"/"hoej", "note": "højst 8 ord om det væsentligste forbehold, tom tekst hvis usikkerhed er lav", '
+    + '"spoergsmaal": [{"tekst": "spørgsmålet, højst 10 ord", "valg": ["1-3 ord", "1-3 ord"]}]}\n\n'
     + (beskrivelse
         ? 'Handler beskrivelsen hverken om mad eller drikkevarer, sættes er_mad til false. '
         : 'Er der hverken mad eller drikkevarer på billedet, sættes er_mad til false og resten til 0 eller tom tekst. ')
-    + 'Har du ingen spørgsmål, sættes spoergsmaal til en tom liste.';
+    + 'Har du ingen spørgsmål, sættes spoergsmaal til en tom liste. Skriv intet uden for JSON-objektet, og hold alle tekstfelter så korte som muligt.';
   return t;
 }
 function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
