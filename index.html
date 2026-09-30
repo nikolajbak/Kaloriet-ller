@@ -371,7 +371,8 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 66;
+var APP_BUILD = 67;
+var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
 var KATEGORIER = ["Kød & fisk","Grønt & salat","Brød & korn","Kartofler, ris & pasta",
@@ -2336,11 +2337,22 @@ function tegnHoved(){
     poster.forEach(function(p){
       if (p.analyserer){
         var st = p.status || "analyserer";
-        if (st === "analyserer" && !ventende[p.id]) st = "fejl";
+        if (st === "analyserer" && !ventende[p.id]){
+          /* Afbrudt af en genstart: genoptag fra miniaturen (420 px er rigeligt
+             til analysen), saa billedet ikke bliver liggende som "afbrudt". */
+          if (p.billede){
+            (function(pp, dg){
+              ventende[pp.id] = { stor: pp.billede, lille: pp.billede };
+              setTimeout(function(){
+                kaldAnalyse(pp.billede, pp.billede, "", null, null, dg, pp.tid, 1, pp.id);
+              }, 0);
+            })(p, S.iDag);
+          } else st = "fejl";
+        }
         var navnTxt = st === "spoergsmaal" ? "Har et spørgsmål" : st === "fejl" ? "Kunne ikke læses" : "Analyserer…";
         var metaTxt = st === "spoergsmaal" ? "Tryk for at svare"
           : st === "fejl" ? esc(ventende[p.id] ? (p.fejlTekst || "Prøv selv") + " · tryk for at prøve selv" : "Afbrudt · stryg for at slette")
-          : esc(p.tid) + ' · <span class="tm" data-timer="' + esc(p.id) + '">0 s</span>';
+          : esc(p.fejlTekst ? p.fejlTekst : p.tid) + ' · <span class="tm" data-timer="' + esc(p.id) + '">0 s</span>';
         var glyf = st === "spoergsmaal" ? "?" : st === "fejl" ? "!" : '<span class="spin"></span>';
         h += '<div class="postrum">'
           + '<div class="slettebag" aria-hidden="true">'
@@ -4010,7 +4022,6 @@ function autoGemResultat(a, r){
 /* Poster der venter paa noget (analyse, svar eller fejl) — id -> det der skal
    til for at fortsaette. Kun i hukommelsen; efter en genstart vises de som
    "afbrudt" og kan slettes. */
-var ventende = {};
 
 function saetPostStatus(id, dag, status, tekst){
   var poster = hentDag(dag);
@@ -4040,6 +4051,29 @@ function visAutoregFejl(id, dag, stor, lille, besked){
   saetPostStatus(id, dag, "fejl", besked);
   notificerAnalyse(id, "Kunne ikke læse måltidet", besked);
 }
+
+/* Automatisk genforsøg med stigende ventetid (5 s, 10 s, ... højst 60 s).
+   Billedet bliver i listen hele tiden. Kommer appen tilbage i forgrunden,
+   proeves straks igen i stedet for at vente ud. */
+function planlaegGenforsoeg(id, dag, stor, lille, note, svar, beskrivelse, tid, antal, besked){
+  var v = ventende[id] = ventende[id] || { stor:stor, lille:lille };
+  v.forsoeg = (v.forsoeg || 0) + 1;
+  v.gen = function(){
+    clearTimeout(v.timer); v.timer = null; v.gen = null;
+    var nu = null;
+    hentDag(dag).forEach(function(x){ if (x.id === id) nu = x; });
+    if (!nu) { delete ventende[id]; return; }   // slettet af brugeren imens
+    saetPostStatus(id, dag, "analyserer", "Prøver igen (forsøg " + (v.forsoeg + 1) + ")");
+    kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, id);
+  };
+  saetPostStatus(id, dag, "analyserer", "Prøver igen (forsøg " + (v.forsoeg + 1) + ")");
+  v.timer = setTimeout(v.gen, Math.min(60000, 5000 * v.forsoeg));
+  if (v.forsoeg === 3) notificerAnalyse(id, "Analysen driller", "Billedet ligger sikkert, og appen prøver igen: " + besked);
+}
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState !== "visible") return;
+  Object.keys(ventende).forEach(function(id){ var v = ventende[id]; if (v && v.gen) v.gen(); });
+});
 
 function aabnVentende(id){
   var dag = S.iDag, v = ventende[id], p = null;
@@ -4109,7 +4143,15 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
     }
     visResultat(basis, r);
   }).catch(function(err){
-    if (auto){ visAutoregFejl(auto, dag, stor, lille, (err && err.message) || "Analysen gik i stå."); return; }
+    if (auto){
+      var besked = (err && err.message) || "Analysen gik i stå.";
+      /* Forkerte noegler og tom kredit hjaelper det ikke at prove igen paa —
+         alt andet (net, timeout, overbelastning, ulaeseligt svar) proeves igen
+         automatisk, indtil analysen er gennemfoert. */
+      if (/afvist|kredit|mangler en Gemini/i.test(besked)){ visAutoregFejl(auto, dag, stor, lille, besked); return; }
+      planlaegGenforsoeg(auto, dag, stor, lille, note, svar, beskrivelse, tid, antal, besked);
+      return;
+    }
     S.ark = { status:"fejl", stor:stor, lille:lille, note:note, beskrivelse:beskrivelse,
       dag:dag, tid:tid, antal:antal,
       besked:(err && err.message) || "Analysen gik i stå. Prøv igen, eller indtast tallene selv." };
