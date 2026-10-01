@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 74;
+var APP_BUILD = 75;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -5280,7 +5280,7 @@ function startKameraLoop(video, statusEl){
   var sC = document.createElement("canvas");
   sC.width = sW; sC.height = sH;
   var sctx = sC.getContext("2d", { willReadFrequently: true });
-  var MIN_SKARPHED = 9, MAKS_BEVAEGELSE = 4, STABIL_KRAV = 3;
+  var MIN_SKARPHED = 9, MAKS_BEVAEGELSE = 12, STABIL_KRAV = 2;
   var forrige = null, stabil = 0, fanget = false, forsoeg = 0;
 
   function vis(t){ if (statusEl) statusEl.textContent = t; }
