@@ -371,7 +371,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 75;
+var APP_BUILD = 76;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -5280,27 +5280,41 @@ function startKameraLoop(video, statusEl){
   var sC = document.createElement("canvas");
   sC.width = sW; sC.height = sH;
   var sctx = sC.getContext("2d", { willReadFrequently: true });
-  var MIN_SKARPHED = 9, MAKS_BEVAEGELSE = 12, STABIL_KRAV = 2;
-  var forrige = null, stabil = 0, fanget = false, forsoeg = 0;
+  /* STABIL_KRAV * 150 ms ≈ 1 s stillestaaende foer optagelse. SIGTETID giver
+     brugeren tid til at se, hvad kameraet peger paa, foer der overhovedet
+     maales — ellers kan billedet tages, foer videoen er synlig. */
+  var MIN_SKARPHED = 9, MAKS_BEVAEGELSE = 8, STABIL_KRAV = 7, SIGTETID = 1200;
+  var forrige = null, stabil = 0, fanget = false, forsoeg = 0, synligFra = 0;
 
   function vis(t){ if (statusEl) statusEl.textContent = t; }
 
   function tick(){
     if (fanget || !$("kamera-lag")) return;
-    if (video.readyState < 2){ setTimeout(tick, 150); return; }
-    forsoeg++;
+    if (video.readyState < 2 || !video.classList.contains("klar")){ setTimeout(tick, 150); return; }
+    if (!synligFra) synligFra = Date.now();
     sctx.drawImage(video, 0, 0, sW, sH);
     var g = graaskala(sctx, sW, sH);
     var skarphed = kantEnergi(g, sW, sH);
     var bevaegelse = forrige ? frameForskel(g, forrige) : 999;
     forrige = g;
+    if (Date.now() - synligFra < SIGTETID){
+      vis("Sigt på maden …");
+      setTimeout(tick, 150);
+      return;
+    }
+    forsoeg++;
 
     if (skarphed >= MIN_SKARPHED && bevaegelse <= MAKS_BEVAEGELSE){
       stabil++;
       vis(stabil >= STABIL_KRAV ? "Fanger billede …" : "Holder stille — et øjeblik …");
-    } else {
+    } else if (skarphed < MIN_SKARPHED){
       stabil = 0;
-      vis(skarphed < MIN_SKARPHED ? "Ret kameraet mod maden" : "Hold telefonen stille …");
+      vis("Ret kameraet mod maden");
+    } else {
+      /* En enkelt rystelse trækker kun lidt fra i stedet for at starte forfra,
+         saa en almindelig haand kan naa i maal. Stor bevægelse nulstiller. */
+      stabil = bevaegelse > MAKS_BEVAEGELSE * 2 ? 0 : Math.max(0, stabil - 2);
+      vis("Hold telefonen stille …");
     }
 
     /* Efter ca. 6 sekunder uden et stabilt, skarpt billede vises en manuel
