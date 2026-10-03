@@ -53,6 +53,18 @@ body{
 .makro{display:flex;gap:22px;font-size:13px;color:var(--daempet);
   border-top:1px solid var(--linje);padding-top:12px;}
 .makro b{font-weight:600;color:var(--blaek);font-variant-numeric:tabular-nums;}
+.alkohol{display:flex;gap:18px;border-top:1px solid var(--linje);padding-top:12px;margin-top:12px;}
+.alkcel{flex:1;min-width:0;}
+.alktop{display:flex;justify-content:space-between;align-items:baseline;gap:6px;
+  font-size:13px;color:var(--daempet);}
+.alktal b{font-weight:600;color:var(--blaek);font-variant-numeric:tabular-nums;}
+.alktal.naer b{color:var(--okker);}
+.alktal.over b{color:var(--ler);}
+.alkbaand{height:4px;background:#DADCD3;border-radius:2px;margin-top:7px;overflow:hidden;}
+.alkbaand span{display:block;height:100%;background:var(--gron);}
+.alkbaand span.naer{background:var(--okker);}
+.alkbaand span.over{background:var(--ler);}
+.alknote{font-size:12px;color:var(--daempet);margin:8px 0 0;}
 h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
 .postrum{position:relative;border-radius:12px;overflow:hidden;margin-bottom:8px;}
 .slettebag{position:absolute;inset:0;background:var(--ler);color:#F7F2F0;
@@ -163,6 +175,8 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .noegletal{display:flex;gap:26px;border-top:1px solid var(--linje);
   border-bottom:1px solid var(--linje);padding:14px 0;margin-top:6px;}
 .noegletal div{font-size:13px;color:var(--daempet);}
+.alknt b.naer{color:var(--okker);}
+.alknt b.over{color:var(--ler);}
 .noegletal b{display:block;font-family:Georgia,serif;font-size:24px;font-weight:400;
   color:var(--blaek);font-variant-numeric:tabular-nums;margin-bottom:1px;}
 /* --- trends --- */
@@ -371,7 +385,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 77;
+var APP_BUILD = 78;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -392,7 +406,7 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb",
     K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_GAUTO = "kd:gemini-auto",
     K_SYNKTID = "kd:synk-tid", K_SYNKKOE = "kd:synk-koe", K_SYNKSTAND = "kd:synk-stand",
-    K_MEDICIN = "kd:medicin";
+    K_MEDICIN = "kd:medicin", K_ALKOHOL = "kd:alkohol";
 var reserve = {};
 
 function laes(k){
@@ -487,6 +501,11 @@ function normaliser(p, i){
     fedt_g: tal.fedt_g,
     billede: typeof p.billede === "string" ? p.billede : null
   };
+  /* Analysens forudsaetning for genstandene (cl, procent, antal) gemmes kun, saa
+     laenge den stadig passer med tallet — er genstandene rettet i haanden eller
+     ganget op med portionerne, ville den vise noget andet end det, der taelles. */
+  var alk = normAlkohol(p.alkohol);
+  if (alk.length && Math.abs(genstandeAf(alk) - tal.genstande) < 0.15) ud.alkohol = alk;
   /* Midlertidige poster (analyse i gang / venter paa svar / fejlet) skal
      beholde deres status, ellers ser de ud som almindelige poster. */
   if (p.analyserer === true){
@@ -521,9 +540,9 @@ function bindPortioner(idAntal, felter, efter){
 /* Rettes beskrivelsen, regnes måltidet om ud fra den nye tekst. Det sker på
    tekstvejen, så det er et billigt kald uden foto. De gamle tal gemmes, så
    genberegningen kan fortrydes — den må ikke kunne overskrive noget uopretteligt. */
-var nyKommentar = null, nyGrupper = null, nyIndhold = null;
+var nyKommentar = null, nyGrupper = null, nyIndhold = null, nyAlkohol = null;
 function bindGenberegning(praefiks, dag, tid){
-  nyKommentar = null; nyGrupper = null; nyIndhold = null;
+  nyKommentar = null; nyGrupper = null; nyIndhold = null; nyAlkohol = null;
   var navnFelt = $(praefiks + "-navn");
   var status = $(praefiks + "-genstatus");
   if (!navnFelt || !status) return;
@@ -574,7 +593,13 @@ function bindGenberegning(praefiks, dag, tid){
       if (S.ark && S.ark.r && r.kommentar) S.ark.r.kommentar = r.kommentar;
       /* Beskrivelsen er lige blevet skiftet ud, saa de gamle fodevaregruppe- og
          indholds-tags hoerer til et andet maaltid og skal ikke folge med. */
-      if (S.ark && S.ark.r){ S.ark.r.grupper = normGrupper(r.grupper); S.ark.r.indhold = normIndhold(r.indhold); }
+      if (S.ark && S.ark.r){ S.ark.r.grupper = normGrupper(r.grupper); S.ark.r.indhold = normIndhold(r.indhold); S.ark.r.alkohol = r.alkohol || []; }
+      if (praefiks === "r") nyAlkohol = r.alkohol || [];
+      var gf = $(praefiks + "-genfor");
+      if (gf){
+        gf.innerHTML = r.alkohol && r.alkohol.length ? 'Regnet som ' + alkoholTekst(r.alkohol) + '.' : '';
+        gf.style.display = r.alkohol && r.alkohol.length ? "" : "none";
+      }
       if (praefiks === "r"){
         nyKommentar = r.kommentar || "";
         nyGrupper = normGrupper(r.grupper);
@@ -600,6 +625,13 @@ function bindGenberegning(praefiks, dag, tid){
         + esc((err && err.message) || "Genberegningen mislykkedes.") + '</div>';
     });
   };
+}
+
+/* Hvad analysen regnede genstandene ud fra, saa et skaevt tal kan ses og rettes */
+function genForHtml(praefiks, alkohol){
+  var l = normAlkohol(alkohol);
+  return '<p class="grafnote" id="' + praefiks + '-genfor" style="margin:6px 0 0'
+    + (l.length ? '">Regnet som ' + alkoholTekst(l) + '.' : ';display:none">') + '</p>';
 }
 
 function prPortion(totaler, antal){
@@ -790,6 +822,7 @@ var S = {
   })(),
   get kaek(){ return this.kaekhed !== "fra"; },
   autoreg: laes(K_AUTOREG) === "1",
+  alkohol: laes(K_ALKOHOL) !== "0",
   medicin: (function(){
     var m;
     try { m = JSON.parse(laes(K_MEDICIN) || "{}") || {}; } catch(e){ m = {}; }
@@ -1017,6 +1050,70 @@ function vaegtgraf(liste, maalvaegt){
   return s + '</svg>';
 }
 function kg(n){ return (Math.round(n * 10) / 10).toLocaleString("da-DK", {minimumFractionDigits:1, maximumFractionDigits:1}); }
+/* ================= Alkohol =================
+   Sundhedsstyrelsens anbefaling siden 2022, ens for maend og kvinder. Grænserne
+   ligger fast med vilje: pointen er en ydre maalestok, ikke et mål man selv saetter. */
+var ALK_DAG = 4, ALK_UGE = 10;
+var KCAL_PR_GENSTAND = 84;   /* 12 g ren alkohol × 7 kcal — kun selve alkoholen */
+
+function normAlkohol(l){
+  if (!Array.isArray(l)) return [];
+  var ud = [];
+  l.forEach(function(x){
+    if (!x || typeof x !== "object") return;
+    var cl = laesKomma(x.cl), pct = laesKomma(x.procent), ant = laesKomma(x.antal) || 1;
+    if (!(cl > 0 && cl <= 300 && pct > 0 && pct <= 96 && ant > 0 && ant <= 50)) return;
+    ud.push({ drik: String(x.drik || "").trim().slice(0, 30), cl: cl, procent: pct, antal: ant });
+  });
+  return ud.slice(0, 8);
+}
+/* En genstand er 12 g ren alkohol; ethanol vejer 0,789 g/ml */
+function genstandeAf(l){
+  var g = l.reduce(function(a, x){ return a + x.cl * 10 * x.procent / 100 * 0.789 / 12 * x.antal; }, 0);
+  return Math.round(g * 10) / 10;
+}
+function talMedKomma(x){ return String(Math.round(x * 10) / 10).replace(".", ","); }
+function alkoholTekst(l){
+  return l.map(function(x){
+    return (x.antal !== 1 ? talMedKomma(x.antal) + " × " : "") + talMedKomma(x.cl) + " cl "
+      + (x.drik ? esc(x.drik) + " " : "") + "à " + talMedKomma(x.procent) + " %";
+  }).join(" + ");
+}
+/* Analysen angiver cl og procent; genstandene regnes her, ikke af modellen */
+function alkoholFraSvar(r){
+  if (!r || typeof r !== "object") return r;
+  var l = normAlkohol(r.alkohol);
+  if (l.length){ r.alkohol = l; r.genstande = genstandeAf(l); }
+  else if (Array.isArray(r.alkohol)){ r.alkohol = []; r.genstande = Number(r.genstande) || 0; }
+  return r;
+}
+/* Genstande paa en dag og i de 7 dage, der slutter med den */
+function genstandeStatus(dag){
+  var slut = tilDato(dag), uge = 0, paaDag = 0;
+  for (var i = 0; i < 7; i++){
+    var d = new Date(slut); d.setDate(d.getDate() - i);
+    var sum = hentDag(dagKey(d)).reduce(function(a, p){ return a + (p.genstande || 0); }, 0);
+    uge += sum; if (i === 0) paaDag = sum;
+  }
+  return { dag: Math.round(paaDag * 10) / 10, uge: Math.round(uge * 10) / 10 };
+}
+function alkMaaler(lbl, v, max){
+  var kl = v > max ? "over" : (v >= max * 0.75 ? "naer" : "");
+  return '<div class="alkcel"><div class="alktop"><span>' + lbl + '</span>'
+    + '<span class="alktal ' + kl + '"><b>' + talMedKomma(v) + '</b> af ' + max + '</span></div>'
+    + '<div class="alkbaand"><span class="' + kl + '" style="width:' + Math.min(100, v / max * 100).toFixed(1) + '%"></span></div></div>';
+}
+/* Vises kun, naar der har vaeret alkohol i ugen — ellers fylder den bare */
+function alkoholHtml(){
+  if (!S.alkohol) return "";
+  var st = genstandeStatus(S.iDag);
+  if (st.uge <= 0) return "";
+  return '<div class="alkohol">' + alkMaaler("genstande i dag", st.dag, ALK_DAG)
+    + alkMaaler("seneste 7 dage", st.uge, ALK_UGE) + '</div>'
+    + '<p class="alknote">Sundhedsstyrelsen anbefaler højst ' + ALK_DAG + ' på en dag og '
+    + ALK_UGE + ' om ugen.</p>';
+}
+
 function laesKomma(v){ return Number(String(v || "").replace(",", ".").trim()) || 0; }
 
 /* ================= Trends ================= */
@@ -1088,9 +1185,20 @@ function analyseAfVindue(dage){
   var snitFoer = tAntal ? tIalt / tAntal : 0;
   var aendring = snitFoer > 0 ? (snitNu - snitFoer) / snitFoer * 100 : null;
 
+  /* alkohol: snit pr. uge regnes over hele vinduet, ogsaa dage uden registrering */
+  var genDag = {};
+  raekker.forEach(function(r){ genDag[r.dag] = (genDag[r.dag] || 0) + (r.post.genstande || 0); });
+  var genIalt = Object.keys(genDag).reduce(function(a, d){ return a + genDag[d]; }, 0);
+  var alkohol = {
+    ialt: genIalt,
+    prUge: genIalt / dage * 7,
+    dageOver: Object.keys(genDag).filter(function(d){ return genDag[d] > ALK_DAG; }).length,
+    kcal: genIalt * KCAL_PR_GENSTAND
+  };
+
   return { poster:poster, ialt:ialt, antalDage:antalDage, snit:snitNu,
            kategorier:kategorier, gengangere:gengangere, toppe:toppe,
-           aendring:aendring, snitFoer:snitFoer };
+           aendring:aendring, snitFoer:snitFoer, alkohol:alkohol };
 }
 
 /* Hvad er der spist indtil nu i dag — bruges som kontekst for vurderingen */
@@ -1764,6 +1872,7 @@ function hentPersonlighed(r, dag, tid, antal){
     + (antal > 1 ? ', ' + antal + ' portioner' : "") + '.\n\n'
     + dagskontekst(dag, tid) + '\n\n'
     + kommentarKontekst(dag) + '\n\n'
+    + alkoholKontekst(r, dag, antal)
     + forslagsregler(dag) + '\n\n'
     + (S.kaek ? 'GREB DENNE GANG: ' + naesteGreb() + '\n\n' : '')
     + 'Svar udelukkende med JSON, uden markdown:\n{'
@@ -1773,6 +1882,21 @@ function hentPersonlighed(r, dag, tid, antal){
     + (S.kaek ? ', "ros": "kvittering i samme tone, ' + ordkrav() + '"' : '') + '}]}\n'
     + 'Har du ingen forslag, sættes alternativer til en tom liste.';
   return tonekald(p);
+}
+
+/* Tallene mod Sundhedsstyrelsens grænser, saa kommentaren kan forholde sig til
+   dem. Selve drikken moraliseres der ikke over — det er vaner og tal, som resten
+   af tonen. Maaltidet er endnu ikke gemt, saa det laegges oveni. */
+function alkoholKontekst(r, dag, antal){
+  var g = Math.round((Number(r.genstande) || 0) * (antal || 1) * 10) / 10;
+  if (!S.alkohol || !(g > 0)) return "";
+  var st = genstandeStatus(dag || S.iDag);
+  var paaDag = Math.round((st.dag + g) * 10) / 10, uge = Math.round((st.uge + g) * 10) / 10;
+  return 'ALKOHOL: måltidet er ' + talMedKomma(g) + ' genstande. Med det bliver det '
+    + talMedKomma(paaDag) + ' genstande på dagen og ' + talMedKomma(uge) + ' de seneste 7 dage. '
+    + 'Sundhedsstyrelsen anbefaler højst ' + ALK_DAG + ' på en dag og højst ' + ALK_UGE + ' om ugen. '
+    + 'Du må gerne bruge tallene og hvor tæt de er på eller over grænserne — som vane og regnestykke, '
+    + 'ikke som moralprædiken over at der drikkes, og aldrig om krop eller udseende.\n\n';
 }
 
 function byggPrompt(note, svar, beskrivelse, dag, tid){
@@ -1803,8 +1927,12 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + 'Regn med danske normalstørrelser, når intet andet fremgår: fadøl 40 cl, flaske eller dåse '
     + 'øl 33 cl, glas vin 12-15 cl, snaps og shot 2-4 cl, gin og tonic 25 cl.'
     + (beskrivelse ? '\n\n' : ' Se efter glassets form og hvor fyldt det er.\n\n')
-    + 'Angiv også antal danske genstande, hvor en genstand er 12 gram ren alkohol: '
-    + 'en øl eller et glas vin er cirka en genstand. Alkoholfrit giver 0.\n\n'
+    + 'Er der alkohol, angives hver slags drik i "alkohol" med mængde i cl pr. stk., '
+    + 'alkoholprocent og antal stk. — appen regner selv genstandene ud. Brug procenten fra '
+    + 'etiketten eller menuen, hvis den fremgår; ellers et typisk dansk tal: pilsner og classic '
+    + '4,6, IPA 6,5, hvidvin og rosé 12, rødvin 13,5, cava og champagne 11,5, spiritus 37,5-40, '
+    + 'snaps 40. I drinks angives kun spiritusdelen, fx gin og tonic som 4 cl à 37,5 %. '
+    + 'Alkoholfrit giver en tom liste.\n\n'
     + 'Vurder desuden, ud fra hvad der reelt indgår i retten og hvor meget, disse fødevaregrupper '
     + 'på en skala 0-3: fisk/skaldyr, rødt kød/indmad, mejeriprodukter/æg, mørkegrønt bladgrønt '
     + '(spinat, grønkål, broccoli — ikke almindelig salat eller agurk), frugt/bær, og fuldkorn/'
@@ -1837,7 +1965,7 @@ function byggPrompt(note, svar, beskrivelse, dag, tid){
     + '"portion": "den mængde du har regnet med, højst 6 ord", '
     + '"gram": heltal — anslået vægt af ÉN portion i gram, alt medregnet, 0 hvis det slet ikke kan vurderes, '
     + '"kalorier": heltal, "protein_g": heltal, "kulhydrat_g": heltal, "fedt_g": heltal, '
-    + '"genstande": tal med en decimal, 0 hvis der ikke er alkohol, '
+    + '"alkohol": [{"drik": "kort navn", "cl": tal, "procent": tal, "antal": tal}] — tom liste hvis der ikke er alkohol, '
     + '"grupper": {"fisk_skaldyr": 0-3, "roedt_koed": 0-3, "mejeri_aeg": 0-3, ' 
     + '"groent_blad": 0-3, "frugt_baer": 0-3, "fuldkorn_baelg": 0-3}, '
     + '"indhold": ["kort normaliseret ord", "..."], '
@@ -1890,7 +2018,7 @@ function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
   return kald(krop).catch(function(e){
     if (e && (e.timeout || e instanceof TypeError)) return kald(krop);
     throw e;
-  });
+  }).then(alkoholFraSvar);
 }
 
 /* Retter appen allerede har foreslaaet. Uden den her liste kommer de samme
@@ -2385,8 +2513,8 @@ function tegnHoved(){
     + '<div class="makro"><div>protein <b>' + tal(sum.pro) + ' g</b></div>'
     + '<div>kulhydrat <b>' + tal(sum.kul) + ' g</b></div>'
     + '<div>fedt <b>' + tal(sum.fedt) + ' g</b></div>'
-    + (gen > 0 ? '<div>genstande <b>' + kg(gen).replace(",0","") + '</b></div>' : "")
-    + '</div></div>'
+    + (gen > 0 && !S.alkohol ? '<div>genstande <b>' + kg(gen).replace(",0","") + '</b></div>' : "")
+    + '</div>' + alkoholHtml() + '</div>'
     + '<h2 class="sek">Dagens måltider</h2>';
 
   if (!poster.length){
@@ -2770,6 +2898,7 @@ function aabnRediger(dag, id){
     + '<input id="r-fedt" type="number" inputmode="numeric" value="' + m.fedt_g + '"></div>'
     + '<span class="lbl">Genstande, hvis der var alkohol</span>'
     + '<input id="r-gen" type="text" inputmode="decimal" value="' + (m.genstande || 0) + '">'
+    + genForHtml("r", m.alkohol)
     + '<span class="lbl">Dato og tidspunkt</span>'
     + '<div style="display:flex;gap:8px">'
     + '<input id="r-dato" type="date" style="flex:1.4" value="' + esc(dag) + '" max="' + esc(S.iDag) + '">'
@@ -2822,6 +2951,7 @@ function aabnRediger(dag, id){
         kulhydrat_g: totaler.kulhydrat_g,
         fedt_g: totaler.fedt_g,
         genstande: totaler.genstande,
+        alkohol: nyAlkohol !== null ? nyAlkohol : p.alkohol,
         grupper: nyGrupper !== null ? nyGrupper : p.grupper,
         indhold: nyIndhold !== null ? nyIndhold : p.indhold,
         billede: p.billede
@@ -2997,6 +3127,23 @@ function tegnTrends(){
         + '<span class="u">' + g.antal + ' gange · snit ' + tal(g.kcal / g.antal) + '</span></span>'
         + '<span class="s">' + tal(g.kcal) + '</span></div>';
     });
+  }
+
+  /* alkohol mod Sundhedsstyrelsens grænser */
+  if (S.alkohol && a.alkohol.ialt > 0){
+    var al = a.alkohol;
+    var ugeKl = al.prUge > ALK_UGE ? "over" : (al.prUge >= ALK_UGE * 0.75 ? "naer" : "");
+    h += '<h2 class="sek">Alkohol</h2>'
+      + '<div class="noegletal alknt"><div><b class="' + ugeKl + '">' + talMedKomma(al.prUge) + '</b>'
+      + (S.vindue === 7 ? 'genstande på 7 dage' : 'genstande pr. uge i snit') + '</div>'
+      + '<div><b class="' + (al.dageOver ? "over" : "") + '">' + al.dageOver + '</b>'
+      + (al.dageOver === 1 ? 'dag' : 'dage') + ' over ' + ALK_DAG + '</div>'
+      + '<div><b>' + tal(al.kcal) + '</b>kcal fra alkoholen</div></div>'
+      + '<p class="grafnote" style="margin-top:8px">Sundhedsstyrelsen anbefaler højst ' + ALK_UGE
+      + ' genstande om ugen og ' + ALK_DAG + ' på en dag. Kalorierne er kun selve alkoholen, '
+      + KCAL_PR_GENSTAND + ' kcal pr. genstand'
+      + (a.ialt > 0 ? ' — ' + Math.round(al.kcal / a.ialt * 100) + ' % af periodens kalorier' : '')
+      + '. Sukker i øl og drinks kommer oveni.</p>';
   }
 
   /* indhold der gaar igen — talt paa normaliserede bestanddele, ikke raa
@@ -3810,7 +3957,8 @@ function tegnArk(){
       + '<input id="f-kul" type="number" inputmode="numeric" value="' + (Number(r.kulhydrat_g)||0) + '">'
       + '<input id="f-fedt" type="number" inputmode="numeric" value="' + (Number(r.fedt_g)||0) + '"></div>'
       + '<span class="lbl">Genstande, hvis der var alkohol</span>'
-      + '<input id="f-gen" type="text" inputmode="decimal" value="' + (Number(r.genstande)||0) + '">';
+      + '<input id="f-gen" type="text" inputmode="decimal" value="' + (Number(r.genstande)||0) + '">'
+      + genForHtml("f", r.alkohol);
     h += '<div id="personlighed">' + personlighedHtml(a) + '</div>';
     var harNote = r.portion || r.note || r.usikkerhed === "hoej";
     h += '<div class="note" id="noteboks"' + (harNote ? '' : ' style="display:none"') + '>'
@@ -3912,6 +4060,7 @@ function tegnArk(){
       protein_g: Number($("f-pro").value) || 0,
       kulhydrat_g: Number($("f-kul").value) || 0,
       fedt_g: Number($("f-fedt").value) || 0,
+      alkohol: (a.r && a.r.alkohol) || [],
       grupper: (a.r && a.r.grupper) || null,
       indhold: (a.r && a.r.indhold) || [],
       billede: a.lille || null
@@ -4078,6 +4227,7 @@ function autoGemResultat(a, r){
     genstande: Number(r.genstande) || 0,
     kalorier: Number(r.kalorier) || 0, protein_g: Number(r.protein_g) || 0,
     kulhydrat_g: Number(r.kulhydrat_g) || 0, fedt_g: Number(r.fedt_g) || 0,
+    alkohol: r.alkohol || [],
     grupper: r.grupper || null, indhold: r.indhold || [],
     billede: a.lille || null
   }, 0);
@@ -4427,6 +4577,10 @@ function tegnIndstillinger(){
     + '<label for="s-autoreg">Registrér måltider automatisk efter analyse, uden at spørge først</label></div>'
     + '<p class="grafnote" style="margin-top:4px">Du får 60 sekunder til at rette det bagefter, hvis noget er forkert. '
     + 'Kan ikke skelne mellem tvivlsomme og sikre gæt, når intet spørges om undervejs.</p>'
+    + '<div class="tjek"><input type="checkbox" id="s-alkohol"' + (S.alkohol ? " checked" : "") + '>'
+    + '<label for="s-alkohol">Hold øje med genstande i forhold til Sundhedsstyrelsens anbefalinger</label></div>'
+    + '<p class="grafnote" style="margin-top:4px">Højst ' + ALK_DAG + ' på en dag og ' + ALK_UGE
+    + ' om ugen. Vises kun, når der har været alkohol de seneste 7 dage.</p>'
     + '<details class="afsnit"><summary>Nøgler og model</summary><div>'
     + '<span class="lbl">Udbyder</span><select id="s-udbyder">'
     + [["claude","Claude — betalt, bedst til dansk"],
@@ -4528,6 +4682,10 @@ function tegnIndstillinger(){
   if (uds) uds.onchange = function(){ gemFelter(); tegnIndstillinger(); };
   var ar = $("s-autoreg");
   if (ar) ar.onchange = function(){ S.autoreg = ar.checked; skriv(K_AUTOREG, ar.checked ? "1" : "0"); };
+  var alk = $("s-alkohol");
+  if (alk) alk.onchange = function(){
+    S.alkohol = alk.checked; skriv(K_ALKOHOL, alk.checked ? "1" : "0"); synkMaerk("#indst");
+  };
 
   $("s-gem").onclick = function(){
     gemFelter();
@@ -5520,7 +5678,7 @@ function synkTekst(){
 }
 
 function indstPakke(){
-  return { maal:S.maal, navn:S.navn, profil:S.profil, vaegte:hentVaegte(), medicin:S.medicin || {}, kaekhed:S.kaekhed };
+  return { maal:S.maal, navn:S.navn, profil:S.profil, vaegte:hentVaegte(), medicin:S.medicin || {}, kaekhed:S.kaekhed, alkohol:S.alkohol };
 }
 
 /* Alle koeede dage sendes i eet kald. Lykkes det ikke, bliver de staaende i
@@ -5599,6 +5757,7 @@ function synkHent(){
           if (d.navn){ S.navn = d.navn; skriv(K_BRUGER, d.navn); }
           if (d.medicin){ S.medicin = d.medicin; skriv(K_MEDICIN, JSON.stringify(d.medicin)); }
           if (d.kaekhed){ S.kaekhed = d.kaekhed; skriv(K_KAEK, d.kaekhed); }
+          if (typeof d.alkohol === "boolean"){ S.alkohol = d.alkohol; skriv(K_ALKOHOL, d.alkohol ? "1" : "0"); }
           rort = true;
         }
         return rort;
