@@ -34,12 +34,12 @@ const loggetFetch = async (url, opt) => {
   } catch (e) { console.log(ts(), "✗", e.name, e.message); throw e; }
 };
 const ctx = vm.createContext({
-  console, setTimeout, clearTimeout, setInterval, clearInterval, Promise, Date, Math, JSON, Object, Array,
+  console, setTimeout, clearTimeout, setInterval, clearInterval,
   AbortController, URL, URLSearchParams, TextEncoder, TextDecoder, fetch: loggetFetch,
   localStorage: { getItem: k => lager.has(k) ? lager.get(k) : null, setItem: (k, v) => lager.set(k, v), removeItem: k => lager.delete(k) },
   document: stub(), window: stub(), navigator: { serviceWorker: undefined, mediaDevices: undefined, userAgent: "node" },
   location: stub(), requestAnimationFrame: f => setTimeout(f, 0), Notification: undefined, indexedDB: undefined,
-  Image: function () {}, FileReader: function () {}, HTMLElement: function () {}, Intl,
+  Image: function () {}, FileReader: function () {}, HTMLElement: function () {},
 });
 ctx.self = ctx; ctx.globalThis = ctx;
 try { vm.runInContext(kode, ctx, { filename: "index.html" }); }

@@ -385,7 +385,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 79;
+var APP_BUILD = 80;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1414,10 +1414,11 @@ function gFejl(status, m){
 function gRang(navn){
   var n = String(navn).toLowerCase();
   if (/embedding|aqa|gemma|learnlm|tts|audio|live|image|imagen|veo|vision/.test(n)) return -1;
-  if (/latest|preview|exp|thinking/.test(n)) return -1;
+  if (/latest|exp|thinking|omni|banana|transcribe|customtools|robotics|computer/.test(n)) return -1;
   var m = n.match(/^gemini-(\d+(?:\.\d+)?)-/);
   if (!m) return -1;
   var v = parseFloat(m[1]) * 10;
+  if (/preview/.test(n)) v -= 3;
   if (/flash-lite/.test(n)) return v + 4;
   if (/flash/.test(n)) return v + 6;
   if (/pro/.test(n)) return v + 2;
@@ -1440,7 +1441,7 @@ function gHentListe(){
       var alle = liste.slice();
       liste = liste.slice(0, 4);
       if (!liste.length) throw new Error("Din Gemini-n\u00f8gle har ikke adgang til en brugbar model.");
-      skriv(K_GAUTO, JSON.stringify({ liste: liste, alle: alle, tid: Date.now() }));
+      skriv(K_GAUTO, JSON.stringify({ v: 2, liste: liste, alle: alle, tid: Date.now() }));
       return liste;
     });
   });
@@ -1456,11 +1457,37 @@ function gValgt(){
 /* To-faset analyse: "grov" bruger de hurtigste modeller (lite foerst) til et
    oejeblikkeligt groft skoen, "detalje" bruger Pro-modeller med taenkning til
    det praecise svar. Begge falder tilbage til almindelige Flash-modeller. */
+/* Modellernes helbred huskes paa telefonen. Test mod den rigtige API viste, at
+   listens nyeste model ofte er den mest overbelastede (503 efter 12 s, 429),
+   at aeldre modeller kan staa paa listen men give 404, og at nogle lite-
+   modeller afviser thinkingConfig (400). Derfor: 404 = udeluk i 7 dage,
+   429/503/timeout = baglaens i 10 min, 400 paa taenkning = send uden. */
+var K_GHELBRED = "kd:gemini-helbred";
+function gHelbred(){
+  try { return JSON.parse(laes(K_GHELBRED) || "{}") || {}; } catch(e){ return {}; }
+}
+function gMaerk(model, felt){
+  var h = gHelbred();
+  h[model] = Object.assign(h[model] || {}, felt);
+  skriv(K_GHELBRED, JSON.stringify(h));
+}
+function gSorterEfterHelbred(liste){
+  var h = gHelbred(), nu = Date.now();
+  var ok = [], straf = [];
+  liste.forEach(function(m){
+    var x = h[m] || {};
+    if (x.vaek && x.vaek > nu) return;
+    (x.straf && x.straf > nu ? straf : ok).push(m);
+  });
+  var res = ok.concat(straf);
+  return res.length ? res : liste;
+}
+
 function gListeTil(modus){
   if (modus !== "grov" && modus !== "detalje") return gListe();
   var c = null;
   try { c = JSON.parse(laes(K_GAUTO) || "null"); } catch(e){}
-  var klar = c && c.alle && c.alle.length && Date.now() - (c.tid || 0) < 6048e5
+  var klar = c && c.v === 2 && c.alle && c.alle.length && Date.now() - (c.tid || 0) < 6048e5
     ? Promise.resolve(c.alle) : gHentListe().then(function(){
         try { return JSON.parse(laes(K_GAUTO)).alle || []; } catch(e){ return []; }
       });
@@ -1470,16 +1497,16 @@ function gListeTil(modus){
     var lite = alle.filter(function(n){ return /flash-lite/.test(n); }).sort(nyeste);
     var flash = alle.filter(function(n){ return /flash/.test(n) && !/lite/.test(n); }).sort(nyeste);
     var pro = alle.filter(function(n){ return /pro/.test(n); }).sort(nyeste);
-    var liste = modus === "grov" ? lite.slice(0, 2).concat(flash.slice(0, 2))
-                                 : flash.slice(0, 2).concat(pro.slice(0, 1), lite.slice(0, 1));
-    return liste.length ? liste : alle.slice(0, 4);
+    var liste = modus === "grov" ? lite.slice(0, 2).concat(flash.slice(0, 3))
+                                 : flash.slice(0, 4).concat(lite.slice(0, 1), pro.slice(0, 1));
+    return gSorterEfterHelbred(liste.length ? liste : alle.slice(0, 4));
   });
 }
 
 function gListe(){
   var c = null;
   try { c = JSON.parse(laes(K_GAUTO) || "null"); } catch(e){}
-  if (c && c.liste && c.liste.length && Date.now() - (c.tid || 0) < 6048e5)
+  if (c && c.v === 2 && c.liste && c.liste.length && Date.now() - (c.tid || 0) < 6048e5)
     return Promise.resolve(c.liste);
   return gHentListe();
 }
@@ -1540,6 +1567,7 @@ function geminiKald(krop){
     return !!m && parseFloat(m[1]) >= 3;
   }
   function byggKrop(model){
+    var uTaenk = (gHelbred()[model] || {}).utanTaenk === true;
     var conf = {
       maxOutputTokens: Number(krop.max_tokens) || 1200,
       responseMimeType: "application/json"
@@ -1552,8 +1580,8 @@ function geminiKald(krop){
     var vm = model.match(/^gemini-(\d+(?:\.\d+)?)-/), vv = vm ? parseFloat(vm[1]) : 0;
     if (krop.gModus === "detalje"){
       conf.maxOutputTokens = 4096;
-      if (vv >= 2.5) conf.thinkingConfig = { thinkingBudget: 1024 };
-    } else if (taenkningOk(model)) conf.thinkingConfig = { thinkingBudget: 0 };
+      if (vv >= 2.5 && !uTaenk) conf.thinkingConfig = { thinkingBudget: 1024 };
+    } else if (taenkningOk(model) && !uTaenk) conf.thinkingConfig = { thinkingBudget: 0 };
     return JSON.stringify({
       contents: [{ parts: dele }],
       systemInstruction: krop.system ? { parts: [{ text: krop.system }] } : undefined,
@@ -1580,6 +1608,7 @@ function geminiKald(krop){
         if (!r.ok){
           var e = gFejl(r.status, (d.error && d.error.message) || "");
           e.status = r.status;
+          e.rod = (d.error && d.error.message) || "";
           throw e;
         }
         var k = d.candidates && d.candidates[0];
@@ -1593,34 +1622,74 @@ function geminiKald(krop){
     });
   }
 
-  /* Overbelastning er n\u00e6sten altid forbig\u00e5ende, s\u00e5 der ventes to gange f\u00f8r
-     appen giver op. Hj\u00e6lper det ikke, pr\u00f8ves den n\u00e6ste model p\u00e5 listen:
-     kvoter og kapacitet g\u00f8res op per model, ikke per n\u00f8gle. */
-  function proev(liste, i, forsoeg){
-    if (typeof krop.gMeld === "function"){
-      try { krop.gMeld(liste[i].replace(/^gemini-/, "Gemini ").replace(/-/g, " ") + (forsoeg ? " · forsøg " + (forsoeg + 1) : "")); } catch(f){}
-    }
-    return etKald(liste[i]).catch(function(e){
-      var s = e.status || 0;
-      /* En model der ikke svarer inden tidsgraensen proeves ikke igen — den
-         naeste model paa listen tager over med det samme. */
-      if (e.timeout) forsoeg = 2;
-      /* s===0 daekker rene netvaerksfejl — fetch() der aldrig fik et svar
-         overhovedet (iOS' "Load failed"), ikke en HTTP-fejlkode. De er lige
-         saa ofte forbigaaende som en 503, og skal behandles saadan i stedet
-         for at give op efter forste forsoeg. */
-      var mellem = (s === 429 || s === 500 || s === 503 || s === 0);
-      if (mellem && forsoeg < 2)
-        return gVent(forsoeg === 0 ? 1500 : 4000).then(function(){ return proev(liste, i, forsoeg + 1); });
-      if ((mellem || s === 404 || s === 400) && i + 1 < liste.length)
-        return proev(liste, i + 1, 0);
-      if (s === 404) skriv(K_GAUTO, "");
-      if (s === 0) throw new Error("Mistede forbindelsen til Gemini undervejs. Tjek din internetforbindelse og prøv igen.");
+  /* Kapløb mellem modeller: den foerste model starter med det samme, og er
+     der intet svar efter HEDGE ms (eller fejler den), starter den naeste
+     ved siden af — foerste svar vinder. Test mod den rigtige API viste, at en
+     overbelastet model bruger 12+ s paa at sige 503; det skal man ikke vente
+     paa, naar en anden model svarer paa 1-2 s. */
+  var HEDGE = krop.gModus === "grov" ? 2500 : 5000;
+
+  function enModel(model){
+    var t0 = Date.now();
+    return etKald(model).catch(function(e){
+      /* Afvist paa taenkningsfeltet: husk det, og proev samme model uden. */
+      if (e.status === 400 && /invalid argument/i.test(e.rod || "") && !(gHelbred()[model] || {}).utanTaenk){
+        gMaerk(model, { utanTaenk: true });
+        return etKald(model);
+      }
       throw e;
+    }).then(function(r){
+      gMaerk(model, { straf: 0, ms: Date.now() - t0 });
+      return r;
+    });
+  }
+  function marker(model, e){
+    var s = e.status || 0, nu = Date.now();
+    if (s === 404) gMaerk(model, { vaek: nu + 6048e5 });
+    else if (s === 400 && /image input|modality|not support/i.test(e.rod || "")) gMaerk(model, { vaek: nu + 6048e5 });
+    else if (s === 429 || s === 500 || s === 503 || e.timeout) gMaerk(model, { straf: nu + 6e5 });
+  }
+
+  function kapløb(liste){
+    return new Promise(function(ok, fejl){
+      var i = 0, igang = 0, faerdig = false, sidste = null;
+      function start(){
+        if (faerdig) return;
+        if (i >= liste.length){
+          if (!igang){ faerdig = true; fejl(sidste || new Error("Gemini svarede ikke.")); }
+          return;
+        }
+        var model = liste[i++]; igang++;
+        if (typeof krop.gMeld === "function"){
+          try { krop.gMeld(model.replace(/^gemini-/, "Gemini ").replace(/-/g, " ")); } catch(f){}
+        }
+        enModel(model).then(function(r){
+          igang--;
+          if (faerdig) return;
+          faerdig = true; ok(r);
+        }, function(e){
+          igang--; sidste = e; marker(model, e);
+          if (faerdig) return;
+          start();
+        });
+        setTimeout(start, HEDGE);
+      }
+      start();
     });
   }
 
-  return gListeTil(krop.gModus).then(function(l){ return proev(l, 0, 0); });
+  /* Højst to omgange: hvis alle modeller var optaget, ventes kort og listen
+     sorteres igen efter, hvad vi nu ved om dem. */
+  function omgang(n){
+    return gListeTil(krop.gModus).then(function(l){ return kapløb(l); }).catch(function(e){
+      var s = e.status || 0;
+      if (n < 1 && (s === 429 || s === 500 || s === 503 || s === 0 || e.timeout))
+        return gVent(4000).then(function(){ return omgang(n + 1); });
+      if (s === 0 && !e.timeout) throw new Error("Mistede forbindelsen til Gemini undervejs. Tjek din internetforbindelse og prøv igen.");
+      throw e;
+    });
+  }
+  return omgang(0);
 }
 
 function kald(krop, andetForsoeg){
