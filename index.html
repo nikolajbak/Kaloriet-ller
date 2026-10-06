@@ -385,7 +385,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 78;
+var APP_BUILD = 79;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1471,7 +1471,7 @@ function gListeTil(modus){
     var flash = alle.filter(function(n){ return /flash/.test(n) && !/lite/.test(n); }).sort(nyeste);
     var pro = alle.filter(function(n){ return /pro/.test(n); }).sort(nyeste);
     var liste = modus === "grov" ? lite.slice(0, 2).concat(flash.slice(0, 2))
-                                 : pro.slice(0, 2).concat(flash.slice(0, 2));
+                                 : flash.slice(0, 2).concat(pro.slice(0, 1), lite.slice(0, 1));
     return liste.length ? liste : alle.slice(0, 4);
   });
 }
@@ -1546,8 +1546,14 @@ function geminiKald(krop){
     };
     /* Detaljeanalysen faar lov at taenke (standard) — det er den, der goer
        portionsvurderingen praecis — og skal have plads til baade tanker og svar. */
-    if (krop.gModus === "detalje") conf.maxOutputTokens = 8192;
-    else if (taenkningOk(model)) conf.thinkingConfig = { thinkingBudget: 0 };
+    /* Detaljeanalysen taenker, men med LOFT (1024 tokens) — ubegrænset taenkning
+       kan tage over et minut og fik analysen til at se ud som om den hang.
+       Plads til tanker + svar i maxOutputTokens. */
+    var vm = model.match(/^gemini-(\d+(?:\.\d+)?)-/), vv = vm ? parseFloat(vm[1]) : 0;
+    if (krop.gModus === "detalje"){
+      conf.maxOutputTokens = 4096;
+      if (vv >= 2.5) conf.thinkingConfig = { thinkingBudget: 1024 };
+    } else if (taenkningOk(model)) conf.thinkingConfig = { thinkingBudget: 0 };
     return JSON.stringify({
       contents: [{ parts: dele }],
       systemInstruction: krop.system ? { parts: [{ text: krop.system }] } : undefined,
@@ -1562,7 +1568,7 @@ function geminiKald(krop){
   }
 
   function etKald(model){
-    return medTid(krop.gModus === "detalje" ? 150000 : KALD_TIDSGRAENSE, function(signal){
+    return medTid(krop.gModus === "detalje" ? 70000 : krop.gModus === "grov" ? 25000 : KALD_TIDSGRAENSE, function(signal){
      return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
         + encodeURIComponent(model) + ":generateContent", {
       method: "POST",
@@ -1591,8 +1597,14 @@ function geminiKald(krop){
      appen giver op. Hj\u00e6lper det ikke, pr\u00f8ves den n\u00e6ste model p\u00e5 listen:
      kvoter og kapacitet g\u00f8res op per model, ikke per n\u00f8gle. */
   function proev(liste, i, forsoeg){
+    if (typeof krop.gMeld === "function"){
+      try { krop.gMeld(liste[i].replace(/^gemini-/, "Gemini ").replace(/-/g, " ") + (forsoeg ? " · forsøg " + (forsoeg + 1) : "")); } catch(f){}
+    }
     return etKald(liste[i]).catch(function(e){
       var s = e.status || 0;
+      /* En model der ikke svarer inden tidsgraensen proeves ikke igen — den
+         naeste model paa listen tager over med det samme. */
+      if (e.timeout) forsoeg = 2;
       /* s===0 daekker rene netvaerksfejl — fetch() der aldrig fik et svar
          overhovedet (iOS' "Load failed"), ikke en HTTP-fejlkode. De er lige
          saa ofte forbigaaende som en 503, og skal behandles saadan i stedet
@@ -1989,11 +2001,30 @@ function analyserGrov(dataUrl){
 }
 /* Detaljeanalyserne koeres ét ad gangen, saa de ikke braendes af paa Geminis
    gratis-kvote samtidig — de venter paa, at der er plads. */
-var detaljeKoe = Promise.resolve();
+var DETALJE_PARALLELT = 2, detaljeIgang = 0, detaljeVenter = [];
 function iDetaljeKoe(fn){
-  var p = detaljeKoe.then(fn, fn);
-  detaljeKoe = p.catch(function(){});
-  return p;
+  return new Promise(function(ok, fejl){
+    function koer(){
+      detaljeIgang++;
+      var p; try { p = Promise.resolve(fn()); } catch(e){ p = Promise.reject(e); }
+      p.then(ok, fejl).then(function(){
+        detaljeIgang--;
+        var n = detaljeVenter.shift(); if (n) n();
+      });
+    }
+    if (detaljeIgang < DETALJE_PARALLELT) koer(); else detaljeVenter.push(koer);
+  });
+}
+/* Skriver hvad Gemini lige nu arbejder paa (model/forsoeg) paa posten, saa en
+   analyse der tager tid kan ses at arbejde — og man kan se, hvor den sidder fast. */
+function saetPostTekst(id, dag, tekst){
+  var poster = hentDag(dag), ok = false;
+  poster.forEach(function(p){
+    if (p.id === id && p.analyserer && (p.status || "analyserer") === "analyserer"){ p.fejlTekst = tekst; ok = true; }
+  });
+  if (!ok) return;
+  gemDag(dag, poster);
+  tegn();
 }
 function saetGrov(id, dag, g){
   var navn = String((g && g.navn) || "").trim().slice(0, 40), kcal = Math.round(Number(g && g.kalorier) || 0);
@@ -2006,17 +2037,17 @@ function saetGrov(id, dag, g){
   gemDag(dag, poster);
   tegn();
 }
-function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
+function analyser(dataUrl, note, svar, beskrivelse, dag, tid, meld){
   var indhold = [];
   if (dataUrl){
     indhold.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } });
   }
   indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse, dag, tid) });
   var krop = { model:S.model, max_tokens:2400, messages:[{ role:"user", content:indhold }] };
-  if (udbyder() === "gemini") krop.gModus = "detalje";
+  if (udbyder() === "gemini"){ krop.gModus = "detalje"; if (meld) krop.gMeld = meld; }
   /* Et kald, der hang eller tabte forbindelsen, proeves én gang til, foer der gives op */
   return kald(krop).catch(function(e){
-    if (e && (e.timeout || e instanceof TypeError)) return kald(krop);
+    if (udbyder() !== "gemini" && e && (e.timeout || e instanceof TypeError)) return kald(krop);
     throw e;
   }).then(alkoholFraSvar);
 }
@@ -4362,7 +4393,11 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
     if (v2) v2.igang = false;
     return false;
   }
-  var koer = function(){ return analyser(stor, note, svar, beskrivelse, dag, tid); };
+  var meld = function(t){
+    var v5 = ventende[auto];
+    if (v5 && v5.runde === runde) saetPostTekst(auto, dag, t);
+  };
+  var koer = function(){ return analyser(stor, note, svar, beskrivelse, dag, tid, auto ? meld : null); };
   var gem = auto && udbyder() === "gemini";
   if (gem && stor && !svar){
     analyserGrov(stor).then(function(g){
@@ -4373,6 +4408,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
   var lob = gem ? iDetaljeKoe(function(){
     var v3 = ventende[auto];
     if (v3 && v3.runde !== runde) return Promise.resolve(null);
+    saetPostTekst(auto, dag, "Venter på Gemini …");
     return koer();
   }) : koer();
   lob.then(function(r){
