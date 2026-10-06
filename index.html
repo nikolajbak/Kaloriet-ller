@@ -385,7 +385,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 80;
+var APP_BUILD = 81;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1471,6 +1471,19 @@ function gMaerk(model, felt){
   h[model] = Object.assign(h[model] || {}, felt);
   skriv(K_GHELBRED, JSON.stringify(h));
 }
+/* utanTaenk er et udloebstidspunkt. Et gammelt `true` (v80) taelles som
+   udloebet, fordi det kunne vaere sat paa en fejl, der slet ikke handlede om
+   taenkning. */
+function gUdenTaenk(model){
+  var u = (gHelbred()[model] || {}).utanTaenk;
+  return typeof u === "number" && u > Date.now();
+}
+/* Kun en 400, der faktisk naevner taenkning/budget, er en afvisning af
+   thinkingConfig. Geminis generiske "invalid argument" kommer ogsaa ved fx et
+   oedelagt eller for stort billede og maa ikke fjerne taenkeloftet. */
+function gTaenkFejl(e){
+  return e && e.status === 400 && /think|budget/i.test(e.rod || "");
+}
 function gSorterEfterHelbred(liste){
   var h = gHelbred(), nu = Date.now();
   var ok = [], straf = [];
@@ -1516,9 +1529,15 @@ function gVent(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
 /* Et netvaerkskald der ALTID afgoeres: efter `ms` afbrydes det og afvises med
    timeout=true. Uden dette kan et kald, hvis forbindelse iOS har kappet i
    baggrunden, hænge for evigt uden hverken svar eller fejl. `lav` faar en
-   AbortSignal og returnerer selve kalds-løftet (inkl. laesning af svarkroppen). */
-function medTid(ms, lav){
+   AbortSignal og returnerer selve kalds-løftet (inkl. laesning af svarkroppen).
+   `ydre` (valgfri) er et signal udefra, der ogsaa afbryder kaldet — bruges af
+   Gemini-kapløbet til at stoppe de modeller, der tabte. */
+function medTid(ms, lav, ydre){
   var ac = typeof AbortController === "function" ? new AbortController() : null;
+  if (ac && ydre){
+    if (ydre.aborted) ac.abort();
+    else ydre.addEventListener("abort", function(){ try { ac.abort(); } catch(f){} });
+  }
   var t;
   var ur = new Promise(function(_, afvis){
     t = setTimeout(function(){
@@ -1566,8 +1585,8 @@ function geminiKald(krop){
     var m = model.match(/^gemini-(\d+(?:\.\d+)?)-/);
     return !!m && parseFloat(m[1]) >= 3;
   }
-  function byggKrop(model){
-    var uTaenk = (gHelbred()[model] || {}).utanTaenk === true;
+  function byggKrop(model, tvingUden){
+    var uTaenk = tvingUden || gUdenTaenk(model);
     var conf = {
       maxOutputTokens: Number(krop.max_tokens) || 1200,
       responseMimeType: "application/json"
@@ -1595,14 +1614,14 @@ function geminiKald(krop){
     });
   }
 
-  function etKald(model){
+  function etKald(model, signal0, tvingUden){
     return medTid(krop.gModus === "detalje" ? 70000 : krop.gModus === "grov" ? 25000 : KALD_TIDSGRAENSE, function(signal){
      return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
         + encodeURIComponent(model) + ":generateContent", {
       method: "POST",
       signal: signal,
       headers: { "Content-Type":"application/json", "x-goog-api-key": noegle },
-      body: byggKrop(model)
+      body: byggKrop(model, tvingUden)
     }).then(function(r){
       return r.json().catch(function(){ return {}; }).then(function(d){
         if (!r.ok){
@@ -1619,7 +1638,7 @@ function geminiKald(krop){
                  stop_reason: k && k.finishReason === "MAX_TOKENS" ? "max_tokens" : "end_turn" };
       });
     });
-    });
+    }, signal0);
   }
 
   /* Kapløb mellem modeller: den foerste model starter med det samme, og er
@@ -1629,13 +1648,16 @@ function geminiKald(krop){
      paa, naar en anden model svarer paa 1-2 s. */
   var HEDGE = krop.gModus === "grov" ? 2500 : 5000;
 
-  function enModel(model){
+  function enModel(model, signal){
     var t0 = Date.now();
-    return etKald(model).catch(function(e){
-      /* Afvist paa taenkningsfeltet: husk det, og proev samme model uden. */
-      if (e.status === 400 && /invalid argument/i.test(e.rod || "") && !(gHelbred()[model] || {}).utanTaenk){
-        gMaerk(model, { utanTaenk: true });
-        return etKald(model);
+    return etKald(model, signal).catch(function(e){
+      /* Afvist paa taenkningsfeltet: proev samme model uden, og husk det
+         (i 7 dage) foerst, naar det rent faktisk virkede uden. */
+      if (gTaenkFejl(e) && !gUdenTaenk(model) && !(signal && signal.aborted)){
+        return etKald(model, signal, true).then(function(r){
+          gMaerk(model, { utanTaenk: Date.now() + 6048e5 });
+          return r;
+        });
       }
       throw e;
     }).then(function(r){
@@ -1645,34 +1667,49 @@ function geminiKald(krop){
   }
   function marker(model, e){
     var s = e.status || 0, nu = Date.now();
+    if (gTaenkFejl(e)) return;
     if (s === 404) gMaerk(model, { vaek: nu + 6048e5 });
-    else if (s === 400 && /image input|modality|not support/i.test(e.rod || "")) gMaerk(model, { vaek: nu + 6048e5 });
+    else if (s === 400 && /image input|modality/i.test(e.rod || "")) gMaerk(model, { vaek: nu + 6048e5 });
     else if (s === 429 || s === 500 || s === 503 || e.timeout) gMaerk(model, { straf: nu + 6e5 });
   }
 
   function kapløb(liste){
     return new Promise(function(ok, fejl){
-      var i = 0, igang = 0, faerdig = false, sidste = null;
+      /* Én ventetimer ad gangen (ellers starter hver fejl en ekstra, og
+         listen fyres af naesten samtidig), og én AbortController pr. model, så
+         taberne stoppes, naar der er et svar — de koster ellers kvote. */
+      var i = 0, igang = 0, faerdig = false, sidste = null, ur = null, styr = [];
+      function afgoer(){
+        faerdig = true;
+        clearTimeout(ur);
+        styr.forEach(function(c){ try { c.abort(); } catch(f){} });
+      }
       function start(){
+        clearTimeout(ur);
         if (faerdig) return;
         if (i >= liste.length){
-          if (!igang){ faerdig = true; fejl(sidste || new Error("Gemini svarede ikke.")); }
+          if (!igang){ afgoer(); fejl(sidste || new Error("Gemini svarede ikke.")); }
           return;
         }
         var model = liste[i++]; igang++;
+        var ac = typeof AbortController === "function" ? new AbortController() : null;
+        if (ac) styr.push(ac);
         if (typeof krop.gMeld === "function"){
           try { krop.gMeld(model.replace(/^gemini-/, "Gemini ").replace(/-/g, " ")); } catch(f){}
         }
-        enModel(model).then(function(r){
+        enModel(model, ac ? ac.signal : undefined).then(function(r){
           igang--;
           if (faerdig) return;
-          faerdig = true; ok(r);
+          afgoer(); ok(r);
         }, function(e){
-          igang--; sidste = e; marker(model, e);
+          igang--;
+          /* Efter afgoerelsen er fejlen typisk vores egen afbrydelse —
+             den siger intet om modellen. */
           if (faerdig) return;
+          sidste = e; marker(model, e);
           start();
         });
-        setTimeout(start, HEDGE);
+        if (i < liste.length) ur = setTimeout(start, HEDGE);
       }
       start();
     });
