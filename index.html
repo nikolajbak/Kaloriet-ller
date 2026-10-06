@@ -385,7 +385,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 81;
+var APP_BUILD = 82;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1455,8 +1455,9 @@ function gValgt(){
 }
 
 /* To-faset analyse: "grov" bruger de hurtigste modeller (lite foerst) til et
-   oejeblikkeligt groft skoen, "detalje" bruger Pro-modeller med taenkning til
-   det praecise svar. Begge falder tilbage til almindelige Flash-modeller. */
+   oejeblikkeligt groft skoen, "detalje" bruger Flash-modeller med et
+   taenkeloft (1024 tokens) til det praecise svar og falder tilbage til lite og
+   til sidst Pro. Listerne koeres som kapløb (se geminiKald). */
 /* Modellernes helbred huskes paa telefonen. Test mod den rigtige API viste, at
    listens nyeste model ofte er den mest overbelastede (503 efter 12 s, 429),
    at aeldre modeller kan staa paa listen men give 404, og at nogle lite-
@@ -1467,8 +1468,14 @@ function gHelbred(){
   try { return JSON.parse(laes(K_GHELBRED) || "{}") || {}; } catch(e){ return {}; }
 }
 function gMaerk(model, felt){
-  var h = gHelbred();
+  var h = gHelbred(), nu = Date.now();
   h[model] = Object.assign(h[model] || {}, felt);
+  /* Ryd modeller, hvor intet er gaeldende laengere (alle frister udloebet),
+     saa listen ikke vokser med hvert modelnavn, der nogensinde er set. */
+  Object.keys(h).forEach(function(m){
+    var x = h[m] || {};
+    if (m !== model && !(x.vaek > nu) && !(x.straf > nu) && !(typeof x.utanTaenk === "number" && x.utanTaenk > nu)) delete h[m];
+  });
   skriv(K_GHELBRED, JSON.stringify(h));
 }
 /* utanTaenk er et udloebstidspunkt. Et gammelt `true` (v80) taelles som
@@ -1519,9 +1526,11 @@ function gListeTil(modus){
 function gListe(){
   var c = null;
   try { c = JSON.parse(laes(K_GAUTO) || "null"); } catch(e){}
+  /* Ogsaa kommentarer, opskrifter osv. springer modeller over, der har givet
+     404 (udelukket i 7 dage), og stiller de overbelastede bagerst. */
   if (c && c.v === 2 && c.liste && c.liste.length && Date.now() - (c.tid || 0) < 6048e5)
-    return Promise.resolve(c.liste);
-  return gHentListe();
+    return Promise.resolve(gSorterEfterHelbred(c.liste));
+  return gHentListe().then(function(l){ return l && l.length ? gSorterEfterHelbred(l) : l; });
 }
 
 function gVent(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
@@ -1575,18 +1584,19 @@ function geminiKald(krop){
      safetySettings loeftes til BLOCK_ONLY_HIGH, fordi standardfilteret laeser
      drilleri rettet mod brugeren selv som chikane og sender en daemper
      tilbage — det er brugerens eget valgte niveau, ikke en fremmed der hakkes paa. */
-  /* thinkingConfig findes kun fra Gemini 3.x og frem. Sendes det til en
-     aeldre model — som fallback-kaeden rammer, naar de nyeste 3.x-modeller
-     er overbelastede (503) — afviser den aeldre model sandsynligvis feltet
-     med en fatal fejl, der IKKE er 429/500/503/404, og kaeden doer der i
-     stedet for at proeve videre. Derfor bygges kroppen per model, ikke \u00e9n
-     gang for det hele. */
+  /* thinkingConfig sendes ikke til alle modeller: grov-kald (budget 0) kun til
+     3.x, detalje-kald (loft 1024) til 2.5+ — 2.5 accepterer et budget, kun
+     aeldre modeller afviser feltet. Lite-modeller faar det aldrig, og en model,
+     der har afvist feltet (400 om thinking/budget), koeres uden i 7 dage.
+     Derfor bygges kroppen per model, ikke \u00e9n gang for det hele. */
   function taenkningOk(model){
     var m = model.match(/^gemini-(\d+(?:\.\d+)?)-/);
     return !!m && parseFloat(m[1]) >= 3;
   }
   function byggKrop(model, tvingUden){
-    var uTaenk = tvingUden || gUdenTaenk(model);
+    /* Lite-modellerne afviste thinkingConfig i test mod den rigtige API —
+       de faar det aldrig. 400-fallbacken i enModel er kun et sikkerhedsnet. */
+    var uTaenk = tvingUden || /lite/.test(model) || gUdenTaenk(model);
     var conf = {
       maxOutputTokens: Number(krop.max_tokens) || 1200,
       responseMimeType: "application/json"
@@ -1673,6 +1683,11 @@ function geminiKald(krop){
     else if (s === 429 || s === 500 || s === 503 || e.timeout) gMaerk(model, { straf: nu + 6e5 });
   }
 
+  function midlertidig(e){
+    var s = e.status || 0;
+    return s === 429 || s === 500 || s === 503 || s === 0 || !!e.timeout;
+  }
+
   function kapløb(liste){
     return new Promise(function(ok, fejl){
       /* Én ventetimer ad gangen (ellers starter hver fejl en ekstra, og
@@ -1706,7 +1721,11 @@ function geminiKald(krop){
           /* Efter afgoerelsen er fejlen typisk vores egen afbrydelse —
              den siger intet om modellen. */
           if (faerdig) return;
-          sidste = e; marker(model, e);
+          /* Behold den mest sigende fejl: en midlertidig (429/5xx/timeout)
+             skal ikke overskrives af en 400/404 fra en senere model — ellers
+             springes anden omgang over, og brugeren faar en misvisende besked. */
+          if (!sidste || !midlertidig(sidste) || midlertidig(e)) sidste = e;
+          marker(model, e);
           start();
         });
         if (i < liste.length) ur = setTimeout(start, HEDGE);
@@ -2105,8 +2124,8 @@ function analyserGrov(dataUrl){
     { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } },
     { type:"text", text:t } ] }] });
 }
-/* Detaljeanalyserne koeres ét ad gangen, saa de ikke braendes af paa Geminis
-   gratis-kvote samtidig — de venter paa, at der er plads. */
+/* Hoejst DETALJE_PARALLELT detaljeanalyser koerer ad gangen, saa de ikke
+   braender Geminis gratis-kvote af samtidig — resten venter paa, at der er plads. */
 var DETALJE_PARALLELT = 2, detaljeIgang = 0, detaljeVenter = [];
 function iDetaljeKoe(fn){
   return new Promise(function(ok, fejl){
@@ -2129,7 +2148,9 @@ function saetPostTekst(id, dag, tekst){
     if (p.id === id && p.analyserer && (p.status || "analyserer") === "analyserer"){ p.fejlTekst = tekst; ok = true; }
   });
   if (!ok) return;
-  gemDag(dag, poster);
+  /* Kun lokalt: det er en ren visuel status, der skifter for hver model i
+     kapløbet — den skal ikke synkroniseres til skyen hver gang. */
+  gemDagLokalt(dag, poster);
   tegn();
 }
 function saetGrov(id, dag, g){
@@ -2676,7 +2697,7 @@ function tegnHoved(){
         var navnTxt = st === "spoergsmaal" ? "Har et spørgsmål" : st === "fejl" ? "Kunne ikke læses" : grov ? esc(p.grovNavn) : "Analyserer…";
         var metaTxt = st === "spoergsmaal" ? "Tryk for at svare"
           : st === "fejl" ? esc(ventende[p.id] ? (p.fejlTekst || "Prøv selv") + " · tryk for at prøve selv" : "Afbrudt · stryg for at slette")
-          : esc(p.fejlTekst ? p.fejlTekst : grov ? "Grov skøn · præciserer" : p.tid) + ' · <span class="tm" data-timer="' + esc(p.id) + '">0 s</span>';
+          : esc(grov ? "Grov skøn · " + (p.fejlTekst || "præciserer") : p.fejlTekst || p.tid) + ' · <span class="tm" data-timer="' + esc(p.id) + '">0 s</span>';
         var glyf = st === "spoergsmaal" ? "?" : st === "fejl" ? "!" : '<span class="spin"></span>';
         h += '<div class="postrum">'
           + '<div class="slettebag" aria-hidden="true">'

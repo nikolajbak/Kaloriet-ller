@@ -1,7 +1,10 @@
-// Tester appens ægte Gemini-kode (analyserGrov / analyser) fra index.html i Node.
-// Nøglen kan ligge i test/.noegle (git-ignoreret) eller i GEMINI_API_KEY.
-// Brug:  node test/gemini-test.mjs <billede.jpg> [claude-model-ignoreres]
-// Nøglen læses kun fra miljøvariablen — den gemmes aldrig i filer.
+// Manuelt maaleværktøj (ingen assertions): kører appens ægte Gemini-kode
+// (analyserGrov / analyser) fra index.html i Node mod den rigtige API og logger
+// tider. Bruger af din Gemini-kvote.
+// Nøglen læses fra GEMINI_API_KEY eller test/.noegle (git-ignoreret) — scriptet
+// skriver den aldrig selv nogen steder.
+// Appkoden findes som den længste <script>-blok i index.html.
+// Brug:  node test/gemini-test.mjs <billede.jpg>
 import fs from "node:fs";
 import vm from "node:vm";
 import path from "node:path";
