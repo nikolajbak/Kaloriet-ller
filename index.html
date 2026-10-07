@@ -41,16 +41,15 @@ body{
   letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
 .stortal.over{color:var(--ler);}
 .maallinje{margin-top:6px;font-size:14px;color:var(--daempet);}
-.baand{height:6px;background:#DADCD3;border-radius:3px;margin:16px 0 14px;overflow:hidden;}
+.maallinje.over{color:var(--ler);}
+.baand{height:6px;background:#DADCD3;border-radius:3px;margin:16px 0 0;overflow:hidden;}
 .baand span{display:block;height:100%;background:var(--gron);
   transition:width .45s cubic-bezier(.2,.7,.3,1);}
 .baand span.over{background:var(--ler);}
-.rest{display:flex;justify-content:space-between;align-items:baseline;
-  border-top:1px solid var(--linje);padding-top:12px;margin-top:2px;}
-.rest .txt{font-size:13px;color:var(--daempet);}
-.rest .num{font-family:Georgia,serif;font-size:30px;font-variant-numeric:tabular-nums;}
-.rest .num.over{color:var(--ler);}
-.makro{display:flex;gap:22px;font-size:13px;color:var(--daempet);
+.status{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  font-size:13px;color:var(--daempet);margin:8px 0 14px;}
+.status b{font-weight:600;color:var(--blaek);font-variant-numeric:tabular-nums;}
+.makro{display:flex;flex-wrap:wrap;column-gap:22px;row-gap:4px;font-size:13px;color:var(--daempet);
   border-top:1px solid var(--linje);padding-top:12px;}
 .makro b{font-weight:600;color:var(--blaek);font-variant-numeric:tabular-nums;}
 .alkohol{display:flex;gap:18px;border-top:1px solid var(--linje);padding-top:12px;margin-top:12px;}
@@ -201,7 +200,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   padding:12px 13px;margin-top:10px;font-size:14px;}
 .budget b{font-family:Georgia,serif;font-size:17px;font-variant-numeric:tabular-nums;font-weight:400;}
 .budget .rest{color:var(--daempet);font-size:13px;margin-top:3px;}
-.budget .rest.over{color:var(--ler);}
+.budget .over,.budget .over b{color:var(--ler);}
 .kort{background:var(--kort);border:1px solid var(--linje);border-radius:12px;
   padding:13px 14px;margin-bottom:9px;}
 .kort .fra{font-weight:600;}
@@ -385,7 +384,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 82;
+var APP_BUILD = 83;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1204,11 +1203,9 @@ function analyseAfVindue(dage){
 /* Hvad er der spist indtil nu i dag — bruges som kontekst for vurderingen */
 function budgetTekst(spist, efter){
   var rest = S.maal - efter;
-  return '<b>' + tal(efter) + '</b> af ' + tal(S.maal) + ' kcal i dag'
-    + '<div class="rest' + (rest < 0 ? " over" : "") + '">'
-    + (rest >= 0 ? tal(rest) + ' kcal tilbage efter dette måltid'
-                 : tal(-rest) + ' kcal over målet')
-    + '</div>';
+  return '<div class="' + (rest < 0 ? "over" : "") + '"><b>' + tal(Math.abs(rest)) + '</b> '
+    + (rest >= 0 ? 'kcal tilbage efter dette måltid' : 'kcal over målet efter dette måltid') + '</div>'
+    + '<div class="rest">' + tal(efter) + ' af ' + tal(S.maal) + ' kcal i dag</div>';
 }
 /* Alt hvad der er regnet ud fra dagbogen. Kaldes hver gang en registrering
    tilfoejes, rettes eller slettes, saa intet analyseret bygger paa gamle tal. */
@@ -2660,14 +2657,24 @@ function tegnHoved(){
   var gen = poster.reduce(function(a,p){ return a + p.genstande; }, 0);
   var over = S.maal > 0 && sum.kcal > S.maal;
   var pct = S.maal > 0 ? Math.min(100, sum.kcal / S.maal * 100) : 0;
+  /* Billeder under analyse taeller ikke med endnu; et groft skoen naevnes,
+     saa det store tal ikke ser mere rummeligt ud, end det er. */
+  var venter = poster.reduce(function(a,p){ return a + (p.analyserer && p.status === "analyserer" && p.grovKcal > 0 ? p.grovKcal : 0); }, 0);
 
+  /* Det store tal er det, der er TILBAGE — det er det, man skal handle paa.
+     Uden et mael er der intet at traekke fra, saa vises det spiste. */
+  var stort = S.maal > 0 ? Math.abs(S.maal - sum.kcal) : sum.kcal;
+  var stortTekst = S.maal <= 0 ? "kalorier i dag"
+    : over ? "kcal over dagens mål" : "kcal tilbage i dag";
   var h = '<div class="indhold">' + hoved(langDato(S.iDag))
-    + '<div class="hero"><div class="stortal' + (over ? " over" : "") + '">' + tal(sum.kcal) + '</div>'
-    + '<div class="maallinje">kalorier i dag · <button class="txtknap" id="b-maal">mål ' + tal(S.maal) + '</button></div>'
-    + '<div class="baand"><span class="' + (over ? "over" : "") + '" style="width:' + pct + '%"></span></div>'
-    + '<div class="rest"><span class="txt">'
-    + (S.maal - sum.kcal >= 0 ? 'tilbage af dagens mål' : 'over dagens mål') + '</span>'
-    + '<span class="num' + (over ? " over" : "") + '">' + tal(Math.abs(S.maal - sum.kcal)) + '</span></div>'
+    + '<div class="hero"><div class="stortal' + (over ? " over" : "") + '">' + tal(stort) + '</div>'
+    + '<div class="maallinje' + (over ? " over" : "") + '">' + stortTekst + '</div>'
+    + '<div class="baand" role="progressbar" aria-label="Spist af dagens mål" aria-valuemin="0" aria-valuemax="'
+    + Math.round(S.maal) + '" aria-valuenow="' + Math.round(sum.kcal) + '"><span class="' + (over ? "over" : "")
+    + '" style="width:' + pct + '%"></span></div>'
+    + '<div class="status"><span><b>' + tal(sum.kcal) + '</b> spist'
+    + (venter > 0 ? ' · ca. ' + tal(venter) + ' under analyse' : '') + '</span>'
+    + '<button class="txtknap" id="b-maal">' + (S.maal > 0 ? 'mål ' + tal(S.maal) : 'sæt et mål') + '</button></div>'
     + '<div class="makro"><div>protein <b>' + tal(sum.pro) + ' g</b></div>'
     + '<div>kulhydrat <b>' + tal(sum.kul) + ' g</b></div>'
     + '<div>fedt <b>' + tal(sum.fedt) + ' g</b></div>'
