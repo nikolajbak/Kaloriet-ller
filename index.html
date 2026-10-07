@@ -9,7 +9,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Kaloriedagbog">
-<meta name="theme-color" content="#E8E9E3">
+<meta name="theme-color" content="#E8E9E3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121815" media="(prefers-color-scheme: dark)">
 <title>Kaloriedagbog</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
@@ -17,9 +18,29 @@
 <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
 <style>
 :root{
+  color-scheme:light dark;
   --papir:#E8E9E3; --kort:#FCFCFA; --blaek:#17211D; --daempet:#5A655F;
   --linje:#D2D5CC; --gron:#1F5D4C; --okker:#7A5810; --ler:#A8442A;
-  --graf-maal:#8A6412;
+  --graf-maal:#8A6412; --paa-gron:#F4F6F2; --flyder:#17211D;
+  --flade:#DDE0D8; --spor:#DADCD3; --skelet2:#E6E8E1;
+  --note-bg:#F4EEDF; --note-kant:#E1D4B2; --fejl-bg:#F6E5DF; --fejl-kant:#E0C0B4;
+  --maerke-bg:#DCE0D6; --maerke-txt:#4A554F; --varm-bg:#EFDCC6; --varm-txt:#7A4A1E;
+  --god-bg:#D3E1CE; --god-txt:#2B5738; --katbar:#8FA39B; --detalje-linje:#DFE2D9;
+  --graf-hjaelp:#A9B0AA; --graf-grund:#CDD1C8;
+}
+/* Moerk tilstand foelger telefonens indstilling. Groen og ler er lysnet, saa de
+   holder kontrast paa den moerke bund; knapperne faar derfor moerk tekst. */
+@media (prefers-color-scheme:dark){
+  :root{
+    --papir:#121815; --kort:#1B2420; --blaek:#E6EAE5; --daempet:#9AA69F;
+    --linje:#2E3933; --gron:#5FB396; --okker:#D8A94A; --ler:#E07A5C;
+    --graf-maal:#D8A94A; --paa-gron:#0E1713; --flyder:#2A3530;
+    --flade:#26302B; --spor:#2A342F; --skelet2:#303B35;
+    --note-bg:#2A2617; --note-kant:#4A4128; --fejl-bg:#2E1D18; --fejl-kant:#5A3226;
+    --maerke-bg:#28322D; --maerke-txt:#B4C0B9; --varm-bg:#3A2A1A; --varm-txt:#E8B27A;
+    --god-bg:#1F3324; --god-txt:#9CCFA6; --katbar:#4F625A; --detalje-linje:#26302B;
+    --graf-hjaelp:#5E6862; --graf-grund:#36413B;
+  }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;padding:0;}
@@ -42,7 +63,7 @@ body{
 .stortal.over{color:var(--ler);}
 .maallinje{margin-top:6px;font-size:14px;color:var(--daempet);}
 .maallinje.over{color:var(--ler);}
-.baand{height:6px;background:#DADCD3;border-radius:3px;margin:16px 0 0;overflow:hidden;}
+.baand{height:6px;background:var(--spor);border-radius:3px;margin:16px 0 0;overflow:hidden;}
 .baand span{display:block;height:100%;background:var(--gron);
   transition:width .45s cubic-bezier(.2,.7,.3,1);}
 .baand span.over{background:var(--ler);}
@@ -59,14 +80,14 @@ body{
 .alktal b{font-weight:600;color:var(--blaek);font-variant-numeric:tabular-nums;}
 .alktal.naer b{color:var(--okker);}
 .alktal.over b{color:var(--ler);}
-.alkbaand{height:4px;background:#DADCD3;border-radius:2px;margin-top:7px;overflow:hidden;}
+.alkbaand{height:4px;background:var(--spor);border-radius:2px;margin-top:7px;overflow:hidden;}
 .alkbaand span{display:block;height:100%;background:var(--gron);}
 .alkbaand span.naer{background:var(--okker);}
 .alkbaand span.over{background:var(--ler);}
 .alknote{font-size:12px;color:var(--daempet);margin:8px 0 0;}
 h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
 .postrum{position:relative;border-radius:12px;overflow:hidden;margin-bottom:8px;}
-.slettebag{position:absolute;inset:0;background:var(--ler);color:#F7F2F0;
+.slettebag{position:absolute;inset:0;background:var(--ler);color:var(--paa-gron);
   display:flex;align-items:center;justify-content:flex-end;gap:8px;
   padding-right:22px;font-size:15px;font-weight:600;}
 .slettebag svg{width:19px;height:19px;}
@@ -87,8 +108,8 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
   transition:transform .24s cubic-bezier(.22,.7,.3,1);}
 .post.glider{transition:none;}
 .post img,.post .tom-foto{width:52px;height:52px;border-radius:8px;flex:none;
-  object-fit:cover;background:#DDE0D8;}
-.post .tom-foto{display:flex;align-items:center;justify-content:center;color:#4A554F;}
+  object-fit:cover;background:var(--flade);}
+.post .tom-foto{display:flex;align-items:center;justify-content:center;color:var(--maerke-txt);}
 .post .tom-foto svg{width:36px;height:36px;}
 .post .txt{flex:1;min-width:0;}
 .post .navn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -103,11 +124,11 @@ h2.sek{font-size:13px;font-weight:600;color:var(--daempet);margin:26px 0 10px;}
 .gruppelabel{font-size:12px;color:var(--daempet);margin:22px 2px 4px;text-transform:uppercase;letter-spacing:.03em;}
 .bund{position:fixed;left:0;right:0;bottom:0;z-index:10;
   padding:14px 18px calc(18px + env(safe-area-inset-bottom));
-  background:linear-gradient(to top,var(--papir) 66%,rgba(232,233,227,0));}
+  background:linear-gradient(to top,var(--papir) 66%,transparent);}
 .bundindhold{max-width:520px;margin:0 auto;display:flex;gap:8px;}
 button.knap.smal{flex:none;width:122px;}
 button.knap{width:100%;border:none;border-radius:12px;padding:15px;font:inherit;
-  font-size:16px;font-weight:600;background:var(--gron);color:#F4F6F2;cursor:pointer;}
+  font-size:16px;font-weight:600;background:var(--gron);color:var(--paa-gron);cursor:pointer;}
 button.knap:disabled{opacity:.45;}
 button.knap.sek{background:none;color:var(--blaek);border:1px solid var(--linje);font-weight:500;}
 button.knap.fare{background:none;color:var(--ler);border:1px solid var(--linje);font-weight:500;}
@@ -136,12 +157,12 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .panel::before{content:"";position:absolute;top:9px;left:50%;transform:translateX(-50%);
   width:38px;height:5px;border-radius:3px;background:var(--linje);}
 .panel.glider{transition:none;}
-.foto{width:100%;border-radius:12px;display:block;background:#DDE0D8;}
+.foto{width:100%;border-radius:12px;display:block;background:var(--flade);}
 .foto.venter{animation:aande 1.5s ease-in-out infinite;}
 @keyframes aande{0%,100%{opacity:1}50%{opacity:.5}}
-.note{background:#F4EEDF;border:1px solid #E1D4B2;border-radius:10px;
+.note{background:var(--note-bg);border:1px solid var(--note-kant);border-radius:10px;
   padding:11px 12px;font-size:14px;margin-top:14px;}
-.note.fejl{background:#F6E5DF;border-color:#E0C0B4;}
+.note.fejl{background:var(--fejl-bg);border-color:var(--fejl-kant);}
 .opsaet{max-width:520px;margin:0 auto;
   padding:calc(30px + env(safe-area-inset-top)) 20px calc(30px + env(safe-area-inset-bottom));}
 .opsaet h1{font-family:Georgia,serif;font-size:30px;font-weight:400;line-height:1.15;margin:0 0 12px;}
@@ -151,7 +172,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   padding:9px 3px;font:inherit;font-size:14px;color:var(--daempet);cursor:pointer;
   white-space:nowrap;}
 .valg button:last-child{border-right:none;}
-.valg button.aktiv{background:var(--gron);color:#F4F6F2;font-weight:600;}
+.valg button.aktiv{background:var(--gron);color:var(--paa-gron);font-weight:600;}
 .graf{width:100%;height:auto;display:block;margin:14px 0 4px;}
 .grafnote{font-size:12px;color:var(--daempet);margin:0 0 6px;}
 .raekke{width:100%;text-align:left;background:none;border:none;
@@ -164,7 +185,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .detalje div{display:flex;justify-content:space-between;gap:12px;padding:3px 0;}
 .detalje span:last-child{font-variant-numeric:tabular-nums;flex:none;}
 .detalje button{width:100%;display:flex;justify-content:space-between;gap:12px;
-  background:none;border:none;border-bottom:1px solid #DFE2D9;padding:8px 2px;
+  background:none;border:none;border-bottom:1px solid var(--detalje-linje);padding:8px 2px;
   font:inherit;font-size:14px;color:var(--daempet);text-align:left;cursor:pointer;}
 .detalje button:last-child{border-bottom:none;}
 .detalje button .navn{color:var(--blaek);flex:1;min-width:0;overflow:hidden;
@@ -186,14 +207,14 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .katnavn em{font-style:normal;font-size:12px;color:var(--daempet);}
 .katmeta{font-size:12px;color:var(--daempet);margin-top:3px;}
 .kattal{font-family:Georgia,serif;font-size:16px;font-variant-numeric:tabular-nums;flex:none;}
-.katbar{height:5px;background:#DADCD3;border-radius:3px;margin-top:7px;overflow:hidden;}
-.katbar span{display:block;height:100%;background:#8FA39B;}
+.katbar{height:5px;background:var(--spor);border-radius:3px;margin-top:7px;overflow:hidden;}
+.katbar span{display:block;height:100%;background:var(--katbar);}
 .katraekke.stoerst .katbar span{background:var(--gron);}
 .katraekke.stoerst .katnavn{font-weight:600;}
 .maerke{display:inline-block;font-size:12px;letter-spacing:.03em;text-transform:uppercase;
-  background:#DCE0D6;color:#4A554F;border-radius:4px;padding:2px 6px;margin-left:7px;vertical-align:2px;}
-.maerke.varm{background:#EFDCC6;color:#7A4A1E;}
-.maerke.god{background:#D3E1CE;color:#2B5738;}
+  background:var(--maerke-bg);color:var(--maerke-txt);border-radius:4px;padding:2px 6px;margin-left:7px;vertical-align:2px;}
+.maerke.varm{background:var(--varm-bg);color:var(--varm-txt);}
+.maerke.god{background:var(--god-bg);color:var(--god-txt);}
 .maerke.stor{display:block;margin:16px 0 0;font-size:12px;padding:4px 9px;
   width:-moz-fit-content;width:fit-content;}
 .budget{background:var(--kort);border:1px solid var(--linje);border-radius:10px;
@@ -210,8 +231,8 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .kort.klik{cursor:pointer;}
 .kort .pil{float:right;color:var(--daempet);font-size:13px;margin-left:10px;}
 .opskrift{border-top:1px solid var(--linje);margin-top:12px;padding-top:12px;}
-.opskrift img{width:100%;border-radius:10px;display:block;background:#DDE0D8;}
-.opskrift .foto-tom{width:100%;height:130px;border-radius:10px;background:#DDE0D8;
+.opskrift img{width:100%;border-radius:10px;display:block;background:var(--flade);}
+.opskrift .foto-tom{width:100%;height:130px;border-radius:10px;background:var(--flade);
   display:flex;align-items:center;justify-content:center;color:var(--daempet);font-size:13px;
   text-align:center;padding:0 20px;line-height:1.35;}
 .opskrift .kilde{font-size:12px;color:var(--daempet);margin-top:5px;}
@@ -233,7 +254,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .chip{display:inline-block;background:var(--kort);border:1px solid var(--linje);
   border-radius:999px;padding:8px 14px;margin:0 7px 8px 0;font:inherit;font-size:15px;
   color:var(--blaek);cursor:pointer;}
-.chip.valgt{background:var(--gron);color:#F4F6F2;border-color:var(--gron);}
+.chip.valgt{background:var(--gron);color:var(--paa-gron);border-color:var(--gron);}
 .sp{margin-top:16px;}
 .sp .tekst{font-size:15px;margin-bottom:9px;}
 .tjek{display:flex;align-items:center;gap:11px;margin-top:15px;font-size:14px;line-height:1.3;}
@@ -244,7 +265,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   bottom:calc(90px + env(safe-area-inset-bottom));padding:0 18px;
   display:flex;justify-content:center;pointer-events:none;}
 .fortryd{animation:traedfrem .24s ease-out;}
-.fortryd .indre{background:var(--blaek);color:#F1F3EE;border-radius:12px;
+.fortryd .indre{background:var(--flyder);color:#F1F3EE;border-radius:12px;
   padding:12px 14px;display:flex;align-items:center;gap:14px;max-width:520px;width:100%;
   font-size:14px;pointer-events:auto;box-shadow:0 6px 18px rgba(23,33,29,.22);}
 .fortryd .tekst{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -277,26 +298,26 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
   text-align:center;color:#fff;font-size:15px;font-weight:600;
   text-shadow:0 1px 4px rgba(0,0,0,.6);padding:0 24px;}
 .kamera-manuel{position:absolute;left:24px;right:24px;bottom:calc(32px + env(safe-area-inset-bottom,0px));
-  background:var(--gron);color:#fff;border:none;border-radius:12px;padding:14px;
+  background:var(--gron);color:var(--paa-gron);border:none;border-radius:12px;padding:14px;
   font:inherit;font-size:15px;font-weight:600;cursor:pointer;}
 .kamera-luk{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:16px;
   width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;
   border:none;font-size:18px;line-height:1;cursor:pointer;}
 .toast{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));
-  z-index:42;background:var(--blaek);color:var(--papir);border-radius:12px;padding:14px 16px;
+  z-index:42;background:var(--flyder);color:#F1F3EE;border-radius:12px;padding:14px 16px;
   display:flex;align-items:center;justify-content:space-between;gap:12px;
   box-shadow:0 4px 16px rgba(0,0,0,.25);font-size:14px;}
 .toast button{flex:none;background:none;border:1px solid rgba(232,233,227,.4);border-radius:8px;
-  padding:6px 12px;color:var(--papir);font:inherit;font-size:13px;cursor:pointer;}
+  padding:6px 12px;color:#F1F3EE;font:inherit;font-size:13px;cursor:pointer;}
 .offline{position:fixed;left:0;right:0;top:0;z-index:41;background:#4A554F;color:#F1F3EE;
   padding:calc(9px + env(safe-area-inset-top)) 14px 10px;font-size:13px;text-align:center;
   animation:falddown .26s ease-out;}
 .opdater{animation:falddown .26s ease-out;}
 @keyframes falddown{from{opacity:0;transform:translateY(-100%)}to{opacity:1;transform:none}}
-.opdater{position:fixed;left:0;right:0;top:0;z-index:40;background:var(--gron);color:#F4F6F2;
+.opdater{position:fixed;left:0;right:0;top:0;z-index:40;background:var(--gron);color:var(--paa-gron);
   padding:calc(10px + env(safe-area-inset-top)) 14px 11px;display:flex;gap:12px;
   align-items:center;justify-content:space-between;font-size:14px;line-height:1.3;}
-.opdater button{flex:none;background:#F4F6F2;color:var(--gron);border:none;border-radius:8px;
+.opdater button{flex:none;background:var(--paa-gron);color:var(--gron);border:none;border-radius:8px;
   padding:8px 13px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
 details.afsnit{border-top:1px solid var(--linje);margin-top:2px;}
 details.afsnit > summary{list-style:none;cursor:pointer;padding:15px 2px;
@@ -308,7 +329,7 @@ details.afsnit > div{padding-bottom:16px;}
 
 details.afsnit > summary::after{transition:transform .22s cubic-bezier(.22,.7,.3,1);}
 details.afsnit[open] > summary::after{transform:rotate(45deg);}
-.skelet{background:linear-gradient(90deg,#DDE0D8 25%,#E6E8E1 50%,#DDE0D8 75%);
+.skelet{background:linear-gradient(90deg,var(--flade) 25%,var(--skelet2) 50%,var(--flade) 75%);
   background-size:200% 100%;animation:glid 1.4s ease-in-out infinite;border-radius:8px;}
 @keyframes glid{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .skelet.linje{height:13px;margin-top:10px;}
@@ -352,7 +373,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
   text-overflow:ellipsis;white-space:nowrap;}
 .ugerk .prikker{display:flex;gap:5px;flex:none;}
 .prik{width:19px;height:19px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;font-size:9.5px;color:#F4F6F2;background:#DDE0D8;}
+  justify-content:center;font-size:9.5px;color:var(--paa-gron);background:var(--flade);}
 .prik.holdt{background:var(--gron);}
 .prik.over{background:var(--ler);}
 .prik.tom{background:none;border:1px dashed var(--linje);color:var(--daempet);}
@@ -360,7 +381,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 .idagrk{display:flex;align-items:center;gap:11px;padding:10px 2px;}
 .idagrk .hvem{width:88px;flex:none;font-size:14px;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;}
-.idagrk .spor{flex:1;height:8px;border-radius:4px;background:#DADCD3;overflow:hidden;}
+.idagrk .spor{flex:1;height:8px;border-radius:4px;background:var(--spor);overflow:hidden;}
 .idagrk .spor span{display:block;height:100%;background:var(--gron);}
 .idagrk .spor span.over{background:var(--ler);}
 .idagrk .pct{flex:none;width:46px;text-align:right;font-family:Georgia,serif;
@@ -384,7 +405,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 83;
+var APP_BUILD = 84;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -919,8 +940,8 @@ function graf(perioder){
   if (S.maal > 0){
     var y = top + hoejde - (S.maal / maks) * hoejde;
     s += '<line x1="0" y1="' + y.toFixed(1) + '" x2="' + B + '" y2="' + y.toFixed(1)
-       + '" stroke="#A9B0AA" stroke-width="1" stroke-dasharray="3 3"/>'
-       + '<text x="' + B + '" y="' + (y - 4).toFixed(1) + '" text-anchor="end" font-size="9" fill="#5A655F">mål</text>';
+       + '" style="stroke:var(--graf-hjaelp)" stroke-width="1" stroke-dasharray="3 3"/>'
+       + '<text x="' + B + '" y="' + (y - 4).toFixed(1) + '" text-anchor="end" font-size="9" style="fill:var(--daempet)">mål</text>';
   }
   perioder.forEach(function(p, i){
     var h = p.snit > 0 ? Math.max(2, (p.snit / maks) * hoejde) : 0;
@@ -928,17 +949,17 @@ function graf(perioder){
     var valgt = S.valgt === p.id;
     if (h > 0){
       s += '<rect x="' + x.toFixed(1) + '" y="' + y2.toFixed(1) + '" width="' + bredde.toFixed(1)
-         + '" height="' + h.toFixed(1) + '" rx="2" fill="' + (valgt ? "#17211D" : "#1F5D4C") + '"/>';
+         + '" height="' + h.toFixed(1) + '" rx="2" fill="' + (valgt ? "var(--blaek)" : "var(--gron)") + '"/>';
     } else {
       s += '<rect x="' + x.toFixed(1) + '" y="' + (top + hoejde - 2) + '" width="' + bredde.toFixed(1)
-         + '" height="2" rx="1" fill="#CDD1C8"/>';
+         + '" height="2" rx="1" style="fill:var(--graf-grund)"/>';
     }
     var hvert = n > 16 ? 5 : (n > 8 ? 2 : 1);
     if (i % hvert === 0 || i === n - 1){
       var mrk = S.periode === "dag" ? tilDato(p.id).getDate()
               : (S.periode === "uge" ? ugeNr(tilDato(p.id.slice(1))) : p.titel.slice(0,3));
       s += '<text x="' + (x + bredde/2).toFixed(1) + '" y="' + (H - 8)
-         + '" text-anchor="middle" font-size="9" fill="#5A655F">' + mrk + '</text>';
+         + '" text-anchor="middle" font-size="9" style="fill:var(--daempet)">' + mrk + '</text>';
     }
   });
   return s + '</svg>';
@@ -1029,21 +1050,21 @@ function vaegtgraf(liste, maalvaegt){
   }
   var punkter = liste.map(function(x){ return X(x.dag).toFixed(1) + "," + Y(x.kg).toFixed(1); });
   if (liste.length > 1){
-    s += '<polyline points="' + punkter.join(" ") + '" fill="none" stroke="#1F5D4C" '
+    s += '<polyline points="' + punkter.join(" ") + '" fill="none" style="stroke:var(--gron)" '
        + 'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
   }
   liste.forEach(function(x, i){
     var sidste = i === liste.length - 1;
     s += '<circle cx="' + X(x.dag).toFixed(1) + '" cy="' + Y(x.kg).toFixed(1) + '" r="'
-       + (sidste ? 4 : 2.4) + '" fill="' + (sidste ? "#17211D" : "#1F5D4C") + '"/>';
+       + (sidste ? 4 : 2.4) + '" fill="' + (sidste ? "var(--blaek)" : "var(--gron)") + '"/>';
   });
   var sid = liste[liste.length - 1];
   s += '<text x="' + (B - 2) + '" y="' + (Y(sid.kg) - 9).toFixed(1) + '" text-anchor="end" '
-     + 'font-size="10" fill="#17211D">' + kg(sid.kg) + '</text>'
-     + '<text x="' + venstre + '" y="' + (H - 6) + '" font-size="9" fill="#5A655F">'
+     + 'font-size="10" style="fill:var(--blaek)">' + kg(sid.kg) + '</text>'
+     + '<text x="' + venstre + '" y="' + (H - 6) + '" font-size="9" style="fill:var(--daempet)">'
      + tilDato(liste[0].dag).toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + '</text>';
   if (liste.length > 1){
-    s += '<text x="' + (venstre + bredde) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" fill="#5A655F">'
+    s += '<text x="' + (venstre + bredde) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" style="fill:var(--daempet)">'
        + tilDato(sid.dag).toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + '</text>';
   }
   return s + '</svg>';
@@ -2737,7 +2758,8 @@ function tegnHoved(){
         + '<div class="kcal">' + tal(p.kalorier) + '</div></div></div>';
     });
   }
-  if (poster.length) h += '<p class="grafnote" style="margin:2px 2px 0">Tryk på et måltid for at rette det. Stryg til venstre for at slette.</p>';
+  /* Hjaelpeteksten er til de foerste dage — derefter ved man det */
+  if (poster.length && dagNoegler().length <= 3) h += '<p class="grafnote" style="margin:2px 2px 0">Tryk på et måltid for at rette det. Stryg til venstre for at slette.</p>';
   h += '<h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>'
     + '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
     + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div>'
@@ -2917,13 +2939,13 @@ function startSpiseforslag(){
 /* --- Vaegt --- */
 function tegnVaegt(){
   var k = kropstal();
-  var h = '<div class="indhold">' + hoved("Vægt");
+  var h = '<div class="indhold">' + hoved(langDato(S.iDag));
 
   if (!k.liste.length){
     h += '<div class="tom" style="margin-top:18px">Ingen vejninger endnu. Registrér den første, '
       + 'så tegnes kurven her. Én gang om ugen på samme tidspunkt siger mere end hver dag.</div>';
   } else {
-    h += '<div class="hero"><div class="stortal mellem">' + kg(k.nu) + '</div>'
+    h += '<div class="hero"><div class="stortal">' + kg(k.nu) + '</div>'
       + '<div class="maallinje">kg'
       + (k.maalvaegt > 0 ? ' · <button class="txtknap" id="b-profil">mål ' + kg(k.maalvaegt) + '</button>'
                          : ' · <button class="txtknap" id="b-profil">sæt et mål</button>') + '</div>';
@@ -3149,7 +3171,7 @@ function tegnHistorik(){
   var snit = dageIalt ? ialt / dageIalt : 0;
   var navn = { dag:"30 dage", uge:"12 uger", maaned:"12 måneder" }[S.periode];
 
-  var h = '<div class="indhold">' + hoved("Historik")
+  var h = '<div class="indhold">' + hoved(langDato(S.iDag))
     + '<div class="valg" style="margin-top:8px">'
     + ['dag','uge','maaned'].map(function(t){
         return '<button data-per="' + t + '" class="' + (S.periode === t ? "aktiv" : "") + '">'
@@ -3237,9 +3259,16 @@ function bindPeriode(){
 }
 
 /* --- Trends --- */
+/* Overskrift paa Trends: hvilke dage vinduet daekker, fx "8. sep. – 7. okt." */
+function periodeTekst(dage){
+  var slut = tilDato(S.iDag), start = new Date(slut);
+  start.setDate(start.getDate() - (dage - 1));
+  var f = {day:"numeric", month:"short"};
+  return start.toLocaleDateString("da-DK", f) + " – " + slut.toLocaleDateString("da-DK", f);
+}
 function tegnTrends(){
   var a = analyseAfVindue(S.vindue);
-  var h = '<div class="indhold">' + hoved("Trends")
+  var h = '<div class="indhold">' + hoved(periodeTekst(S.vindue))
     + '<div class="valg" style="margin-top:8px">'
     + [7,30,90].map(function(v){
         return '<button data-vin="' + v + '" class="' + (S.vindue === v ? "aktiv" : "") + '">' + v + ' dage</button>';
@@ -3281,7 +3310,8 @@ function tegnTrends(){
       + '<span class="u">' + kortDato(t.dag) + ' · ' + esc(t.kategori) + '</span></span>'
       + '<span class="s">' + tal(t.kcal) + '</span></div>';
   });
-  h += '<p class="grafnote" style="margin-top:8px">“Stikker ud” betyder, at måltidet ligger tydeligt over dit eget gennemsnit i perioden — ikke at der er noget galt med det.</p>';
+  if (a.toppe.some(function(t){ return t.ekstrem; }))
+    h += '<p class="grafnote" style="margin-top:8px">“Stikker ud” betyder, at måltidet ligger tydeligt over dit eget gennemsnit i perioden — ikke at der er noget galt med det.</p>';
 
   /* gengangere */
   if (a.gengangere.length){
