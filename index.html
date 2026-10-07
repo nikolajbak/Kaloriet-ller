@@ -27,6 +27,7 @@
   --maerke-bg:#DCE0D6; --maerke-txt:#4A554F; --varm-bg:#EFDCC6; --varm-txt:#7A4A1E;
   --god-bg:#D3E1CE; --god-txt:#2B5738; --katbar:#8FA39B; --detalje-linje:#DFE2D9;
   --graf-hjaelp:#A9B0AA; --graf-grund:#CDD1C8;
+  --dug:rgba(23,33,29,.42); --ark-kant:transparent;
 }
 /* Moerk tilstand foelger telefonens indstilling. Groen og ler er lysnet, saa de
    holder kontrast paa den moerke bund; knapperne faar derfor moerk tekst. */
@@ -40,6 +41,7 @@
     --maerke-bg:#28322D; --maerke-txt:#B4C0B9; --varm-bg:#3A2A1A; --varm-txt:#E8B27A;
     --god-bg:#1F3324; --god-txt:#9CCFA6; --katbar:#4F625A; --detalje-linje:#26302B;
     --graf-hjaelp:#5E6862; --graf-grund:#36413B;
+    --dug:rgba(0,0,0,.62); --ark-kant:#34403A;
   }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -137,7 +139,7 @@ input,select,textarea{font-family:inherit;font-size:16px;width:100%;background:v
 input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outline-offset:2px;}
 .lbl{display:block;font-size:13px;color:var(--daempet);margin:14px 0 5px;}
 .gitter{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
-.overlay{position:fixed;inset:0;background:rgba(23,33,29,.42);z-index:30;
+.overlay{position:fixed;inset:0;background:var(--dug);z-index:30;
   display:flex;align-items:flex-end;justify-content:center;
   animation:doer .22s ease-out;}
 .overlay.lukker{animation:doerud .2s ease-in forwards;}
@@ -145,7 +147,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 @keyframes doerud{to{opacity:0}}
 @keyframes glidned{to{transform:translateY(30px)}}
 .panel{background:var(--papir);width:100%;max-width:520px;max-height:92vh;overflow-y:auto;
-  border-radius:18px 18px 0 0;padding:18px 18px calc(26px + env(safe-area-inset-bottom));
+  border-radius:18px 18px 0 0;box-shadow:0 -1px 0 var(--ark-kant);padding:18px 18px calc(26px + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling:touch;
   animation:glidop .3s cubic-bezier(.22,.7,.3,1);}
 @keyframes doer{from{opacity:0}to{opacity:1}}
@@ -405,7 +407,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 84;
+var APP_BUILD = 85;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
