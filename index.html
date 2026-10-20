@@ -407,7 +407,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 85;
+var APP_BUILD = 86;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1029,6 +1029,10 @@ function kropstal(){
 
 /* Linjegraf over vaegten. X foelger den faktiske kalender, saa et hul
    paa tre uger ogsaa ser ud som tre uger. */
+function median(v){
+  var t = v.slice().sort(function(a,b){ return a - b; }), m = Math.floor(t.length / 2);
+  return t.length % 2 ? t[m] : (t[m - 1] + t[m]) / 2;
+}
 function vaegtgraf(liste, maalvaegt){
   var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 34;
   var bredde = B - venstre - hoejre, hoejdeP = H - top - bund;
@@ -1049,6 +1053,16 @@ function vaegtgraf(liste, maalvaegt){
     s += '<line x1="' + venstre + '" y1="' + ym.toFixed(1) + '" x2="' + (venstre + bredde)
        + '" y2="' + ym.toFixed(1) + '" stroke="var(--graf-maal)" stroke-width="1" stroke-dasharray="4 3"/>'
        + '<text x="' + (B - 2) + '" y="' + (ym + 3.5).toFixed(1) + '" text-anchor="end" font-size="9.5" fill="var(--graf-maal)">mål</text>';
+  }
+  /* Median af alle vejninger som vandret linje — svinger ikke med enkelte
+     udsving, saa den viser niveauet bedre end snittet. Teksten flyttes, hvis
+     den ville ramme maal-teksten. */
+  if (liste.length > 2){
+    var med = median(liste.map(function(x){ return x.kg; })), yd = Y(med), ty = yd + 3.5;
+    if (maalvaegt > 0 && Math.abs(yd - Y(maalvaegt)) < 11) ty = yd < Y(maalvaegt) ? yd - 3 : yd + 11;
+    s += '<line x1="' + venstre + '" y1="' + yd.toFixed(1) + '" x2="' + (venstre + bredde)
+       + '" y2="' + yd.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="1.5 3"/>'
+       + '<text x="' + (B - 2) + '" y="' + ty.toFixed(1) + '" text-anchor="end" font-size="9.5" style="fill:var(--daempet)">median</text>';
   }
   var punkter = liste.map(function(x){ return X(x.dag).toFixed(1) + "," + Y(x.kg).toFixed(1); });
   if (liste.length > 1){
@@ -2955,6 +2969,9 @@ function tegnVaegt(){
     if (k.aendring !== null && k.liste.length > 1){
       linjer.push((k.aendring > 0 ? "+" : "−") + kg(Math.abs(k.aendring)) + " kg siden "
         + tilDato(k.foerste.dag).toLocaleDateString("da-DK",{day:"numeric",month:"long"}));
+    }
+    if (k.liste.length > 2){
+      linjer.push("median " + kg(median(k.liste.map(function(x){ return x.kg; }))) + " kg");
     }
     if (k.tilMaal !== null && Math.abs(k.tilMaal) >= 0.1){
       linjer.push(kg(Math.abs(k.tilMaal)) + " kg " + (k.tilMaal > 0 ? "til målet" : "under målet"));
