@@ -407,7 +407,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 86;
+var APP_BUILD = 87;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1048,21 +1048,23 @@ function vaegtgraf(liste, maalvaegt){
   function Y(kg){ return top + hoejdeP - (kg - min) / (maks - min) * hoejdeP; }
 
   var s = '<svg class="graf" viewBox="0 0 ' + B + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Vaegtudvikling">';
+  /* Teksterne i hoejre side (seneste vaegt, maal, median) samles her og
+     placeres til sidst, saa de kan skubbes fra hinanden i stedet for at
+     staa oven i hinanden, naar tallene ligger taet. */
+  var etiketter = [];
   if (maalvaegt > 0){
     var ym = Y(maalvaegt);
     s += '<line x1="' + venstre + '" y1="' + ym.toFixed(1) + '" x2="' + (venstre + bredde)
-       + '" y2="' + ym.toFixed(1) + '" stroke="var(--graf-maal)" stroke-width="1" stroke-dasharray="4 3"/>'
-       + '<text x="' + (B - 2) + '" y="' + (ym + 3.5).toFixed(1) + '" text-anchor="end" font-size="9.5" fill="var(--graf-maal)">mål</text>';
+       + '" y2="' + ym.toFixed(1) + '" stroke="var(--graf-maal)" stroke-width="1" stroke-dasharray="4 3"/>';
+    etiketter.push({ y: ym + 3.5, tekst: "mål", attr: 'font-size="9.5" fill="var(--graf-maal)"' });
   }
   /* Median af alle vejninger som vandret linje — svinger ikke med enkelte
-     udsving, saa den viser niveauet bedre end snittet. Teksten flyttes, hvis
-     den ville ramme maal-teksten. */
+     udsving, saa den viser niveauet bedre end snittet. */
   if (liste.length > 2){
-    var med = median(liste.map(function(x){ return x.kg; })), yd = Y(med), ty = yd + 3.5;
-    if (maalvaegt > 0 && Math.abs(yd - Y(maalvaegt)) < 11) ty = yd < Y(maalvaegt) ? yd - 3 : yd + 11;
+    var yd = Y(median(liste.map(function(x){ return x.kg; })));
     s += '<line x1="' + venstre + '" y1="' + yd.toFixed(1) + '" x2="' + (venstre + bredde)
-       + '" y2="' + yd.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="1.5 3"/>'
-       + '<text x="' + (B - 2) + '" y="' + ty.toFixed(1) + '" text-anchor="end" font-size="9.5" style="fill:var(--daempet)">median</text>';
+       + '" y2="' + yd.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="1.5 3"/>';
+    etiketter.push({ y: yd + 3.5, tekst: "median", attr: 'font-size="9.5" style="fill:var(--daempet)"' });
   }
   var punkter = liste.map(function(x){ return X(x.dag).toFixed(1) + "," + Y(x.kg).toFixed(1); });
   if (liste.length > 1){
@@ -1075,9 +1077,21 @@ function vaegtgraf(liste, maalvaegt){
        + (sidste ? 4 : 2.4) + '" fill="' + (sidste ? "var(--blaek)" : "var(--gron)") + '"/>';
   });
   var sid = liste[liste.length - 1];
-  s += '<text x="' + (B - 2) + '" y="' + (Y(sid.kg) - 9).toFixed(1) + '" text-anchor="end" '
-     + 'font-size="10" style="fill:var(--blaek)">' + kg(sid.kg) + '</text>'
-     + '<text x="' + venstre + '" y="' + (H - 6) + '" font-size="9" style="fill:var(--daempet)">'
+  etiketter.push({ y: Y(sid.kg) - 9, tekst: kg(sid.kg), attr: 'font-size="10" style="fill:var(--blaek)"' });
+  /* Mindst 11 enheder mellem grundlinjerne: skub nedad fra oeverst, og
+     ryger den nederste ud over grafen, skub hele stakken op igen. */
+  var luftE = 11, oeverst = 10, nederst = top + hoejdeP + 3.5;
+  etiketter.sort(function(a, b){ return a.y - b.y; });
+  etiketter.forEach(function(e, i){
+    e.y = Math.max(e.y, oeverst, i ? etiketter[i - 1].y + luftE : -Infinity);
+  });
+  for (var j = etiketter.length - 1; j >= 0; j--){
+    etiketter[j].y = Math.min(etiketter[j].y, j < etiketter.length - 1 ? etiketter[j + 1].y - luftE : nederst);
+  }
+  etiketter.forEach(function(e){
+    s += '<text x="' + (B - 2) + '" y="' + e.y.toFixed(1) + '" text-anchor="end" ' + e.attr + '>' + e.tekst + '</text>';
+  });
+  s += '<text x="' + venstre + '" y="' + (H - 6) + '" font-size="9" style="fill:var(--daempet)">'
      + tilDato(liste[0].dag).toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + '</text>';
   if (liste.length > 1){
     s += '<text x="' + (venstre + bredde) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" style="fill:var(--daempet)">'
