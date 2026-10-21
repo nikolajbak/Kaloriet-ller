@@ -407,7 +407,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 87;
+var APP_BUILD = 88;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1033,6 +1033,19 @@ function median(v){
   var t = v.slice().sort(function(a,b){ return a - b; }), m = Math.floor(t.length / 2);
   return t.length % 2 ? t[m] : (t[m - 1] + t[m]) / 2;
 }
+/* Mindste kvadraters linje over vejningerne mod den faktiske kalender.
+   Haeldning i kg pr. dag; null hvis alle vejninger er fra samme dag. */
+function trend(liste){
+  var t0 = tilDato(liste[0].dag).getTime(), n = liste.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  liste.forEach(function(x){
+    var d = (tilDato(x.dag).getTime() - t0) / 864e5;
+    sx += d; sy += x.kg; sxx += d * d; sxy += d * x.kg;
+  });
+  var naevner = n * sxx - sx * sx;
+  if (n < 3 || Math.abs(naevner) < 1e-9) return null;
+  var a = (n * sxy - sx * sy) / naevner;
+  return { prDag: a, start: (sy - a * sx) / n };
+}
 function vaegtgraf(liste, maalvaegt){
   var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 34;
   var bredde = B - venstre - hoejre, hoejdeP = H - top - bund;
@@ -1065,6 +1078,15 @@ function vaegtgraf(liste, maalvaegt){
     s += '<line x1="' + venstre + '" y1="' + yd.toFixed(1) + '" x2="' + (venstre + bredde)
        + '" y2="' + yd.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="1.5 3"/>';
     etiketter.push({ y: yd + 3.5, tekst: "median", attr: 'font-size="9.5" style="fill:var(--daempet)"' });
+  }
+  /* Trend som ret linje fra foerste til seneste vejning — viser retningen
+     uden at enkelte udsving trækker kurven rundt. */
+  var tr = trend(liste);
+  if (tr){
+    var dage = (t1 - t0) / 864e5, ya = Y(tr.start), yb = Y(tr.start + tr.prDag * dage);
+    s += '<line x1="' + venstre + '" y1="' + ya.toFixed(1) + '" x2="' + (venstre + bredde)
+       + '" y2="' + yb.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="5 3"/>';
+    etiketter.push({ y: yb + 3.5, tekst: "trend", attr: 'font-size="9.5" style="fill:var(--daempet)"' });
   }
   var punkter = liste.map(function(x){ return X(x.dag).toFixed(1) + "," + Y(x.kg).toFixed(1); });
   if (liste.length > 1){
@@ -2986,6 +3008,11 @@ function tegnVaegt(){
     }
     if (k.liste.length > 2){
       linjer.push("median " + kg(median(k.liste.map(function(x){ return x.kg; }))) + " kg");
+    }
+    var tr = trend(k.liste);
+    if (tr){
+      var uge = tr.prDag * 7;
+      linjer.push("trend " + (uge > 0 ? "+" : uge < 0 ? "−" : "") + kg(Math.abs(uge)) + " kg/uge");
     }
     if (k.tilMaal !== null && Math.abs(k.tilMaal) >= 0.1){
       linjer.push(kg(Math.abs(k.tilMaal)) + " kg " + (k.tilMaal > 0 ? "til målet" : "under målet"));
