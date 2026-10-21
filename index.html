@@ -407,7 +407,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 88;
+var APP_BUILD = 89;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1029,10 +1029,6 @@ function kropstal(){
 
 /* Linjegraf over vaegten. X foelger den faktiske kalender, saa et hul
    paa tre uger ogsaa ser ud som tre uger. */
-function median(v){
-  var t = v.slice().sort(function(a,b){ return a - b; }), m = Math.floor(t.length / 2);
-  return t.length % 2 ? t[m] : (t[m - 1] + t[m]) / 2;
-}
 /* Mindste kvadraters linje over vejningerne mod den faktiske kalender.
    Haeldning i kg pr. dag; null hvis alle vejninger er fra samme dag. */
 function trend(liste){
@@ -1061,7 +1057,7 @@ function vaegtgraf(liste, maalvaegt){
   function Y(kg){ return top + hoejdeP - (kg - min) / (maks - min) * hoejdeP; }
 
   var s = '<svg class="graf" viewBox="0 0 ' + B + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Vaegtudvikling">';
-  /* Teksterne i hoejre side (seneste vaegt, maal, median) samles her og
+  /* Teksterne i hoejre side (seneste vaegt, maal, trend) samles her og
      placeres til sidst, saa de kan skubbes fra hinanden i stedet for at
      staa oven i hinanden, naar tallene ligger taet. */
   var etiketter = [];
@@ -1070,14 +1066,6 @@ function vaegtgraf(liste, maalvaegt){
     s += '<line x1="' + venstre + '" y1="' + ym.toFixed(1) + '" x2="' + (venstre + bredde)
        + '" y2="' + ym.toFixed(1) + '" stroke="var(--graf-maal)" stroke-width="1" stroke-dasharray="4 3"/>';
     etiketter.push({ y: ym + 3.5, tekst: "mål", attr: 'font-size="9.5" fill="var(--graf-maal)"' });
-  }
-  /* Median af alle vejninger som vandret linje — svinger ikke med enkelte
-     udsving, saa den viser niveauet bedre end snittet. */
-  if (liste.length > 2){
-    var yd = Y(median(liste.map(function(x){ return x.kg; })));
-    s += '<line x1="' + venstre + '" y1="' + yd.toFixed(1) + '" x2="' + (venstre + bredde)
-       + '" y2="' + yd.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="1.5 3"/>';
-    etiketter.push({ y: yd + 3.5, tekst: "median", attr: 'font-size="9.5" style="fill:var(--daempet)"' });
   }
   /* Trend som ret linje fra foerste til seneste vejning — viser retningen
      uden at enkelte udsving trækker kurven rundt. */
@@ -3005,9 +2993,6 @@ function tegnVaegt(){
     if (k.aendring !== null && k.liste.length > 1){
       linjer.push((k.aendring > 0 ? "+" : "−") + kg(Math.abs(k.aendring)) + " kg siden "
         + tilDato(k.foerste.dag).toLocaleDateString("da-DK",{day:"numeric",month:"long"}));
-    }
-    if (k.liste.length > 2){
-      linjer.push("median " + kg(median(k.liste.map(function(x){ return x.kg; }))) + " kg");
     }
     var tr = trend(k.liste);
     if (tr){
