@@ -42,7 +42,9 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   den til selv at opdage en nyere version (`tjekOpdatering()`/`hentNyVersion()`);
   glemmes det, opdager klienterne ikke ændringen.
 - **Edge-funktioner:** Supabase MCP `deploy_edge_function` med filen fra
-  `supabase/functions/<navn>/` (CLI'en er ikke installeret). Repoet er
+  `supabase/functions/<navn>/`. Det MCP ikke kan (fx sletning), klares med
+  Supabase CLI (`brew`, logget ind 2026-10-22):
+  `supabase functions delete <navn> --project-ref vhkglrrmkdqrjdhbkgbn`. Repoet er
   kilden; commit ændringen sammen med udrulningen. `verify_jwt` skal sættes
   som nu, ellers stopper kaldene:
 
@@ -109,10 +111,9 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   hentet ind i `supabase/functions/` uændret (`daglig-paamindelse` v3,
   `medicin-paamindelse` v16, `modtag-vaegt` v3). Udrul aldrig en rettelse
   direkte i Supabase uden at committe den.
-- **Supabase MCP kan ikke slette edge-funktioner** (2026-10-22). `udgiv`, en
-  rest fra den gamle chat-udgivelse, som intet kalder, skal slettes af
-  Nikolaj i dashboardet (Edge Functions → udgiv → Delete). Står den stadig i
-  `list_edge_functions`, er det ikke sket endnu.
+- **Supabase MCP kan ikke slette edge-funktioner** (2026-10-22). Brug CLI'en
+  (se »Udrulning«); sådan blev resten `udgiv` fra den gamle chat-udgivelse
+  slettet.
 
 ## Konventioner
 
