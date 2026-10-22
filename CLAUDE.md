@@ -108,11 +108,11 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
 - **Edge-funktionerne lå kun i Supabase** indtil 2026-10-22, hvor kilden blev
   hentet ind i `supabase/functions/` uændret (`daglig-paamindelse` v3,
   `medicin-paamindelse` v16, `modtag-vaegt` v3). Udrul aldrig en rettelse
-  direkte i Supabase uden at committe den. `udgiv` ligger stadig kun i
-  Supabase: en rest fra den gamle chat-udgivelse, som intet kalder.
-- **`backup-modtager.gs` er en rest** fra den fjernede sikkerhedskopi (Supabase
-  er datakilden); intet i appen kalder den. Drift-oversigten viser den derfor
-  som »Google Apps Script«.
+  direkte i Supabase uden at committe den.
+- **Supabase MCP kan ikke slette edge-funktioner** (2026-10-22). `udgiv`, en
+  rest fra den gamle chat-udgivelse, som intet kalder, skal slettes af
+  Nikolaj i dashboardet (Edge Functions → udgiv → Delete). Står den stadig i
+  `list_edge_functions`, er det ikke sket endnu.
 
 ## Konventioner
 
