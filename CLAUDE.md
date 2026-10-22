@@ -1,66 +1,116 @@
 # Kaloriedagbog
 
-Personlig kaloriedagbog-PWA med AI-madanalyse, bygget til Nikolaj og hans kæreste (delt konto/app, to brugere). Ingen build-proces — hele appen er én fil.
+Personlig kaloriedagbog-PWA med AI-madanalyse til Nikolaj og hans kæreste
+(to brugere, hver sin konto). Hele klienten er én fil uden build.
+
+## Overblik
+
+| | |
+|---|---|
+| Repo | `nikolajbak/Kaloriet-ller` · lokalt `~/Kaloriet-ller` · direkte på `main` |
+| Kører på | GitHub Pages → https://nikolajbak.github.io/Kaloriet-ller/ · Supabase edge-funktioner + pg_cron |
+| Data | Supabase `vhkglrrmkdqrjdhbkgbn` (eget projekt, deles ikke) |
+| Stack | Vanilla JS, ingen framework, ingen bundler, ingen eksterne JS-biblioteker · funktioner i Deno/TypeScript |
+| Betalte API'er | Gemini (standard; appens fælles nøgle eller brugerens egen) · Anthropic (kun med brugerens egen nøgle) |
+
+## Kommandoer
+
+```bash
+python3 -m http.server 5173                 # appen lokalt
+node test/gemini-test.mjs <billede.jpg>     # måler appens ægte Gemini-kode mod API'et (bruger kvote, ingen asserts)
+sh tools/gemini-noegle.sh                   # brugeren lægger GEMINI_API_KEY i Supabase fra udklipsholderen
+```
 
 ## Arkitektur
 
-- **`index.html`** — hele klienten. Vanilla JS, ingen framework, ingen bundler. Alt (HTML, CSS, JS) i én fil, af historiske årsager (nem udgivelse via en chat-baseret pipeline — se nedenfor, som nu er overflødig med Claude Code).
-- **`sw.js`** — service worker. Håndterer offline-cache og push-notifikationer (`push`/`notificationclick`).
-- **`manifest.webmanifest`** — PWA-manifest.
-- **`genvej-nikolajbak.shortcut` / `genvej-annepande.shortcut`** — Apple Shortcuts-filer til vægtautomatisering (se nedenfor).
-- **Backend: Supabase** (projekt-ref `vhkglrrmkdqrjdhbkgbn`), tabeller (vigtigste): `dagbog` (måltider pr. dag/bruger), `dagbog_indstillinger` (indstillinger pr. bruger, jsonb `data`-kolonne — inkl. `kaekhed`, `navn`, `maal`, `medicin`), `vaegtmaalinger`, `push_abonnenter`, `hemmeligheder` (**en VIEW over `vault.decrypted_secrets`** — skriv aldrig direkte til den, brug `vault.create_secret()`).
-- **Edge functions:** `daglig-paamindelse` (aften-check-in), `medicin-paamindelse` (morgen/aften medicin-reminder, Gemini-genereret).
-- **Cron (pg_cron):** `daglig-paamindelse` kl. 18:00 UTC, `medicin-paamindelse-0700` hvert 15. min (tjekker selv om noget rammer brugerens valgte klokkeslæt — se "DST og tid" nedenfor).
+| Del | Filer |
+|---|---|
+| Hele klienten (HTML, CSS, JS) | `index.html` |
+| Offline-cache og push (`push`/`notificationclick`) | `sw.js`, `manifest.webmanifest` |
+| Gemini-proxy med appens fælles nøgle | `supabase/functions/gemini/` (i repoet) |
+| Aften-check-in | edge-funktion `daglig-paamindelse` — **kun i Supabase** |
+| Medicin-påmindelse morgen/aften (Gemini-genereret) | edge-funktion `medicin-paamindelse` — **kun i Supabase** |
+| Vægt: Zepp Life → Apple Sundhed → Shortcut → webhook | edge-funktion `modtag-vaegt` — **kun i Supabase**; `genvej-*.shortcut` |
 
-## Sådan udgives ændringer (opdateret arbejdsgang)
+Cron (pg_cron): `daglig-paamindelse` kl. 18:00 UTC; `medicin-paamindelse-0700`
+hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
 
-Med Claude Code: **rediger filerne direkte, `git commit`, `git push`.** Ingen patch/diff/checksum-ceremoni nødvendig — den eksisterende `udgivelsespipeline` (beskrevet i chattens hukommelse) var en nødløsning for at redigere en fil uden filadgang, og er overflødig nu.
+## Udrulning
 
-**Det ene, der stadig skal huskes manuelt ved enhver ændring af `index.html`:** øg `APP_BUILD`-konstanten (nær toppen af filen) med 1. Appen bruger den til selv at opdage, om der findes en nyere version (se `tjekOpdatering()`/`hentNyVersion()`), uafhængigt af git. Glemmes det, opdager klienter ikke ændringen.
+- **Klienten:** rediger, commit, push → GitHub Pages. **Øg `APP_BUILD`**
+  (nær toppen af `index.html`) med 1 ved hver ændring af filen. Appen bruger
+  den til selv at opdage en nyere version (`tjekOpdatering()`/`hentNyVersion()`);
+  glemmes det, opdager klienterne ikke ændringen.
+- **Edge-funktioner:** Supabase MCP `deploy_edge_function` (CLI'en er ikke
+  installeret). `gemini` udrulles med `verify_jwt: false` (den tjekker selv
+  brugertegnet) og videresender kun `/models` og
+  `/models/gemini-…:generateContent`. Skal en funktion, der kun ligger i
+  Supabase, ændres, så hent kilden med `get_edge_function` og læg den i
+  `supabase/functions/` først.
 
-For ændringer i edge functions: brug Supabase CLI (`supabase functions deploy <navn>`) eller Supabase MCP-connectoren, hvis den er sat op i Claude Code.
+## Data og hemmeligheder
 
-## Vigtig, ikke-åbenlys viden
+- Tabeller: `dagbog` (måltider pr. dag/bruger), `dagbog_indstillinger` (jsonb
+  `data`: `kaekhed`, `navn`, `maal`, `medicin` …), `vaegtmaalinger`,
+  `push_abonnenter`.
+- `hemmeligheder` er **en VIEW over `vault.decrypted_secrets`** — skriv aldrig
+  til den; brug `vault.create_secret()`.
+- `GEMINI_API_KEY` (Supabase-secret) lægges ind af brugeren med
+  `sh tools/gemini-noegle.sh`; Claude håndterer den ikke selv. Lokale nøgler:
+  `kd:gemini-noegle`, `kd:udbyder` i browserens storage.
 
-### tone()-funktionen findes ÉN GANG for meget
-Måltidskommentarernes personlighed (`function tone()` i `index.html`) og medicin-påmindelsens tilsvarende funktion i `medicin-paamindelse`-edge-functionen er **bevidst duplikeret kode** — Deno og browserens JS deler ikke kildefiler. Ændres tone-reglerne (fx et nyt niveau, ny kalibrering), **skal begge steder opdateres i hånden**. De er pt. holdt synkrone med de samme tre eksempellinjer i hudløs-reglen.
+## Model og tone
 
-### Dansk locale bruger PUNKTUM som tidsseparator
-`Intl.DateTimeFormat` med `da-DK` og `hour12:false` returnerer `"07.42"`, ikke `"07:42"`. Brug **aldrig** en locale-formatteret streng til tidsberegning — brug `formatToParts()` og læs `hour`/`minute` som rene tal. Ramte os hårdt i medicin-påmindelsens tidsvindue-tjek.
+- **Gemini er standard for alle** (`udbyder()` giver kun `claude`, hvis
+  `kd:udbyder` udtrykkeligt er sat). Egen Gemini-nøgle → Google direkte;
+  ellers gennem edge-funktionen `gemini` (kræver login, `gAdgang()`).
+- Claude kræver brugerens egen Anthropic-nøgle (Indstillinger). Korte,
+  personlighedstunge kald (måltidskommentar, alternativer, »resten af dagen«)
+  kører på `claude-haiku-4-5-20251001`; foto-analyse og opskrifter på brugerens
+  valgte model (`S.model`).
+- **Under analysen nævnes motoren aldrig.** `sjovTekst()` roterer hvert 3. sek.
+  gennem `SJOVT`; fejltekster siger »Analysen …«, ikke »Gemini …«.
+- **Tone:** fire niveauer, kæk → skarp → brutal → hudløs (standard). **Fast
+  grænse, som ikke må fjernes uden eksplicit anmodning:** aldrig kommentarer om
+  krop, vægt, figur eller udseende — kun vaner, undskyldninger og tal.
+- **`tone()` findes to steder med vilje:** i `index.html` og i
+  `medicin-paamindelse` (Deno og browseren deler ikke kode). Ændres
+  tonereglerne, opdateres begge i hånden.
+- **Automatisk registrering** (`S.autoreg`): eget live-kamera (`startKamera()`)
+  udløser selv, når billedet er skarpt og stabilt. Tærsklerne `MIN_SKARPHED`,
+  `MAKS_BEVAEGELSE`, `STABIL_KRAV` er **ukalibrerede gæt**.
 
-### Gemini 3.x kræver `thinkingConfig: { thinkingBudget: 0 }` — men KUN 3.x
-Uden det bruger Gemini 3.x-modeller token-budgettet på intern "tænkning" før selve svaret (tomme/afkortede svar, eller for blødt formulerede svar ift. den ønskede tone). MED det, men sendt til en ældre model (2.x, 1.5) i en fallback-kæde, afviser den ældre model sandsynligvis feltet med en fatal fejl. Løsning: byg request-kroppen **pr. model** i fallback-loopet, og tjek modelnavnets versionsnummer før feltet inkluderes (grov: ≥ 3 med budget 0; detalje: ≥ 2.5 med loft 1024; lite-modeller aldrig). Se `geminiKald()` i `index.html` og den tilsvarende funktion i `medicin-paamindelse`.
+## Faldgruber
 
-### Gemini-kapløb og modelhelbred
-`geminiKald()` kører modellisten som et kapløb: første model starter straks, den næste efter 2,5 s (grov) / 5 s (detalje) eller med det samme ved fejl — første svar vinder, og taberne afbrydes (AbortController), så de ikke bruger kvote. Kun én ventetimer ad gangen. Modellernes helbred huskes i `kd:gemini-helbred`: 404 = udelukket 7 dage, 429/5xx/timeout = bagerst i 10 min, afvist tænkefelt (400 der nævner thinking/budget) = kør uden i 7 dage. Gælder alle Gemini-kald, ikke kun analysen.
-
-### iOS/WebKit: `notificationclick` → `clients.openWindow(url)` ignorerer `url` ved koldstart
-Kendt, uløst WebKit-bug (nr. 263687): er PWA'en helt lukket, navigerer et tryk på en notifikation IKKE til den adresse, service workeren beder om — den åbner altid til roden. Løsning implementeret: `sw.js` gemmer notifikationens fulde tekst i IndexedDB ved selve `push`-eventet (som fungerer upåvirket), og klienten læser denne database ved hver opstart, uanset hvilken adresse den faktisk blev åbnet på. URL-baseret overlevering (`?paamindelse=...`) er bevaret som ekstra vej for desktop/Android og for tilfældet hvor appen allerede var åben (der bruges `postMessage` til det åbne vindue, fordi `focus()` alene ikke navigerer).
-
-### Push-notifikationer skal bruge `renotify: true`
-Samme `tag` hver dag + `renotify: false` betyder, at en ny notifikation erstatter gårsdagens **lydløst**, hvis den ikke er blevet lukket. Rettet i `sw.js`.
-
-### Automatisk registrering (kamera → analyse → gemt, uden tryk)
-Slås til i Indstillinger (`S.autoreg`). Erstatter det indbyggede kamera (som altid viser sin egen "Brug foto"-bekræftelse) med et selvbygget live-kamera (`startKamera()`, `getUserMedia`), der selv afgør, hvornår billedet er skarpt og stabilt nok til at udløse optagelsen (kantenergi + frame-til-frame-forskel, klassisk billedbehandling, ingen ML-model). Tærskelværdierne (`MIN_SKARPHED`, `MAKS_BEVAEGELSE`, `STABIL_KRAV`) er **ukalibrerede gæt** — de er aldrig testet mod en rigtig kameraramme, kun kodegennemgået. Forvent at skulle justere dem efter faktisk brug. Et midlertidigt "Analyserer…"-element lægges i dagens liste med det samme (samme `id` opdateres på plads, når analysen er færdig), og en 60-sekunders "Ret"-toast vises bagefter.
-
-### Model-strategi
-- Kortere, personligheds-tunge kald (måltidskommentar, "lettere alternativer", "resten af dagen"-forslag) kan med fordel køre på en hurtigere/billigere model — `claude-haiku-4-5-20251001` er brugt til dette pt. (uafhængigt af brugerens valgte model i Indstillinger).
-- Foto-analyse og opskriftsgenerering bruger fortsat den model, brugeren selv har valgt (`S.model`) — de har brug for kapaciteten.
-- Klienten understøtter to udbydere, og **Gemini er standard for alle** (`udbyder()` giver kun `claude`, hvis `kd:udbyder` udtrykkeligt er sat til det). Har brugeren sin egen Gemini-nøgle (`kd:gemini-noegle`), kaldes Google direkte; ellers går kaldene gennem edge-funktionen `gemini` (`supabase/functions/gemini`), der lægger appens fælles nøgle på — kræver at brugeren er logget ind (`gAdgang()`). Nøglen er Supabase-hemmeligheden `GEMINI_API_KEY`, lagt ind af brugeren med `sh tools/gemini-noegle.sh` fra udklipsholderen; Claude må ikke selv håndtere den. Funktionen udrulles med `verify_jwt: false` (den tjekker selv brugertegnet) og videresender kun `/models` og `/models/gemini-…:generateContent`.
-- Claude kræver brugerens egen Anthropic-nøgle og vælges under Indstillinger. Opsætningsskærmen beder kun om nøglen, når Claude er valgt.
-- **Under analysen nævnes motoren aldrig.** I stedet roterer `sjovTekst()` hvert 3. sekund gennem `SJOVT` (køkken møder databehandling: »Udstener outliers«, »Knækker kalorienødderne«). Fejltekster siger »Analysen …«, ikke »Gemini …«.
-
-### Tone-niveauer og grænser
-Fire niveauer: kæk → skarp → brutal → hudløs (standard for nye/nulstillede konti). **Fast grænse, som ikke må fjernes uden eksplicit anmodning:** ingen kommentarer nogensinde om krop, vægt, figur eller udseende — kun vaner, undskyldninger og tal. Denne grænse er selve pointen i stilen (inspireret af dansk standup-retorik), ikke en dæmpning af den.
-
-### Vægtautomatisering
-Zepp Life/Xiaomi-vægt → Apple Sundhed → en Apple Shortcut (se `.shortcut`-filerne) → webhook til Supabase Edge Function `modtag-vaegt` → `vaegtmaalinger`-tabellen. Se `/projects/.../areas/vaegt-automatisering.md` i den chat-baserede hukommelse for fulde detaljer og overvejede alternativer.
-
-## Ting der IKKE findes længere (fjernet bevidst)
-- Lokal sikkerhedskopi-funktion (snapshots, fil-eksport/import, sky-webhook) — fjernet, fordi Supabase nu er den reelle datakilde og gør det redundant.
-- Faste, hardcodede "kæk"-formuleringer i AI-prompts — erstattet af neutrale referencer til "den fastlagte tone", så `tone()` alene styrer registret.
+- **Dansk locale bruger punktum i klokkeslæt:** `Intl.DateTimeFormat('da-DK')`
+  giver `"07.42"`. Regn aldrig på en formateret streng — brug
+  `formatToParts()` og læs `hour`/`minute` som tal. Ramte medicin-påmindelsen.
+- **Gemini 3.x kræver `thinkingConfig: { thinkingBudget: 0 }` — men kun 3.x.**
+  Uden bruges budgettet på tænkning (tomme/afkortede svar); sendt til 2.x/1.5 i
+  fallback-kæden afvises feltet fatalt. Byg kroppen pr. model (grov: ≥ 3 med
+  budget 0; detalje: ≥ 2.5 med loft 1024; lite-modeller aldrig). Se
+  `geminiKald()` og tilsvarende i `medicin-paamindelse`.
+- **Gemini-kapløb og modelhelbred:** `geminiKald()` starter næste model efter
+  2,5 s (grov) / 5 s (detalje) eller straks ved fejl; første svar vinder,
+  taberne afbrydes. Helbred i `kd:gemini-helbred`: 404 = udelukket 7 dage,
+  429/5xx/timeout = bagerst i 10 min, afvist tænkefelt = uden i 7 dage.
+- **iOS/WebKit: `clients.openWindow(url)` ignorerer `url` ved koldstart**
+  (WebKit-bug 263687). `sw.js` gemmer derfor notifikationens tekst i IndexedDB
+  ved `push`, og klienten læser den ved hver opstart. `?paamindelse=…` og
+  `postMessage` er bevaret til desktop/Android og åben app.
+- **Push skal have `renotify: true`**, ellers erstatter dagens notifikation
+  gårsdagens lydløst (samme `tag`).
+- **Fire af fem edge-funktioner findes kun i Supabase** (tjekket 2026-10-22):
+  `daglig-paamindelse`, `medicin-paamindelse`, `modtag-vaegt` og `udgiv` (rest
+  fra den gamle chat-udgivelse). Der er ingen versionsstyring af dem.
+- **`backup-modtager.gs` er en rest** fra den fjernede sikkerhedskopi (Supabase
+  er datakilden); intet i appen kalder den. Drift-oversigten viser den derfor
+  som »Google Apps Script«.
 
 ## Konventioner
-- Alt brugervendt tekst er dansk, uformel, "du"-form.
-- Funktions- og variabelnavne er danske (`hentDag`, `gemDag`, `tegnArk`, `nulstilAfledt` osv.) — følg denne konvention i nyt kode.
-- Ingen eksterne JS-biblioteker i klienten — hold den sådan medmindre andet aftales eksplicit.
+
+- Brugervendt tekst: dansk, uformel, du-form.
+- Funktions- og variabelnavne på dansk (`hentDag`, `gemDag`, `tegnArk` …).
+- Ingen eksterne JS-biblioteker i klienten uden eksplicit aftale.
+- Faste »kæk«-formuleringer hører ikke hjemme i prompterne; `tone()` alene
+  styrer registret.
