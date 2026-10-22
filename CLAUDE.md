@@ -27,10 +27,10 @@ sh tools/gemini-noegle.sh                   # brugeren lægger GEMINI_API_KEY i 
 |---|---|
 | Hele klienten (HTML, CSS, JS) | `index.html` |
 | Offline-cache og push (`push`/`notificationclick`) | `sw.js`, `manifest.webmanifest` |
-| Gemini-proxy med appens fælles nøgle | `supabase/functions/gemini/` (i repoet) |
-| Aften-check-in | edge-funktion `daglig-paamindelse` — **kun i Supabase** |
-| Medicin-påmindelse morgen/aften (Gemini-genereret) | edge-funktion `medicin-paamindelse` — **kun i Supabase** |
-| Vægt: Zepp Life → Apple Sundhed → Shortcut → webhook | edge-funktion `modtag-vaegt` — **kun i Supabase**; `genvej-*.shortcut` |
+| Gemini-proxy med appens fælles nøgle | `supabase/functions/gemini/` |
+| Aften-check-in | `supabase/functions/daglig-paamindelse/` |
+| Medicin-påmindelse morgen/aften (Gemini-genereret) | `supabase/functions/medicin-paamindelse/` |
+| Vægt: Zepp Life → Apple Sundhed → Shortcut → webhook | `supabase/functions/modtag-vaegt/`; `genvej-*.shortcut` |
 
 Cron (pg_cron): `daglig-paamindelse` kl. 18:00 UTC; `medicin-paamindelse-0700`
 hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
@@ -41,12 +41,17 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   (nær toppen af `index.html`) med 1 ved hver ændring af filen. Appen bruger
   den til selv at opdage en nyere version (`tjekOpdatering()`/`hentNyVersion()`);
   glemmes det, opdager klienterne ikke ændringen.
-- **Edge-funktioner:** Supabase MCP `deploy_edge_function` (CLI'en er ikke
-  installeret). `gemini` udrulles med `verify_jwt: false` (den tjekker selv
-  brugertegnet) og videresender kun `/models` og
-  `/models/gemini-…:generateContent`. Skal en funktion, der kun ligger i
-  Supabase, ændres, så hent kilden med `get_edge_function` og læg den i
-  `supabase/functions/` først.
+- **Edge-funktioner:** Supabase MCP `deploy_edge_function` med filen fra
+  `supabase/functions/<navn>/` (CLI'en er ikke installeret). Repoet er
+  kilden; commit ændringen sammen med udrulningen. `verify_jwt` skal sættes
+  som nu, ellers stopper kaldene:
+
+  | Funktion | `verify_jwt` | Hvorfor |
+  |---|---|---|
+  | `gemini` | `false` | tjekker selv brugertegnet; videresender kun `/models` og `/models/gemini-…:generateContent` |
+  | `modtag-vaegt` | `false` | Shortcut har intet tegn; tjekker selv `x-noegle` mod `vaegt_adgang` |
+  | `daglig-paamindelse` | `true` | kaldes kun af pg_cron |
+  | `medicin-paamindelse` | `true` | kaldes kun af pg_cron |
 
 ## Data og hemmeligheder
 
@@ -100,9 +105,11 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   `postMessage` er bevaret til desktop/Android og åben app.
 - **Push skal have `renotify: true`**, ellers erstatter dagens notifikation
   gårsdagens lydløst (samme `tag`).
-- **Fire af fem edge-funktioner findes kun i Supabase** (tjekket 2026-10-22):
-  `daglig-paamindelse`, `medicin-paamindelse`, `modtag-vaegt` og `udgiv` (rest
-  fra den gamle chat-udgivelse). Der er ingen versionsstyring af dem.
+- **Edge-funktionerne lå kun i Supabase** indtil 2026-10-22, hvor kilden blev
+  hentet ind i `supabase/functions/` uændret (`daglig-paamindelse` v3,
+  `medicin-paamindelse` v16, `modtag-vaegt` v3). Udrul aldrig en rettelse
+  direkte i Supabase uden at committe den. `udgiv` ligger stadig kun i
+  Supabase: en rest fra den gamle chat-udgivelse, som intet kalder.
 - **`backup-modtager.gs` er en rest** fra den fjernede sikkerhedskopi (Supabase
   er datakilden); intet i appen kalder den. Drift-oversigten viser den derfor
   som »Google Apps Script«.
