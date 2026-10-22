@@ -46,7 +46,9 @@ Slås til i Indstillinger (`S.autoreg`). Erstatter det indbyggede kamera (som al
 ### Model-strategi
 - Kortere, personligheds-tunge kald (måltidskommentar, "lettere alternativer", "resten af dagen"-forslag) kan med fordel køre på en hurtigere/billigere model — `claude-haiku-4-5-20251001` er brugt til dette pt. (uafhængigt af brugerens valgte model i Indstillinger).
 - Foto-analyse og opskriftsgenerering bruger fortsat den model, brugeren selv har valgt (`S.model`) — de har brug for kapaciteten.
-- Klienten understøtter to udbydere: Claude (Anthropic, direkte browser-kald med brugerens egen nøgle) og Gemini (samme mønster, egen nøgle). `udbyder()` afgør hvilken.
+- Klienten understøtter to udbydere, og **Gemini er standard for alle** (`udbyder()` giver kun `claude`, hvis `kd:udbyder` udtrykkeligt er sat til det). Har brugeren sin egen Gemini-nøgle (`kd:gemini-noegle`), kaldes Google direkte; ellers går kaldene gennem edge-funktionen `gemini` (`supabase/functions/gemini`), der lægger appens fælles nøgle på — kræver at brugeren er logget ind (`gAdgang()`). Nøglen er Supabase-hemmeligheden `GEMINI_API_KEY`, lagt ind af brugeren med `sh tools/gemini-noegle.sh` fra udklipsholderen; Claude må ikke selv håndtere den. Funktionen udrulles med `verify_jwt: false` (den tjekker selv brugertegnet) og videresender kun `/models` og `/models/gemini-…:generateContent`.
+- Claude kræver brugerens egen Anthropic-nøgle og vælges under Indstillinger. Opsætningsskærmen beder kun om nøglen, når Claude er valgt.
+- **Under analysen nævnes motoren aldrig.** I stedet roterer `sjovTekst()` hvert 3. sekund gennem `SJOVT` (køkken møder databehandling: »Udstener outliers«, »Knækker kalorienødderne«). Fejltekster siger »Analysen …«, ikke »Gemini …«.
 
 ### Tone-niveauer og grænser
 Fire niveauer: kæk → skarp → brutal → hudløs (standard for nye/nulstillede konti). **Fast grænse, som ikke må fjernes uden eksplicit anmodning:** ingen kommentarer nogensinde om krop, vægt, figur eller udseende — kun vaner, undskyldninger og tal. Denne grænse er selve pointen i stilen (inspireret af dansk standup-retorik), ikke en dæmpning af den.

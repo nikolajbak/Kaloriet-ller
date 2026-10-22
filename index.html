@@ -407,7 +407,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 89;
+var APP_BUILD = 90;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1455,14 +1455,35 @@ function udtraekJson(tekst){
    og oversættes her — så alle instruktioner og hele resten af appen er uændret.
    Gemini kan desuden tvinges til gyldig JSON på API-niveau, hvilket fjerner den
    hyppigste fejl: et svar der ikke kunne læses. */
-function udbyder(){ return laes(K_UDBYDER) === "gemini" ? "gemini" : "claude"; }
+/* Gemini er standard for alle. Har brugeren ikke sin egen Gemini-noegle,
+   gaar kaldene gennem edge-funktionen `gemini`, der laegger appens faelles
+   noegle paa — saa skal man blot vaere logget ind. Claude kun efter eget valg. */
+function udbyder(){ return laes(K_UDBYDER) === "claude" ? "claude" : "gemini"; }
 
+var LOG_IND_GRATIS = "Log ind under Indstillinger \u2192 Konto for at bruge den gratis analyse.";
+function gAdgang(){
+  var egen = laes(K_GNOEGLE) || "";
+  if (egen) return Promise.resolve({ rod: "https://generativelanguage.googleapis.com/v1beta",
+                                     hoved: { "x-goog-api-key": egen } });
+  return adgangstegn().then(function(tegn){
+    if (!tegn){ var e = new Error(LOG_IND_GRATIS); e.status = 401; throw e; }
+    return { rod: SB_URL + "/functions/v1/gemini",
+             hoved: { "Authorization": "Bearer " + tegn, "apikey": SB_KEY } };
+  });
+}
+
+/* Fejltekster uden motorens navn: brugeren skal vide, hvad de kan goere, ikke
+   hvilken model der sad fast. */
 function gFejl(status, m){
-  if (status === 403) return new Error("Gemini afviser n\u00f8glen. Opret en ny p\u00e5 aistudio.google.com og indl\u00e6s den under Indstillinger.");
-  if (status === 429) return new Error("Gemini er ramt af sin gratisgr\u00e6nse. Vent et minut.");
-  if (status === 503 || status === 500) return new Error("Gemini er overbelastet lige nu. Pr\u00f8v igen om lidt, eller skift til Claude under Indstillinger.");
-  if (status === 400 && /API key/i.test(m)) return new Error("Gemini-n\u00f8glen blev afvist. Ret den under Indstillinger.");
-  return new Error(m || ("Gemini svarede " + status));
+  var egen = !!laes(K_GNOEGLE);
+  if (status === 401) return new Error(LOG_IND_GRATIS);
+  if (status === 403) return new Error(egen ? "Din egen n\u00f8gle blev afvist. Opret en ny p\u00e5 aistudio.google.com og indl\u00e6s den under Indstillinger."
+                                            : "Analysen er ikke tilg\u00e6ngelig lige nu. Pr\u00f8v igen senere.");
+  if (status === 429) return new Error("Analysen er ramt af gratisgr\u00e6nsen. Vent et minut.");
+  if (status === 503 || status === 500 || status === 502) return new Error("Analysen er overbelastet lige nu. Pr\u00f8v igen om lidt.");
+  if (status === 400 && /API key/i.test(m)) return new Error(egen ? "Din egen n\u00f8gle blev afvist. Ret den under Indstillinger."
+                                                                   : "Analysen er ikke tilg\u00e6ngelig lige nu. Pr\u00f8v igen senere.");
+  return new Error(m || ("Analysen svarede " + status));
 }
 
 /* Modellen v\u00e6lges automatisk. Aliasser som -latest og preview-modeller fravalgt:
@@ -1484,9 +1505,8 @@ function gRang(navn){
 }
 
 function gHentListe(){
-  var noegle = laes(K_GNOEGLE) || "";
-  return fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {
-    headers: { "x-goog-api-key": noegle }
+  return gAdgang().then(function(a){
+    return fetch(a.rod + "/models?pageSize=200", { headers: a.hoved });
   }).then(function(r){
     return r.json().catch(function(){ return {}; }).then(function(d){
       if (!r.ok) throw gFejl(r.status, (d.error && d.error.message) || "");
@@ -1498,7 +1518,7 @@ function gHentListe(){
       liste.sort(function(a, b){ return gRang(b) - gRang(a); });
       var alle = liste.slice();
       liste = liste.slice(0, 4);
-      if (!liste.length) throw new Error("Din Gemini-n\u00f8gle har ikke adgang til en brugbar model.");
+      if (!liste.length) throw new Error("Analysen har ikke adgang til en brugbar model lige nu.");
       skriv(K_GAUTO, JSON.stringify({ v: 2, liste: liste, alle: alle, tid: Date.now() }));
       return liste;
     });
@@ -1623,8 +1643,6 @@ function medTid(ms, lav, ydre){
 var KALD_TIDSGRAENSE = 45000;
 
 function geminiKald(krop){
-  var noegle = laes(K_GNOEGLE) || "";
-  if (!noegle) return Promise.reject(new Error("Der mangler en Gemini-n\u00f8gle under Indstillinger."));
 
   var dele = [];
   (krop.messages[0].content instanceof Array ? krop.messages[0].content
@@ -1684,12 +1702,13 @@ function geminiKald(krop){
 
   function etKald(model, signal0, tvingUden){
     return medTid(krop.gModus === "detalje" ? 70000 : krop.gModus === "grov" ? 25000 : KALD_TIDSGRAENSE, function(signal){
-     return fetch("https://generativelanguage.googleapis.com/v1beta/models/"
-        + encodeURIComponent(model) + ":generateContent", {
-      method: "POST",
-      signal: signal,
-      headers: { "Content-Type":"application/json", "x-goog-api-key": noegle },
-      body: byggKrop(model, tvingUden)
+     return gAdgang().then(function(a){
+      return fetch(a.rod + "/models/" + encodeURIComponent(model) + ":generateContent", {
+        method: "POST",
+        signal: signal,
+        headers: Object.assign({ "Content-Type":"application/json" }, a.hoved),
+        body: byggKrop(model, tvingUden)
+      });
     }).then(function(r){
       return r.json().catch(function(){ return {}; }).then(function(d){
         if (!r.ok){
@@ -1761,15 +1780,12 @@ function geminiKald(krop){
         clearTimeout(ur);
         if (faerdig) return;
         if (i >= liste.length){
-          if (!igang){ afgoer(); fejl(sidste || new Error("Gemini svarede ikke.")); }
+          if (!igang){ afgoer(); fejl(sidste || new Error("Analysen svarede ikke.")); }
           return;
         }
         var model = liste[i++]; igang++;
         var ac = typeof AbortController === "function" ? new AbortController() : null;
         if (ac) styr.push(ac);
-        if (typeof krop.gMeld === "function"){
-          try { krop.gMeld(model.replace(/^gemini-/, "Gemini ").replace(/-/g, " ")); } catch(f){}
-        }
         enModel(model, ac ? ac.signal : undefined).then(function(r){
           igang--;
           if (faerdig) return;
@@ -1799,7 +1815,7 @@ function geminiKald(krop){
       var s = e.status || 0;
       if (n < 1 && (s === 429 || s === 500 || s === 503 || s === 0 || e.timeout))
         return gVent(4000).then(function(){ return omgang(n + 1); });
-      if (s === 0 && !e.timeout) throw new Error("Mistede forbindelsen til Gemini undervejs. Tjek din internetforbindelse og prøv igen.");
+      if (s === 0 && !e.timeout) throw new Error("Mistede forbindelsen undervejs. Tjek din internetforbindelse og prøv igen.");
       throw e;
     });
   }
@@ -2198,18 +2214,22 @@ function iDetaljeKoe(fn){
     if (detaljeIgang < DETALJE_PARALLELT) koer(); else detaljeVenter.push(koer);
   });
 }
-/* Skriver hvad Gemini lige nu arbejder paa (model/forsoeg) paa posten, saa en
-   analyse der tager tid kan ses at arbejde — og man kan se, hvor den sidder fast. */
-function saetPostTekst(id, dag, tekst){
-  var poster = hentDag(dag), ok = false;
-  poster.forEach(function(p){
-    if (p.id === id && p.analyserer && (p.status || "analyserer") === "analyserer"){ p.fejlTekst = tekst; ok = true; }
-  });
-  if (!ok) return;
-  /* Kun lokalt: det er en ren visuel status, der skifter for hver model i
-     kapløbet — den skal ikke synkroniseres til skyen hver gang. */
-  gemDagLokalt(dag, poster);
-  tegn();
+/* Mens en analyse koerer, skifter teksten hvert tredje sekund mellem disse —
+   saa man kan se, at der arbejdes, uden at motoren under hjelmen naevnes.
+   Kokkenet moeder databehandlingen; hold nye linjer i samme boldgade. */
+var SJOVT = [
+  "Bryder billedet i pixels", "Udstener outliers", "Knækker kalorienødderne",
+  "Åbner en flaske rådata", "Skræller metadata af", "Hakker pixels i tern",
+  "Marinerer datasættet", "Pisker tallene stive", "Sigter støjen fra krummerne",
+  "Lader regnestykket hæve", "Smager på decimalerne", "Filetterer portionen",
+  "Rører rundt i rådataene", "Lader bytesene dryppe af", "Brækker brødet i bits",
+  "Koger kalorierne ind", "Afskummer afrundingsfejl", "Trækker en prik fra sovsen"
+];
+function sjovTekst(start){
+  var sek = Math.max(0, Math.floor((Date.now() - Number(start || 0)) / 1000));
+  var frø = 0, k = String(start || "");
+  for (var i = 0; i < k.length; i++) frø = (frø * 31 + k.charCodeAt(i)) % SJOVT.length;
+  return SJOVT[(frø + Math.floor(sek / 3)) % SJOVT.length] + " …";
 }
 function saetGrov(id, dag, g){
   var navn = String((g && g.navn) || "").trim().slice(0, 40), kcal = Math.round(Number(g && g.kalorier) || 0);
@@ -2222,14 +2242,14 @@ function saetGrov(id, dag, g){
   gemDag(dag, poster);
   tegn();
 }
-function analyser(dataUrl, note, svar, beskrivelse, dag, tid, meld){
+function analyser(dataUrl, note, svar, beskrivelse, dag, tid){
   var indhold = [];
   if (dataUrl){
     indhold.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data:dataUrl.split(",")[1] } });
   }
   indhold.push({ type:"text", text: byggPrompt(note, svar, beskrivelse, dag, tid) });
   var krop = { model:S.model, max_tokens:2400, messages:[{ role:"user", content:indhold }] };
-  if (udbyder() === "gemini"){ krop.gModus = "detalje"; if (meld) krop.gMeld = meld; }
+  if (udbyder() === "gemini") krop.gModus = "detalje";
   /* Et kald, der hang eller tabte forbindelsen, proeves én gang til, foer der gives op */
   return kald(krop).catch(function(e){
     if (udbyder() !== "gemini" && e && (e.timeout || e instanceof TypeError)) return kald(krop);
@@ -2581,7 +2601,7 @@ function profiltekst(){
 
 function tegn(){
   if (harLaas() && !aktivNoegle) return tegnLaas();
-  if (!aktivNoegle && !laes(K_NOEGLE)) return tegnOpsaet();
+  if (udbyder() === "claude" && !aktivNoegle && !laes(K_NOEGLE)) return tegnOpsaet();
   if (!laes(K_BRUGER)) return tegnOpsaet();
   if (S.skaerm === "historik") tegnHistorik();
   else if (S.skaerm === "trends") tegnTrends();
@@ -2634,14 +2654,18 @@ function tegnLaas(){
 }
 
 function tegnOpsaet(){
-  var harN = !!laes(K_NOEGLE);
+  /* Gratis analyse er standard: der skal kun en noegle til, hvis man selv har
+     valgt Claude under Indstillinger. */
+  var harN = udbyder() !== "claude" || !!laes(K_NOEGLE);
   $("rod").innerHTML =
     '<div class="opsaet"><h1>Kaloriedagbog</h1>'
-    + '<p>Appen bruger din egen API-nøgle til at læse billeder af mad. Nøglen bliver liggende på denne telefon og sendes kun til Anthropic, når du analyserer et måltid.</p>'
+    + (udbyder() === "claude"
+        ? '<p>Du har valgt Claude, som bruger din egen API-nøgle. Nøglen bliver liggende på denne telefon og sendes kun til Anthropic, når du analyserer et måltid.</p>'
+        : '<p>Appen læser billeder af mad gratis. Log ind under Indstillinger → Konto, så er analysen klar.</p>')
     + '<span class="lbl">Dit fornavn — kommentarerne bliver stilet til dig</span>'
     + '<input id="in-navn" autocomplete="given-name" placeholder="Fornavn" value="' + esc(S.navn) + '">'
     + (harN
-        ? '<div class="note">Din API-nøgle ligger her allerede. Den skal du ikke røre.</div>'
+        ? (udbyder() === "claude" ? '<div class="note">Din API-nøgle ligger her allerede. Den skal du ikke røre.</div>' : '')
         : '<span class="lbl">API-nøgle</span>'
           + '<input id="in-noegle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-...">')
     + '<div id="opsaet-fejl"></div>'
@@ -2765,7 +2789,7 @@ function tegnHoved(){
         var navnTxt = st === "spoergsmaal" ? "Har et spørgsmål" : st === "fejl" ? "Kunne ikke læses" : grov ? esc(p.grovNavn) : "Analyserer…";
         var metaTxt = st === "spoergsmaal" ? "Tryk for at svare"
           : st === "fejl" ? esc(ventende[p.id] ? (p.fejlTekst || "Prøv selv") + " · tryk for at prøve selv" : "Afbrudt · stryg for at slette")
-          : esc(grov ? "Grov skøn · " + (p.fejlTekst || "præciserer") : p.fejlTekst || p.tid) + ' · <span class="tm" data-timer="' + esc(p.id) + '">0 s</span>';
+          : (grov ? "Grov skøn · " : "") + '<span data-sjov="' + esc(p.id) + '">' + esc(sjovTekst(p.id)) + '</span> · <span class="tm" data-timer="' + esc(p.id) + '">0 s</span>';
         var glyf = st === "spoergsmaal" ? "?" : st === "fejl" ? "!" : '<span class="spin"></span>';
         h += '<div class="postrum">'
           + '<div class="slettebag" aria-hidden="true">'
@@ -2818,7 +2842,7 @@ function tegnHoved(){
   Array.prototype.forEach.call(document.querySelectorAll("[data-vent]"), function(el){
     el.onclick = function(){ aabnVentende(el.getAttribute("data-vent")); };
   });
-  if (document.querySelector("[data-timer]")) startTimere();
+  if (document.querySelector("[data-timer],[data-sjov]")) startTimere();
 }
 
 /* --- Forslag til resten af dagen --- */
@@ -4138,8 +4162,8 @@ function tegnArk(){
       + '<button class="knap sek" id="b-luk" style="margin-top:8px">Fortryd</button>';
   }
   if (a.status === "analyserer"){
-    h += '<p style="margin-top:16px;color:var(--daempet)" role="status" aria-live="polite">'
-      + 'Vurderer portion og kalorier …</p>'
+    h += '<p style="margin-top:16px;color:var(--daempet)" role="status" data-sjov="' + (a.start || Date.now()) + '">'
+      + esc(sjovTekst(a.start || Date.now())) + '</p>'
       + '<div class="skelet linje" style="width:55%"></div>'
       + '<div class="skelet linje" style="width:85%"></div>'
       + '<div class="skelet linje" style="width:70%"></div>';
@@ -4217,6 +4241,7 @@ function tegnArk(){
     if (e.target.id === "overlay" && a.status !== "analyserer") lukArk();
   };
   if (a.status !== "analyserer") bindTraekNed("overlay", lukArk);
+  if (a.status === "analyserer") startTimere();
   var bl = $("b-luk"); if (bl) bl.onclick = lukArk;
   var bm = $("b-manuel"); if (bm) bm.onclick = function(){
     var st = $("s-tekst");
@@ -4567,11 +4592,15 @@ function aabnVentende(id){
 
 var analyseTimer = null;
 function opdaterTimere(){
-  var els = document.querySelectorAll("[data-timer]");
-  if (!els.length){ clearInterval(analyseTimer); analyseTimer = null; return; }
+  var els = document.querySelectorAll("[data-timer]"), sj = document.querySelectorAll("[data-sjov]");
+  if (!els.length && !sj.length){ clearInterval(analyseTimer); analyseTimer = null; return; }
   Array.prototype.forEach.call(els, function(e){
     var sek = Math.max(0, Math.round((Date.now() - Number(e.getAttribute("data-timer"))) / 1000));
     e.textContent = sek + " s";
+  });
+  Array.prototype.forEach.call(sj, function(e){
+    var t = sjovTekst(e.getAttribute("data-sjov"));
+    if (e.textContent !== t) e.textContent = t;
   });
 }
 function startTimere(){
@@ -4584,7 +4613,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
   tid = tid || standardTid(dag);
   if (!auto){
     S.ark = { status:"analyserer", stor:stor, lille:lille, note:note,
-              beskrivelse:beskrivelse, dag:dag, tid:tid, antal:antal };
+              beskrivelse:beskrivelse, dag:dag, tid:tid, antal:antal, start:Date.now() };
     tegnArk();
   }
   /* Auto-tilstand: hver start faar et rundenummer, saa et svar fra et
@@ -4602,11 +4631,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
     if (v2) v2.igang = false;
     return false;
   }
-  var meld = function(t){
-    var v5 = ventende[auto];
-    if (v5 && v5.runde === runde) saetPostTekst(auto, dag, t);
-  };
-  var koer = function(){ return analyser(stor, note, svar, beskrivelse, dag, tid, auto ? meld : null); };
+  var koer = function(){ return analyser(stor, note, svar, beskrivelse, dag, tid); };
   var gem = auto && udbyder() === "gemini";
   if (gem && stor && !svar){
     analyserGrov(stor).then(function(g){
@@ -4617,7 +4642,6 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
   var lob = gem ? iDetaljeKoe(function(){
     var v3 = ventende[auto];
     if (v3 && v3.runde !== runde) return Promise.resolve(null);
-    saetPostTekst(auto, dag, "Venter på Gemini …");
     return koer();
   }) : koer();
   lob.then(function(r){
@@ -4655,7 +4679,7 @@ function kaldAnalyse(stor, lille, note, svar, beskrivelse, dag, tid, antal, auto
       /* Forkerte noegler og tom kredit hjaelper det ikke at prove igen paa —
          alt andet (net, timeout, overbelastning, ulaeseligt svar) proeves igen
          automatisk, indtil analysen er gennemfoert. */
-      if (/afvist|kredit|mangler en Gemini/i.test(besked)){ visAutoregFejl(auto, dag, stor, lille, besked); return; }
+      if (/afvist|kredit|Log ind/i.test(besked)){ visAutoregFejl(auto, dag, stor, lille, besked); return; }
       planlaegGenforsoeg(auto, dag, stor, lille, note, svar, beskrivelse, tid, antal, besked);
       return;
     }
@@ -4828,12 +4852,12 @@ function tegnIndstillinger(){
     + ' om ugen. Vises kun, når der har været alkohol de seneste 7 dage.</p>'
     + '<details class="afsnit"><summary>Nøgler og model</summary><div>'
     + '<span class="lbl">Udbyder</span><select id="s-udbyder">'
-    + [["claude","Claude — betalt, bedst til dansk"],
-       ["gemini","Gemini — gratis niveau"]].map(function(a){
+    + [["gemini","Gemini — gratis (standard)"],
+       ["claude","Claude — betalt, med din egen nøgle"]].map(function(a){
         return '<option value="' + a[0] + '"' + (udbyder() === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
       }).join("") + '</select>'
     + (udbyder() === "gemini"
-        ? '<span class="lbl">Gemini-nøgle fra aistudio.google.com</span>'
+        ? '<span class="lbl">Egen Gemini-nøgle (valgfri — uden den bruges appens, når du er logget ind)</span>'
           + '<input id="s-gnoegle" type="password" autocomplete="off" autocapitalize="off" '
           + 'spellcheck="false" placeholder="' + (laes(K_GNOEGLE) ? "Uændret" : "AIza…") + '">'
           + '<div class="note">Modellen vælges automatisk'
