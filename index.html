@@ -407,7 +407,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 90;
+var APP_BUILD = 91;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -623,7 +623,7 @@ function bindGenberegning(praefiks, dag, tid){
         gf.style.display = r.alkohol && r.alkohol.length ? "" : "none";
       }
       if (praefiks === "r"){
-        nyKommentar = r.kommentar || "";
+        if (r.kommentar) nyKommentar = r.kommentar;
         nyGrupper = normGrupper(r.grupper);
         nyIndhold = normIndhold(r.indhold);
         var kv = $("r-kommentar-vis");
@@ -4303,9 +4303,9 @@ function tegnArk(){
   var bg = $("b-gem"); if (bg) bg.onclick = function(){
     var dag = ($("f-dato") && $("f-dato").value) || maalDag();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dag)) dag = S.iDag;
-    var poster = hentDag(dag);
+    var poster = hentDag(dag), nyId = String(Date.now());
     poster.push(normaliser({
-      id: String(Date.now()),
+      id: nyId,
       tid: laesTid("f-tid") || standardTid(dag),
       navn: $("f-navn").value.trim() || "Måltid",
       kategori: $("f-kat").value,
@@ -4331,6 +4331,8 @@ function tegnArk(){
       billede: a.lille || null
     }, 0));
     gemDag(dag, poster);
+    if (a.tekstStatus === "henter" && a.personlighed)
+      a.personlighed.then(function(t){ saetSenKommentar(dag, nyId, t); }).catch(function(){});
     S.maalDag = null;
     nulstilAfledt();
     lukArk();
@@ -4424,7 +4426,8 @@ function startPersonlighed(){
   var boks = $("personlighed");
   if (boks) boks.innerHTML = personlighedHtml(a);
 
-  hentPersonlighed(a.r, a.dag, a.tid, laesKomma($("f-ant") ? $("f-ant").value : "1") || 1)
+  a.personlighed = hentPersonlighed(a.r, a.dag, a.tid, laesKomma($("f-ant") ? $("f-ant").value : "1") || 1);
+  a.personlighed
     .then(function(t){
       if (S.ark !== a || a.status !== "resultat") return;
       a.tekstStatus = "klar";
@@ -4441,6 +4444,19 @@ function startPersonlighed(){
     });
 }
 
+/* Kommentaren kommer i anden fase og kan derfor naa frem, efter posten er
+   gemt — i auto-tilstand altid, i den manuelle vej hvis man trykker Gem hurtigt.
+   Den saettes saa paa den gemte post, saa laenge posten ikke allerede har en. */
+function saetSenKommentar(dag, id, t){
+  if (!t || !t.kommentar) return;
+  var poster = hentDag(dag), fundet = false;
+  poster.forEach(function(x){ if (x.id === id && !x.kommentar){ x.kommentar = String(t.kommentar); fundet = true; } });
+  if (!fundet) return;
+  gemDag(dag, poster);
+  notérKommentar(t.kommentar);
+  if (!S.ark && !S.indst && S.skaerm === "idag") tegn();
+}
+
 function visResultat(a, r){
   if (a.auto){
     /* Kommentaren hentes i baggrunden og saettes paa posten, naar den er klar.
@@ -4449,15 +4465,7 @@ function visResultat(a, r){
     var kom = S.kaek ? hentPersonlighed(r, a.dag, a.tid, a.antal || 1) : null;
     var gemt = autoGemResultat(a, r);
     delete ventende[gemt.id];
-    if (kom) kom.then(function(t){
-      if (!t || !t.kommentar) return;
-      var poster = hentDag(gemt.dag), fundet = false;
-      poster.forEach(function(x){ if (x.id === gemt.id){ x.kommentar = String(t.kommentar); fundet = true; } });
-      if (!fundet) return;
-      gemDag(gemt.dag, poster);
-      notérKommentar(t.kommentar);
-      if (!S.ark && !S.indst && S.skaerm === "idag") tegn();
-    }).catch(function(){});
+    if (kom) kom.then(function(t){ saetSenKommentar(gemt.dag, gemt.id, t); }).catch(function(){});
     var aaben = !!$("overlay");
     S.ark = null; S.nyPost = gemt.id;
     if (aaben) lukBlodt("overlay", tegn); else tegn();
