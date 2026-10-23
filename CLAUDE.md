@@ -122,3 +122,4 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
 - Ingen eksterne JS-biblioteker i klienten uden eksplicit aftale.
 - Faste »kæk«-formuleringer hører ikke hjemme i prompterne; `tone()` alene
   styrer registret.
+- **Tokenforbrugende kørsler ligger uden for Anthropics spidstid** (Nikolaj 2026-10-23): hverdage 05–11 PT ≈ 14–20 dansk tid. En planlagt kørsel, der kalder en model (routine, Actions, pg_cron → edge-funktion), startes ikke man–fre kl. 12:00–18:59 UTC (dækker både sommer- og vintertid); weekenden er fri. Brugerudløste og tidskritiske kørsler (kundebeskeder, ordrer, påmindelser på et fast klokkeslæt) er undtaget. Påmindelserne (Gemini) går ud på faste klokkeslæt og er undtaget; nye planlagte modelkald følger reglen.
