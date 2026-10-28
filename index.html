@@ -440,7 +440,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 95;
+var APP_BUILD = 96;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1117,7 +1117,7 @@ function maalkort(k, tr){
     + '</div>';
 }
 function vaegtgraf(liste, maalvaegt){
-  var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 50;
+  var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 58;
   var bredde = B - venstre - hoejre, hoejdeP = H - top - bund;
   var vaerdier = liste.map(function(x){ return x.kg; });
   if (maalvaegt > 0) vaerdier = vaerdier.concat([maalvaegt]);
@@ -1148,7 +1148,7 @@ function vaegtgraf(liste, maalvaegt){
     var dage = (t1 - t0) / 864e5, ya = Y(tr.start), yb = Y(tr.start + tr.prDag * dage);
     s += '<line x1="' + venstre + '" y1="' + ya.toFixed(1) + '" x2="' + (venstre + bredde)
        + '" y2="' + yb.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="5 3"/>';
-    etiketter.push({ y: yb + 3.5, tekst: "trend", attr: 'font-size="9.5" style="fill:var(--daempet)"' });
+    etiketter.push({ y: yb + 3.5, tekst: 'trend <tspan font-weight="700">' + kg(tr.start + tr.prDag * dage) + '</tspan>', attr: 'font-size="9.5" style="fill:var(--daempet)"' });
   }
   var punkter = liste.map(function(x){ return X(x.dag).toFixed(1) + "," + Y(x.kg).toFixed(1); });
   if (liste.length > 1){
