@@ -49,9 +49,8 @@ html,body{margin:0;padding:0;}
 /* Ingen zoom: manipulation fjerner dobbelttryk-zoom; knibe-zoom stoppes i JS
    (gesturestart), fordi iOS ignorerer user-scalable=no. */
 html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
-/* Ingen orienteringslaas (iOS ignorerer den): appen foelger telefonen.
-   Kolonnen er max 520px og centreret, saa liggende kraever kun sikre zoner
-   i siderne (kameraoeen) og mindre luft i hoejden; se "Liggende" nederst. */
+/* Ingen orienteringslaas (iOS ignorerer den): appen foelger telefonen og
+   skaermbredden; se "Bred skaerm" nederst i CSS'en. */
 body{
   background:var(--papir); color:var(--blaek);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
@@ -433,8 +432,10 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
   font-size:15px;font-variant-numeric:tabular-nums;}
 .stime{font-size:12.5px;color:var(--daempet);}
 .skjul{display:none;}
-/* --- Liggende --- Sikre zoner i siderne gaelder altid (0 i staaende);
-   den lave hoejde paa en telefon paa tvaers faar mindre luft. */
+/* --- Bred skaerm --- Fanerne er delt i .spalter (.s-a, .s-b, .s-c). Smalt
+   staar de under hinanden; fra 760 px (liggende telefon, iPad) bliver de
+   to spalter, og indholdet bruger bredden. Sikre zoner i siderne gaelder
+   altid (0 i staaende), saa kameraoeen paa en liggende telefon holdes fri. */
 .indhold,.opsaet,.bund,.fortryd{
   padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right));}
 .toast{left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));}
@@ -443,14 +444,31 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
   max-width:420px;margin:0 auto;}
 .panel{max-height:92dvh;}
 .fejring{overflow-y:auto;}
+@media (min-width:760px){
+  .indhold,.bund{padding-left:max(32px,env(safe-area-inset-left));padding-right:max(32px,env(safe-area-inset-right));}
+  .indhold{max-width:1100px;}
+  .spalter{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:44px;align-items:start;}
+  .spalter.idag{grid-template-rows:auto 1fr;}
+  .spalter.idag .s-a{grid-column:1;grid-row:1;}
+  .spalter.idag .s-b{grid-column:2;grid-row:1 / span 2;}
+  .spalter.idag .s-c{grid-column:1;grid-row:2;}
+  .s-b > h2.sek:first-child{margin-top:16px;}
+  .bundindhold{max-width:1100px;justify-content:flex-end;}
+  .bundindhold .knap,button.knap.smal{width:auto;flex:none;padding-left:30px;padding-right:30px;white-space:nowrap;}
+  .bundindhold .knap:not(.smal){min-width:240px;}
+  .panel{max-width:640px;}
+  .toast{max-width:520px;margin:0 auto;}
+}
 @media (orientation:landscape) and (max-height:500px){
   body{padding-bottom:calc(84px + env(safe-area-inset-bottom));}
   .indhold{padding-top:calc(12px + env(safe-area-inset-top));}
   .bund{padding-top:8px;padding-bottom:calc(10px + env(safe-area-inset-bottom));}
   button.knap{padding:12px;}
   .fortryd{bottom:calc(70px + env(safe-area-inset-bottom));}
-  .overlay{align-items:flex-end;}
   .panel{max-height:96dvh;padding-top:22px;}
+  .foto{max-height:60dvh;object-fit:cover;}
+  .stortal{font-size:54px;}
+  .vh-tal{font-size:60px;}
   .kamera-status{bottom:calc(76px + env(safe-area-inset-bottom,0px));}
   .kamera-manuel{bottom:calc(16px + env(safe-area-inset-bottom,0px));}
   .fejring{justify-content:flex-start;padding-top:20px;padding-bottom:20px;}
@@ -458,7 +476,6 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
   .fejring .tal{font-size:48px;margin:8px 0 4px;}
   .fejring .linje{margin-top:14px;}
   .fejring button{margin-top:18px;}
-  .vh-tal{font-size:60px;}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -477,7 +494,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 103;
+var APP_BUILD = 104;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -2874,6 +2891,7 @@ function tegnHoved(){
   var stortTekst = S.maal <= 0 ? "kalorier i dag"
     : over ? "kcal over dagens mål" : "kcal tilbage i dag";
   var h = '<div class="indhold">' + hoved(langDato(S.iDag))
+    + '<div class="spalter idag"><div class="s-a">'
     + '<div class="hero"><div class="stortal' + (over ? " over" : "") + '">' + tal(stort) + '</div>'
     + '<div class="maallinje' + (over ? " over" : "") + '">' + stortTekst + '</div>'
     + '<div class="baand" role="progressbar" aria-label="Spist af dagens mål" aria-valuemin="0" aria-valuemax="'
@@ -2886,8 +2904,8 @@ function tegnHoved(){
     + '<div>kulhydrat <b>' + tal(sum.kul) + ' g</b></div>'
     + '<div>fedt <b>' + tal(sum.fedt) + ' g</b></div>'
     + (gen > 0 && !S.alkohol ? '<div>genstande <b>' + kg(gen).replace(",0","") + '</b></div>' : "")
-    + '</div>' + alkoholHtml() + '</div>'
-    + '<h2 class="sek">Dagens måltider</h2>';
+    + '</div>' + alkoholHtml() + '</div></div>'
+    + '<div class="s-b"><h2 class="sek">Dagens måltider</h2>';
 
   if (!poster.length){
     h += '<div class="tom">Ingen måltider endnu. Tag et billede af det første, så regner appen resten ud.</div>';
@@ -2946,9 +2964,9 @@ function tegnHoved(){
   }
   /* Hjaelpeteksten er til de foerste dage — derefter ved man det */
   if (poster.length && dagNoegler().length <= 3) h += '<p class="grafnote" style="margin:2px 2px 0">Tryk på et måltid for at rette det. Stryg til venstre for at slette.</p>';
-  h += '<h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>'
+  h += '</div><div class="s-c"><h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>'
     + '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
-    + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div>'
+    + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div></div></div>'
     + '<div class="bund"><div class="bundindhold">'
     + '<button class="knap" id="b-foto">Tag billede</button>'
     + '<button class="knap sek smal" id="b-skriv">Skriv det</button></div></div>';
@@ -3132,7 +3150,8 @@ function tegnVaegt(){
       + 'så tegnes kurven her. Én gang om ugen på samme tidspunkt siger mere end hver dag.</div>';
   } else {
     var sid = k.liste[k.liste.length - 1], forr = k.liste[k.liste.length - 2];
-    h += '<div class="hero"><div class="vh-top">'
+    h += '<div class="spalter"><div class="s-a">'
+      + '<div class="hero"><div class="vh-top">'
       + '<div class="vh-tal">' + kg(k.nu) + '<span>kg</span></div>'
       + '<div class="vh-dato">seneste vejning<b>' + esc(kortDato(sid.dag)) + '</b></div></div>';
     var tr = trend(k.liste);
@@ -3169,7 +3188,7 @@ function tegnVaegt(){
       h += '<div class="note">Målvægten svarer til et BMI på ' + kg(k.maalBmi)
         + '. Under 18,5 regnes som undervægt. Det er dit valg — men det er værd at vende med en læge.</div>';
     }
-    h += '<h2 class="sek">Vejninger</h2>';
+    h += '</div><div class="s-b"><h2 class="sek">Vejninger</h2>';
     /* De nyeste staar fremme; resten foldes sammen, saa skaermen ikke
        vokser med hver vejning. Foldningen huskes, til appen lukkes. */
     var FREMME = 5;
@@ -3188,7 +3207,7 @@ function tegnVaegt(){
     });
     if (k.liste.length > FREMME) h += '</div></details>';
     h += '<p class="fodnote">Tryk på en vejning for at rette eller slette den. '
-      + 'Vægten svinger et kilo eller to hen over døgnet, så det er linjen over uger der siger noget.</p>';
+      + 'Vægten svinger et kilo eller to hen over døgnet, så det er linjen over uger der siger noget.</p></div></div>';
   }
 
   /* Personlig Genveje-fil med egen noegle indbagt. Kun de to kendte konti har
@@ -3385,11 +3404,12 @@ function tegnHistorik(){
     $("rod").innerHTML = h; bindHoved(); bindPeriode(); return;
   }
 
-  h += '<div class="noegletal"><div><b>' + tal(snit) + '</b>snit pr. dag</div>'
+  h += '<div class="spalter"><div class="s-a"><div class="noegletal"><div><b>' + tal(snit) + '</b>snit pr. dag</div>'
     + '<div><b>' + tal(ialt) + '</b>i alt</div>'
     + '<div><b>' + dageIalt + '</b>dage registreret</div></div>'
     + graf(perioder)
-    + '<p class="grafnote">Søjlerne viser snit pr. dag, så målet betyder det samme i alle tre visninger. Seneste ' + navn + '.</p>';
+    + '<p class="grafnote">Søjlerne viser snit pr. dag, så målet betyder det samme i alle tre visninger. Seneste ' + navn + '.</p>'
+    + '</div><div class="s-b">';
 
   perioder.slice().reverse().forEach(function(p){
     if (!p.antal && S.periode !== "dag") return;
@@ -3425,7 +3445,7 @@ function tegnHistorik(){
       h += '</div>';
     }
   });
-  h += '</div>';
+  h += '</div></div></div>';
   $("rod").innerHTML = h;
   bindHoved(); bindPeriode();
   Array.prototype.forEach.call(document.querySelectorAll("[data-valg]"), function(b){
@@ -3485,7 +3505,7 @@ function tegnTrends(){
   if (a.aendring !== null && Math.abs(a.aendring) >= 3){
     retning = (a.aendring > 0 ? "↑ " : "↓ ") + Math.abs(Math.round(a.aendring)) + " %";
   }
-  h += '<div class="noegletal"><div><b>' + tal(a.snit) + '</b>snit pr. dag</div>'
+  h += '<div class="spalter"><div class="s-a"><div class="noegletal"><div><b>' + tal(a.snit) + '</b>snit pr. dag</div>'
     + '<div><b>' + a.antalDage + '</b>dage registreret</div>'
     + (retning ? '<div><b>' + retning + '</b>mod forrige periode</div>' : '')
     + '</div>';
@@ -3515,6 +3535,7 @@ function tegnTrends(){
   if (a.toppe.some(function(t){ return t.ekstrem; }))
     h += '<p class="grafnote" style="margin-top:8px">“Stikker ud” betyder, at måltidet ligger tydeligt over dit eget gennemsnit i perioden — ikke at der er noget galt med det.</p>';
 
+  h += '</div><div class="s-b">';
   /* gengangere */
   if (a.gengangere.length){
     h += '<h2 class="sek">Gengangere</h2>';
@@ -3569,7 +3590,7 @@ function tegnTrends(){
     + '<details class="afsnit"><summary id="sum-tilskud">Kost og tilskud</summary>'
     + '<div id="tilskudsboks"></div></details>'
     + '<h2 class="sek">Dysten</h2><div id="holdboks"></div>'
-    + '</div>';
+    + '</div></div></div>';
   $("rod").innerHTML = h;
   bindHoved(); bindVindue();
   tegnForslag(a);

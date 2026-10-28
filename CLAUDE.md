@@ -109,8 +109,10 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   ved `push`, og klienten læser den ved hver opstart. `?paamindelse=…` og
   `postMessage` er bevaret til desktop/Android og åben app.
 - **iOS ignorerer manifestets `orientation` og `screen.orientation.lock()`.**
-  Appen følger derfor telefonen og tilpasser sig liggende (blok »Liggende«
-  i CSS'en: sikre zoner i siderne, mindre luft i højden). At dreje `body`
+  Appen følger derfor telefonen og skærmbredden (blok »Bred skærm« i
+  CSS'en). Fra 760 px deles hver fane i to spalter via `.spalter` med
+  `.s-a`/`.s-b` (I dag også `.s-c`); smalt står de under hinanden i samme
+  rækkefølge. Ny fane eller nyt afsnit skal placeres i en spalte. At dreje `body`
   tilbage blev rullet tilbage som »forfærdeligt og uelegant«, og skjoldet
   »Vend telefonen« blev skiftet ud med det responsive layout
   (Nikolaj 2026-10-28). Prøv ikke at låse retningen igen.
