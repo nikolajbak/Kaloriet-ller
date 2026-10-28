@@ -49,22 +49,14 @@ html,body{margin:0;padding:0;}
 /* Ingen zoom: manipulation fjerner dobbelttryk-zoom; knibe-zoom stoppes i JS
    (gesturestart), fordi iOS ignorerer user-scalable=no. */
 html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
-/* Kun staaende: manifestet laaser paa Android, men iOS ignorerer orientation.
-   Ligger telefonen ned, drejer drejLaas() hele body 90 grader tilbage, saa
-   appen staar fast i forhold til telefonen. body er da containing block for
-   de faste lag, og #rod ruller i stedet for vinduet. Notch og hjemmelinje
-   ligger altid ved appens top/bund, saa sidernes inset bliver top-padding. */
-html.drejet,html.drejet body{overflow:hidden;height:100%;}
-html.drejet body{position:fixed;left:0;top:0;width:var(--kort);height:var(--lang);
-  padding:0;transform-origin:0 0;transform:translateY(var(--kort)) rotate(-90deg);}
-html.drejet-h body{transform:translateX(var(--lang)) rotate(90deg);}
-html.drejet #rod{height:100%;overflow-y:auto;overscroll-behavior-y:contain;
-  padding-top:max(env(safe-area-inset-left),env(safe-area-inset-right));
-  padding-bottom:calc(104px + env(safe-area-inset-bottom));}
-/* Kameraet foelger verden, ikke appen: videoen drejes tilbage igen. */
-html.drejet .kamera-lag video{position:absolute;left:50%;top:50%;max-width:none;
-  width:var(--lang);height:var(--kort);transform:translate(-50%,-50%) rotate(90deg);}
-html.drejet-h .kamera-lag video{transform:translate(-50%,-50%) rotate(-90deg);}
+/* Kun staaende: manifestet laaser paa Android, men iOS ignorerer orientation,
+   saa en telefon paa tvaers faar et skjold i stedet for appen. */
+#vend{display:none;}
+@media (orientation:landscape) and (max-height:500px) and (pointer:coarse){
+  #vend{display:flex;position:fixed;inset:0;z-index:99999;background:var(--papir);
+    color:var(--daempet);align-items:center;justify-content:center;
+    font-size:15px;text-align:center;padding:24px;}
+}
 body{
   background:var(--papir); color:var(--blaek);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
@@ -450,6 +442,7 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
 </style>
 </head>
 <body>
+<div id="vend">Vend telefonen op igen.</div>
 
 <h1 class="skjul">Kaloriedagbog</h1>
 <div id="rod"></div>
@@ -463,7 +456,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 101;
+var APP_BUILD = 102;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -472,32 +465,6 @@ document.addEventListener("touchmove",function(e){
   if(e.touches.length>1)e.preventDefault();
 },{passive:false});
 try{screen.orientation.lock("portrait").catch(function(){});}catch(e){}
-
-/* Graders drejning af appen i forhold til skaermen: 0, -90 eller 90.
-   Kun telefoner (touch, lav hoejde paa tvaers); se CSS ved html.drejet. */
-var DREJ = 0;
-function drejLaas(){
-  var e = document.documentElement, v = 0;
-  if (matchMedia("(pointer:coarse)").matches && innerWidth > innerHeight && innerHeight <= 500){
-    var o = typeof window.orientation === "number" ? window.orientation
-      : (screen.orientation && screen.orientation.angle === 270 ? -90 : 90);
-    v = o === -90 ? 90 : -90;
-  }
-  DREJ = v;
-  e.classList.toggle("drejet", v !== 0);
-  e.classList.toggle("drejet-h", v === 90);
-  e.style.setProperty("--lang", innerWidth + "px");
-  e.style.setProperty("--kort", innerHeight + "px");
-}
-/* Skaermpunkt (clientX/Y) -> punkt i appens egne koordinater. */
-function iApp(x, y){
-  if (DREJ === -90) return { x: innerHeight - y, y: x };
-  if (DREJ === 90) return { x: y, y: innerWidth - x };
-  return { x: x, y: y };
-}
-drejLaas();
-addEventListener("resize", drejLaas);
-addEventListener("orientationchange", function(){ setTimeout(drejLaas, 150); });
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1437,16 +1404,14 @@ function bindStryg(){
 
     el.addEventListener("touchstart", function(e){
       if (e.touches.length !== 1) return;
-      var p = iApp(e.touches[0].clientX, e.touches[0].clientY);
-      x0 = p.x; y0 = p.y;
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
       raa = 0; laast = null;
       el.classList.add("glider");
     }, { passive: true });
 
     el.addEventListener("touchmove", function(e){
       if (e.touches.length !== 1) return;
-      var p = iApp(e.touches[0].clientX, e.touches[0].clientY);
-      var nx = p.x - x0, ny = p.y - y0;
+      var nx = e.touches[0].clientX - x0, ny = e.touches[0].clientY - y0;
       if (laast === null){
         if (Math.abs(nx) < 10 && Math.abs(ny) < 10) return;
         laast = Math.abs(nx) > Math.abs(ny) * 1.4 ? "vandret" : "lodret";
@@ -2852,7 +2817,7 @@ function bindHoved(){
          den vej man ville skubbe siden med fingeren. */
       S.skiftRetning = FANER.indexOf(ny) > FANER.indexOf(S.skaerm) ? "frem" : "tilbage";
       S.skaerm = ny;
-      S.valgt = null; skjulFortryd(); window.scrollTo(0,0); $("rod").scrollTop = 0; tegn();
+      S.valgt = null; skjulFortryd(); window.scrollTo(0,0); tegn();
     };
   });
 }
@@ -3464,7 +3429,7 @@ function tegnHistorik(){
     b.onclick = function(e){
       e.stopPropagation();
       S.periode = "dag"; S.valgt = b.getAttribute("data-gaadag");
-      window.scrollTo(0, 0); $("rod").scrollTop = 0;
+      window.scrollTo(0, 0);
       tegnHistorik();
     };
   });
@@ -4911,13 +4876,13 @@ function bindTraekNed(id, luk){
 
   panel.addEventListener("touchstart", function(e){
     if (e.touches.length !== 1) return;
-    y0 = iApp(e.touches[0].clientX, e.touches[0].clientY).y; dy = 0; laast = null;
+    y0 = e.touches[0].clientY; dy = 0; laast = null;
     panel.classList.add("glider");
   }, { passive: true });
 
   panel.addEventListener("touchmove", function(e){
     if (e.touches.length !== 1) return;
-    var ny = iApp(e.touches[0].clientX, e.touches[0].clientY).y - y0;
+    var ny = e.touches[0].clientY - y0;
     if (laast === null){
       if (Math.abs(ny) < 8) return;
       /* kun hvis der trækkes nedad fra toppen af arket */
@@ -5871,10 +5836,9 @@ function flyTilListe(stor, id){
   setTimeout(function(){
     lag.classList.add("flyver");
     requestAnimationFrame(function(){ requestAnimationFrame(function(){
-      var b = maal.getBoundingClientRect();
-      var a = iApp(b.left, b.top), c = iApp(b.right, b.bottom);
-      still.style.left = Math.min(a.x, c.x) + "px"; still.style.top = Math.min(a.y, c.y) + "px";
-      still.style.width = Math.abs(c.x - a.x) + "px"; still.style.height = Math.abs(c.y - a.y) + "px";
+      var r = maal.getBoundingClientRect();
+      still.style.left = r.left + "px"; still.style.top = r.top + "px";
+      still.style.width = r.width + "px"; still.style.height = r.height + "px";
       still.style.borderRadius = "8px";
     }); });
   }, 110);

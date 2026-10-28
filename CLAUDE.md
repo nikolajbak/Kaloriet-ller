@@ -108,11 +108,10 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   (WebKit-bug 263687). `sw.js` gemmer derfor notifikationens tekst i IndexedDB
   ved `push`, og klienten læser den ved hver opstart. `?paamindelse=…` og
   `postMessage` er bevaret til desktop/Android og åben app.
-- **iOS ignorerer manifestets `orientation` og `screen.orientation.lock()`**
-  (2026-10-28). Appen holdes stående ved at dreje hele `body` 90° tilbage
-  (`drejLaas()`, `html.drejet`), og så ruller `#rod` i stedet for vinduet.
-  Nye touch-koordinater og `getBoundingClientRect()` skal gennem `iApp()`,
-  ellers bytter vandret og lodret, når telefonen ligger ned.
+- **iOS ignorerer manifestets `orientation` og `screen.orientation.lock()`.**
+  Et skjold (`#vend`) dækker appen, når en telefon ligger ned. At dreje hele
+  `body` tilbage blev prøvet og rullet tilbage: »forfærdeligt og uelegant«
+  (Nikolaj 2026-10-28). Prøv det ikke igen.
 - **Push skal have `renotify: true`**, ellers erstatter dagens notifikation
   gårsdagens lydløst (samme `tag`).
 - **Edge-funktionerne lå kun i Supabase** indtil 2026-10-22, hvor kilden blev
