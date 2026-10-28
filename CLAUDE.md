@@ -109,9 +109,11 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   ved `push`, og klienten læser den ved hver opstart. `?paamindelse=…` og
   `postMessage` er bevaret til desktop/Android og åben app.
 - **iOS ignorerer manifestets `orientation` og `screen.orientation.lock()`.**
-  Et skjold (`#vend`) dækker appen, når en telefon ligger ned. At dreje hele
-  `body` tilbage blev prøvet og rullet tilbage: »forfærdeligt og uelegant«
-  (Nikolaj 2026-10-28). Prøv det ikke igen.
+  Appen følger derfor telefonen og tilpasser sig liggende (blok »Liggende«
+  i CSS'en: sikre zoner i siderne, mindre luft i højden). At dreje `body`
+  tilbage blev rullet tilbage som »forfærdeligt og uelegant«, og skjoldet
+  »Vend telefonen« blev skiftet ud med det responsive layout
+  (Nikolaj 2026-10-28). Prøv ikke at låse retningen igen.
 - **Push skal have `renotify: true`**, ellers erstatter dagens notifikation
   gårsdagens lydløst (samme `tag`).
 - **Edge-funktionerne lå kun i Supabase** indtil 2026-10-22, hvor kilden blev

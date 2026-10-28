@@ -49,14 +49,9 @@ html,body{margin:0;padding:0;}
 /* Ingen zoom: manipulation fjerner dobbelttryk-zoom; knibe-zoom stoppes i JS
    (gesturestart), fordi iOS ignorerer user-scalable=no. */
 html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
-/* Kun staaende: manifestet laaser paa Android, men iOS ignorerer orientation,
-   saa en telefon paa tvaers faar et skjold i stedet for appen. */
-#vend{display:none;}
-@media (orientation:landscape) and (max-height:500px) and (pointer:coarse){
-  #vend{display:flex;position:fixed;inset:0;z-index:99999;background:var(--papir);
-    color:var(--daempet);align-items:center;justify-content:center;
-    font-size:15px;text-align:center;padding:24px;}
-}
+/* Ingen orienteringslaas (iOS ignorerer den): appen foelger telefonen.
+   Kolonnen er max 520px og centreret, saa liggende kraever kun sikre zoner
+   i siderne (kameraoeen) og mindre luft i hoejden; se "Liggende" nederst. */
 body{
   background:var(--papir); color:var(--blaek);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
@@ -438,11 +433,37 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
   font-size:15px;font-variant-numeric:tabular-nums;}
 .stime{font-size:12.5px;color:var(--daempet);}
 .skjul{display:none;}
+/* --- Liggende --- Sikre zoner i siderne gaelder altid (0 i staaende);
+   den lave hoejde paa en telefon paa tvaers faar mindre luft. */
+.indhold,.opsaet,.bund,.fortryd{
+  padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right));}
+.toast{left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));}
+.kamera-luk{right:max(16px,env(safe-area-inset-right));}
+.kamera-manuel{left:max(24px,env(safe-area-inset-left));right:max(24px,env(safe-area-inset-right));
+  max-width:420px;margin:0 auto;}
+.panel{max-height:92dvh;}
+.fejring{overflow-y:auto;}
+@media (orientation:landscape) and (max-height:500px){
+  body{padding-bottom:calc(84px + env(safe-area-inset-bottom));}
+  .indhold{padding-top:calc(12px + env(safe-area-inset-top));}
+  .bund{padding-top:8px;padding-bottom:calc(10px + env(safe-area-inset-bottom));}
+  button.knap{padding:12px;}
+  .fortryd{bottom:calc(70px + env(safe-area-inset-bottom));}
+  .overlay{align-items:flex-end;}
+  .panel{max-height:96dvh;padding-top:22px;}
+  .kamera-status{bottom:calc(76px + env(safe-area-inset-bottom,0px));}
+  .kamera-manuel{bottom:calc(16px + env(safe-area-inset-bottom,0px));}
+  .fejring{justify-content:flex-start;padding-top:20px;padding-bottom:20px;}
+  .fejring .indre{margin:auto 0;}
+  .fejring .tal{font-size:48px;margin:8px 0 4px;}
+  .fejring .linje{margin-top:14px;}
+  .fejring button{margin-top:18px;}
+  .vh-tal{font-size:60px;}
+}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
 </head>
 <body>
-<div id="vend">Vend telefonen op igen.</div>
 
 <h1 class="skjul">Kaloriedagbog</h1>
 <div id="rod"></div>
@@ -456,7 +477,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 102;
+var APP_BUILD = 103;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -464,7 +485,6 @@ var APP_BUILD = 102;
 document.addEventListener("touchmove",function(e){
   if(e.touches.length>1)e.preventDefault();
 },{passive:false});
-try{screen.orientation.lock("portrait").catch(function(){});}catch(e){}
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
