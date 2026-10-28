@@ -176,6 +176,10 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .valg button:last-child{border-right:none;}
 .valg button.aktiv{background:var(--gron);color:var(--paa-gron);font-weight:600;}
 .graf{width:100%;height:auto;display:block;margin:14px 0 4px;}
+.graf-forkl{display:flex;justify-content:center;gap:16px;font-size:12px;color:var(--daempet);margin:2px 0 6px;}
+.graf-forkl i{display:inline-block;width:14px;margin-right:6px;vertical-align:middle;border-top:2px solid var(--gron);}
+.graf-forkl .fk-trend{border-top:1.5px dashed var(--daempet);}
+.graf-forkl .fk-maal{border-top:1.5px dashed var(--graf-maal);}
 .grafnote{font-size:12px;color:var(--daempet);margin:0 0 6px;}
 .raekke{width:100%;text-align:left;background:none;border:none;
   border-bottom:1px solid var(--linje);display:flex;justify-content:space-between;
@@ -440,7 +444,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 96;
+var APP_BUILD = 97;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1117,7 +1121,7 @@ function maalkort(k, tr){
     + '</div>';
 }
 function vaegtgraf(liste, maalvaegt){
-  var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 58;
+  var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 38;
   var bredde = B - venstre - hoejre, hoejdeP = H - top - bund;
   var vaerdier = liste.map(function(x){ return x.kg; });
   if (maalvaegt > 0) vaerdier = vaerdier.concat([maalvaegt]);
@@ -1131,15 +1135,17 @@ function vaegtgraf(liste, maalvaegt){
   function Y(kg){ return top + hoejdeP - (kg - min) / (maks - min) * hoejdeP; }
 
   var s = '<svg class="graf" viewBox="0 0 ' + B + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Vaegtudvikling">';
-  /* Teksterne i hoejre side (seneste vaegt, maal, trend) samles her og
-     placeres til sidst, saa de kan skubbes fra hinanden i stedet for at
-     staa oven i hinanden, naar tallene ligger taet. */
+  /* Tallene i hoejre side (seneste vaegt, maal) staar i samme stil og
+     linjens farve; navnene staar i forklaringen under grafen. De samles her
+     og placeres til sidst, saa de kan skubbes fra hinanden, naar de ligger
+     taet. Trenden faar intet tal her: dens endepunkt ligger naesten altid
+     oven i seneste vaegt, og dens tal (kg/uge) staar over grafen. */
   var etiketter = [];
   if (maalvaegt > 0){
     var ym = Y(maalvaegt);
     s += '<line x1="' + venstre + '" y1="' + ym.toFixed(1) + '" x2="' + (venstre + bredde)
        + '" y2="' + ym.toFixed(1) + '" stroke="var(--graf-maal)" stroke-width="1" stroke-dasharray="4 3"/>';
-    etiketter.push({ y: ym + 3.5, tekst: 'mål <tspan font-weight="700">' + kg(maalvaegt) + '</tspan>', attr: 'font-size="9.5" fill="var(--graf-maal)"' });
+    etiketter.push({ y: ym + 3.5, tekst: kg(maalvaegt), attr: 'fill="var(--graf-maal)"' });
   }
   /* Trend som ret linje fra foerste til seneste vejning — viser retningen
      uden at enkelte udsving trækker kurven rundt. */
@@ -1148,7 +1154,6 @@ function vaegtgraf(liste, maalvaegt){
     var dage = (t1 - t0) / 864e5, ya = Y(tr.start), yb = Y(tr.start + tr.prDag * dage);
     s += '<line x1="' + venstre + '" y1="' + ya.toFixed(1) + '" x2="' + (venstre + bredde)
        + '" y2="' + yb.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="5 3"/>';
-    etiketter.push({ y: yb + 3.5, tekst: 'trend <tspan font-weight="700">' + kg(tr.start + tr.prDag * dage) + '</tspan>', attr: 'font-size="9.5" style="fill:var(--daempet)"' });
   }
   var punkter = liste.map(function(x){ return X(x.dag).toFixed(1) + "," + Y(x.kg).toFixed(1); });
   if (liste.length > 1){
@@ -1161,7 +1166,7 @@ function vaegtgraf(liste, maalvaegt){
        + (sidste ? 4 : 2.4) + '" fill="' + (sidste ? "var(--blaek)" : "var(--gron)") + '"/>';
   });
   var sid = liste[liste.length - 1];
-  etiketter.push({ y: Y(sid.kg) - 9, tekst: kg(sid.kg), attr: 'font-size="10" style="fill:var(--blaek)"' });
+  etiketter.push({ y: Y(sid.kg) + 3.5, tekst: kg(sid.kg), attr: 'style="fill:var(--blaek)"' });
   /* Mindst 11 enheder mellem grundlinjerne: skub nedad fra oeverst, og
      ryger den nederste ud over grafen, skub hele stakken op igen. */
   var luftE = 11, oeverst = 10, nederst = top + hoejdeP + 3.5;
@@ -1173,7 +1178,7 @@ function vaegtgraf(liste, maalvaegt){
     etiketter[j].y = Math.min(etiketter[j].y, j < etiketter.length - 1 ? etiketter[j + 1].y - luftE : nederst);
   }
   etiketter.forEach(function(e){
-    s += '<text x="' + (B - 2) + '" y="' + e.y.toFixed(1) + '" text-anchor="end" ' + e.attr + '>' + e.tekst + '</text>';
+    s += '<text x="' + (B - 2) + '" y="' + e.y.toFixed(1) + '" text-anchor="end" font-size="11" font-weight="700" font-family="Georgia,serif" ' + e.attr + '>' + e.tekst + '</text>';
   });
   s += '<text x="' + venstre + '" y="' + (H - 6) + '" font-size="9" style="fill:var(--daempet)">'
      + tilDato(liste[0].dag).toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + '</text>';
@@ -1181,7 +1186,10 @@ function vaegtgraf(liste, maalvaegt){
     s += '<text x="' + (venstre + bredde) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" style="fill:var(--daempet)">'
        + tilDato(sid.dag).toLocaleDateString("da-DK",{day:"numeric",month:"short"}) + '</text>';
   }
-  return s + '</svg>';
+  s += '</svg><div class="graf-forkl"><span><i class="fk-vaegt"></i>vægt</span>'
+    + (tr ? '<span><i class="fk-trend"></i>trend</span>' : '')
+    + (maalvaegt > 0 ? '<span><i class="fk-maal"></i>mål</span>' : '') + '</div>';
+  return s;
 }
 function kg(n){ return (Math.round(n * 10) / 10).toLocaleString("da-DK", {minimumFractionDigits:1, maximumFractionDigits:1}); }
 /* ================= Alkohol =================
