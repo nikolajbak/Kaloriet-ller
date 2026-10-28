@@ -224,8 +224,22 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .budget b{font-family:Georgia,serif;font-size:17px;font-variant-numeric:tabular-nums;font-weight:400;}
 .budget .rest{color:var(--daempet);font-size:13px;margin-top:3px;}
 .budget .over,.budget .over b{color:var(--ler);}
+.vh-top{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-top:18px;}
+.vh-tal{font-family:Georgia,"Times New Roman",serif;font-size:76px;line-height:.9;
+  letter-spacing:-.03em;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.vh-tal span{font-size:26px;letter-spacing:0;color:var(--daempet);margin-left:6px;}
+.vh-dato{font-size:12px;color:var(--daempet);text-align:right;padding-bottom:6px;}
+.vh-dato b{display:block;font-size:14px;font-weight:600;color:var(--blaek);margin-top:2px;}
+.vh-tre{display:grid;grid-template-columns:repeat(3,1fr);background:var(--kort);
+  border:1px solid var(--linje);border-radius:12px;margin-top:16px;}
+.vh-tre div{padding:11px 12px 10px;font-size:12px;color:var(--daempet);min-width:0;}
+.vh-tre div + div{border-left:1px solid var(--linje);}
+.vh-tre b{display:block;font-family:Georgia,serif;font-size:21px;font-weight:400;color:var(--blaek);
+  font-variant-numeric:tabular-nums;margin-bottom:2px;white-space:nowrap;}
+.vh-tre b.mod{color:var(--gron);}
+.vh-tre b.vaek{color:var(--ler);}
 .maalkort{background:var(--kort);border:1px solid var(--linje);border-radius:12px;
-  padding:14px 14px 13px;margin-top:16px;}
+  padding:14px 14px 13px;margin-top:10px;}
 .mk-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;}
 .mk-top .lbl{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--daempet);}
 .mk-top .txtknap{font-family:Georgia,serif;font-size:22px;color:var(--blaek);
@@ -426,7 +440,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 93;
+var APP_BUILD = 94;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -3069,20 +3083,26 @@ function tegnVaegt(){
     h += '<div class="tom" style="margin-top:18px">Ingen vejninger endnu. Registrér den første, '
       + 'så tegnes kurven her. Én gang om ugen på samme tidspunkt siger mere end hver dag.</div>';
   } else {
-    h += '<div class="hero"><div class="stortal">' + kg(k.nu) + '</div>'
-      + '<div class="maallinje">kg'
-      + (k.maalvaegt > 0 ? '' : ' · <button class="txtknap" id="b-profil">sæt et mål</button>') + '</div>';
-    var linjer = [];
-    if (k.aendring !== null && k.liste.length > 1){
-      linjer.push((k.aendring > 0 ? "+" : "−") + kg(Math.abs(k.aendring)) + " kg siden "
-        + tilDato(k.foerste.dag).toLocaleDateString("da-DK",{day:"numeric",month:"long"}));
-    }
+    var sid = k.liste[k.liste.length - 1], forr = k.liste[k.liste.length - 2];
+    h += '<div class="hero"><div class="vh-top">'
+      + '<div class="vh-tal">' + kg(k.nu) + '<span>kg</span></div>'
+      + '<div class="vh-dato">seneste vejning<b>' + esc(kortDato(sid.dag)) + '</b></div></div>';
     var tr = trend(k.liste);
-    if (tr && k.maalvaegt <= 0){
-      var uge = tr.prDag * 7;
-      linjer.push("trend " + (uge > 0 ? "+" : uge < 0 ? "−" : "") + kg(Math.abs(uge)) + " kg/uge");
+    /* Groen naar aendringen gaar mod maalet, rod naar den gaar vaek;
+       uden maal er tallene neutrale. */
+    function aendr(d, etiket){
+      var retning = !(k.maalvaegt > 0) || Math.abs(d) < 0.05 ? ""
+        : (d < 0) === (k.maalvaegt < k.nu) ? "mod" : "vaek";
+      return '<div><b class="' + retning + '">' + (d > 0.04 ? "+" : d < -0.04 ? "−" : "±") + kg(Math.abs(d)) + '</b>' + esc(etiket) + '</div>';
     }
-    if (linjer.length) h += '<p class="grafnote" style="margin:10px 0 0">' + esc(linjer.join(" · ")) + '</p>';
+    if (k.liste.length > 1){
+      h += '<div class="vh-tre">'
+        + aendr(sid.kg - forr.kg, "siden sidst")
+        + aendr(k.aendring, "siden start")
+        + (tr ? aendr(tr.prDag * 7, "kg/uge i trend") : '<div><b>–</b>trend efter 3 vejninger</div>')
+        + '</div>';
+    }
+    if (!(k.maalvaegt > 0)) h += '<p class="grafnote" style="margin:12px 0 0"><button class="txtknap" id="b-profil">sæt et mål</button> — så regnes det ud, hvornår du når det.</p>';
     if (k.maalvaegt > 0) h += maalkort(k, tr);
     h += '</div>' + vaegtgraf(k.liste, k.maalvaegt);
 
