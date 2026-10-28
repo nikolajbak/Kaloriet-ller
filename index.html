@@ -224,6 +224,25 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .budget b{font-family:Georgia,serif;font-size:17px;font-variant-numeric:tabular-nums;font-weight:400;}
 .budget .rest{color:var(--daempet);font-size:13px;margin-top:3px;}
 .budget .over,.budget .over b{color:var(--ler);}
+.maalkort{background:var(--kort);border:1px solid var(--linje);border-radius:12px;
+  padding:14px 14px 13px;margin-top:16px;}
+.mk-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;}
+.mk-top .lbl{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--daempet);}
+.mk-top .txtknap{font-family:Georgia,serif;font-size:22px;color:var(--blaek);
+  text-decoration-color:var(--linje);padding:10px 0;margin:-10px 0;}
+.mk-rest{font-size:13px;color:var(--daempet);text-align:right;}
+.mk-rest b{font-family:Georgia,serif;font-size:22px;font-weight:400;color:var(--blaek);
+  font-variant-numeric:tabular-nums;}
+.mk-spor{position:relative;height:8px;background:var(--spor);border-radius:4px;margin:12px 0 0;}
+.mk-spor span{position:absolute;left:0;top:0;bottom:0;background:var(--gron);border-radius:4px;
+  transition:width .45s cubic-bezier(.2,.7,.3,1);}
+.mk-ender{display:flex;justify-content:space-between;gap:10px;margin-top:6px;
+  font-size:12px;color:var(--daempet);font-variant-numeric:tabular-nums;}
+.mk-ender .midt{color:var(--gron);font-weight:600;}
+.mk-eta{border-top:1px solid var(--linje);margin-top:12px;padding-top:11px;font-size:13px;color:var(--daempet);}
+.mk-eta b{display:block;font-family:Georgia,serif;font-size:19px;font-weight:400;color:var(--blaek);margin-bottom:2px;}
+.mk-eta.skaev b{color:var(--ler);}
+.mk-eta.naaet b{color:var(--gron);}
 .kort{background:var(--kort);border:1px solid var(--linje);border-radius:12px;
   padding:13px 14px;margin-bottom:9px;}
 .kort .fra{font-weight:600;}
@@ -407,7 +426,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 92;
+var APP_BUILD = 93;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1043,17 +1062,45 @@ function trend(liste){
   return { prDag: a, start: (sy - a * sx) / n };
 }
 /* Fremskriver trenden fra seneste vejning til maalvaegten. Kun et skoen:
-   trenden er en ret linje over hele historikken. */
+   trenden er en ret linje over hele historikken. Giver { titel, tekst, tilstand }. */
 function tidTilMaal(k, tr){
-  if (!tr || k.tilMaal === null || Math.abs(k.tilMaal) < 0.1) return "";
-  if (Math.abs(tr.prDag * 7) < 0.05) return "trenden står stille, så målet rykker ikke nærmere";
+  if (k.tilMaal === null) return null;
+  if (Math.abs(k.tilMaal) < 0.1) return { titel: "Du er ved målet", tekst: "Nu handler det om at blive der.", tilstand: "naaet" };
+  if (!tr) return { titel: "Estimat på vej", tekst: "Kræver mindst 3 vejninger på forskellige dage.", tilstand: "" };
+  var uge = tr.prDag * 7, tempo = (uge > 0 ? "+" : "−") + kg(Math.abs(uge)) + " kg/uge";
+  if (Math.abs(uge) < 0.05) return { titel: "Trenden står stille", tekst: "Med " + tempo + " rykker målet ikke nærmere.", tilstand: "skaev" };
   var dage = (k.maalvaegt - k.nu) / tr.prDag;
-  if (dage <= 0) return "trenden går væk fra målet";
-  if (dage > 3 * 365) return "med den trend er målet mere end 3 år væk";
+  if (dage <= 0) return { titel: "Trenden går væk fra målet", tekst: "Lige nu " + tempo + ".", tilstand: "skaev" };
+  if (dage > 3 * 365) return { titel: "Mere end 3 år væk", tekst: "Med " + tempo + " tager det sin tid.", tilstand: "skaev" };
   var dato = new Date(tilDato(k.liste[k.liste.length - 1].dag).getTime() + dage * 864e5);
   var uger = Math.round(dage / 7);
-  return "mål ca. " + dato.toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })
-    + " (" + (uger < 2 ? "om " + Math.max(1, Math.round(dage)) + " dage" : "om " + uger + " uger") + ")";
+  return {
+    titel: "Ca. " + dato.toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" }),
+    tekst: (uger < 2 ? "om " + Math.max(1, Math.round(dage)) + " dage" : "om " + uger + " uger") + " med " + tempo + ", hvis trenden holder",
+    tilstand: ""
+  };
+}
+/* Kortet med maalet: hvor langt fra start mod maal, hvad der mangler, og
+   hvornaar trenden rammer. */
+function maalkort(k, tr){
+  var start = k.foerste.kg, hele = k.maalvaegt - start, gaaet = k.nu - start;
+  var andel = Math.abs(hele) < 0.05 ? 1 : Math.max(0, Math.min(1, gaaet / hele));
+  var forbi = Math.abs(hele) >= 0.05 && (k.maalvaegt - k.nu) * hele < 0;
+  var naaet = forbi || Math.abs(k.tilMaal) < 0.1;
+  var eta = forbi ? { titel: "Målet er nået", tekst: kg(Math.abs(k.tilMaal)) + " kg forbi målet.", tilstand: "naaet" }
+                  : tidTilMaal(k, tr);
+  return '<div class="maalkort">'
+    + '<div class="mk-top"><span><span class="lbl">Mål</span>'
+    + '<button class="txtknap" id="b-profil">' + kg(k.maalvaegt) + ' kg</button></span>'
+    + (naaet ? '<span class="mk-rest">nået</span>'
+             : '<span class="mk-rest"><b>' + kg(Math.abs(k.tilMaal)) + '</b> kg tilbage</span>') + '</div>'
+    + '<div class="mk-spor" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'
+    + Math.round(andel * 100) + '"><span style="width:' + (andel * 100).toFixed(1) + '%"></span></div>'
+    + '<div class="mk-ender"><span>start ' + kg(start) + '</span>'
+    + '<span class="midt">' + Math.round(andel * 100) + ' % af vejen</span>'
+    + '<span>mål ' + kg(k.maalvaegt) + '</span></div>'
+    + (eta ? '<div class="mk-eta ' + eta.tilstand + '"><b>' + esc(eta.titel) + '</b>' + esc(eta.tekst) + '</div>' : '')
+    + '</div>';
 }
 function vaegtgraf(liste, maalvaegt){
   var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 34;
@@ -3024,26 +3071,19 @@ function tegnVaegt(){
   } else {
     h += '<div class="hero"><div class="stortal">' + kg(k.nu) + '</div>'
       + '<div class="maallinje">kg'
-      + (k.maalvaegt > 0 ? ' · <button class="txtknap" id="b-profil">mål ' + kg(k.maalvaegt) + '</button>'
-                         : ' · <button class="txtknap" id="b-profil">sæt et mål</button>') + '</div>';
+      + (k.maalvaegt > 0 ? '' : ' · <button class="txtknap" id="b-profil">sæt et mål</button>') + '</div>';
     var linjer = [];
     if (k.aendring !== null && k.liste.length > 1){
       linjer.push((k.aendring > 0 ? "+" : "−") + kg(Math.abs(k.aendring)) + " kg siden "
         + tilDato(k.foerste.dag).toLocaleDateString("da-DK",{day:"numeric",month:"long"}));
     }
     var tr = trend(k.liste);
-    if (tr){
+    if (tr && k.maalvaegt <= 0){
       var uge = tr.prDag * 7;
       linjer.push("trend " + (uge > 0 ? "+" : uge < 0 ? "−" : "") + kg(Math.abs(uge)) + " kg/uge");
     }
-    if (k.tilMaal !== null && Math.abs(k.tilMaal) >= 0.1){
-      linjer.push(kg(Math.abs(k.tilMaal)) + " kg " + (k.tilMaal > 0 ? "til målet" : "under målet"));
-    } else if (k.tilMaal !== null){
-      linjer.push("du er ved målet");
-    }
     if (linjer.length) h += '<p class="grafnote" style="margin:10px 0 0">' + esc(linjer.join(" · ")) + '</p>';
-    var eta = tidTilMaal(k, tr);
-    if (eta) h += '<p class="grafnote" style="margin:4px 0 0">' + esc(eta) + '</p>';
+    if (k.maalvaegt > 0) h += maalkort(k, tr);
     h += '</div>' + vaegtgraf(k.liste, k.maalvaegt);
 
     var celler = [];
