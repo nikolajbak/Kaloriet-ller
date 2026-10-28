@@ -41,6 +41,9 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   (nær toppen af `index.html`) med 1 ved hver ændring af filen. Appen bruger
   den til selv at opdage en nyere version (`tjekOpdatering()`/`hentNyVersion()`);
   glemmes det, opdager klienterne ikke ændringen.
+  Klienterne opdaterer selv: HEAD-tjek hvert minut, mens appen er synlig
+  (`tjekOpdateringLet()`), og genindlæser straks — eller så snart intet er i
+  gang (`optaget()`: ark, indstillinger eller fokus i et felt).
 - **Edge-funktioner:** Supabase MCP `deploy_edge_function` med filen fra
   `supabase/functions/<navn>/`. Det MCP ikke kan (fx sletning), klares med
   Supabase CLI (`brew`, logget ind 2026-10-22):

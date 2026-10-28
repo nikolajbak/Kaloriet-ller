@@ -456,7 +456,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 99;
+var APP_BUILD = 100;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -5527,7 +5527,9 @@ function grundadresse(){
 }
 /* Noget i gang, som ikke maa afbrydes af en genindlaesning? */
 function optaget(){
-  return !!(S.ark || S.indst || $("v-overlay"));
+  var f = document.activeElement;
+  return !!(S.ark || S.indst || $("v-overlay")
+    || (f && (f.tagName === "INPUT" || f.tagName === "TEXTAREA")));
 }
 function hentNyVersion(nu){
   location.replace(grundadresse() + "?v=" + encodeURIComponent(nu));
@@ -5535,7 +5537,7 @@ function hentNyVersion(nu){
 function visOpdatering(nu){
   if ($("opdater-bjaelke")) return;
   document.body.insertAdjacentHTML("afterbegin",
-    '<div class="opdater" id="opdater-bjaelke"><span>Version ' + esc(nu) + ' er klar.</span>'
+    '<div class="opdater" id="opdater-bjaelke" data-version="' + esc(nu) + '"><span>Version ' + esc(nu) + ' er klar.</span>'
     + '<button id="b-opdater">Opdatér nu</button></div>');
   $("b-opdater").onclick = function(){ hentNyVersion(nu); };
 }
@@ -5562,6 +5564,29 @@ function tjekOpdatering(tvunget){
     })
     .catch(function(){ return null; });
 }
+
+/* Ny udgivelse naar ud uden at nogen skal trykke. Mens appen er synlig, spoerges
+   hvert minut med et HEAD-kald (ingen krop — index.html er ~300 kB), og kun naar
+   ETag/Last-Modified har flyttet sig, hentes filen og APP_BUILD sammenlignes.
+   Venter en opdatering, fordi noget var i gang, tages den, saa snart det er slut. */
+var sidsteMaerke = null;
+function tjekOpdateringLet(){
+  if (document.visibilityState !== "visible") return;
+  if ($("opdater-bjaelke")){
+    if (!optaget()) hentNyVersion($("opdater-bjaelke").dataset.version);
+    return;
+  }
+  fetch(grundadresse() + "index.html?tjek=" + Date.now(), { method: "HEAD", cache: "no-store" })
+    .then(function(r){
+      if (!r.ok) return;
+      var m = (r.headers.get("etag") || "") + "|" + (r.headers.get("last-modified") || "");
+      if (m === "|") { tjekOpdatering(false); return; }
+      if (sidsteMaerke !== null && m !== sidsteMaerke) tjekOpdatering(true);
+      sidsteMaerke = m;
+    })
+    .catch(function(){});
+}
+setInterval(tjekOpdateringLet, 60 * 1000);
 
 /* --- Opret eller skift kode --- */
 function opsaetKode(){
@@ -5948,6 +5973,7 @@ document.addEventListener("visibilitychange", function(){
   var d = dagKey(new Date());
   if (d !== S.iDag){ S.iDag = d; S.valgt = null; tegn(); }
   tjekOpdatering(false);
+  tjekOpdateringLet();
 });
 
 /* Service worker. Den serverer netvaerk foerst, saa appens eget versionstjek
@@ -6186,6 +6212,7 @@ genkendBruger();
 synkStart();
 (function(){ var f = fejringsdag(); if (f) setTimeout(function(){ visFejring(f); }, 420); })();
 tjekOpdatering(false);
+tjekOpdateringLet();
 </script>
 </body>
 </html>
