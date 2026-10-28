@@ -407,7 +407,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 91;
+var APP_BUILD = 92;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -1041,6 +1041,19 @@ function trend(liste){
   if (n < 3 || Math.abs(naevner) < 1e-9) return null;
   var a = (n * sxy - sx * sy) / naevner;
   return { prDag: a, start: (sy - a * sx) / n };
+}
+/* Fremskriver trenden fra seneste vejning til maalvaegten. Kun et skoen:
+   trenden er en ret linje over hele historikken. */
+function tidTilMaal(k, tr){
+  if (!tr || k.tilMaal === null || Math.abs(k.tilMaal) < 0.1) return "";
+  if (Math.abs(tr.prDag * 7) < 0.05) return "trenden står stille, så målet rykker ikke nærmere";
+  var dage = (k.maalvaegt - k.nu) / tr.prDag;
+  if (dage <= 0) return "trenden går væk fra målet";
+  if (dage > 3 * 365) return "med den trend er målet mere end 3 år væk";
+  var dato = new Date(tilDato(k.liste[k.liste.length - 1].dag).getTime() + dage * 864e5);
+  var uger = Math.round(dage / 7);
+  return "mål ca. " + dato.toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })
+    + " (" + (uger < 2 ? "om " + Math.max(1, Math.round(dage)) + " dage" : "om " + uger + " uger") + ")";
 }
 function vaegtgraf(liste, maalvaegt){
   var B = 340, H = 168, top = 12, bund = 22, venstre = 4, hoejre = 34;
@@ -3029,6 +3042,8 @@ function tegnVaegt(){
       linjer.push("du er ved målet");
     }
     if (linjer.length) h += '<p class="grafnote" style="margin:10px 0 0">' + esc(linjer.join(" · ")) + '</p>';
+    var eta = tidTilMaal(k, tr);
+    if (eta) h += '<p class="grafnote" style="margin:4px 0 0">' + esc(eta) + '</p>';
     h += '</div>' + vaegtgraf(k.liste, k.maalvaegt);
 
     var celler = [];
