@@ -444,7 +444,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 97;
+var APP_BUILD = 98;
 var ventende = {};   /* id -> ventende auto-registrering, se planlaegGenforsoeg() */
 var SKEMA = 5;
 
@@ -3130,15 +3130,23 @@ function tegnVaegt(){
         + '. Under 18,5 regnes som undervægt. Det er dit valg — men det er værd at vende med en læge.</div>';
     }
     h += '<h2 class="sek">Vejninger</h2>';
-    k.liste.slice().reverse().slice(0, 20).forEach(function(x, i, arr){
+    /* De nyeste staar fremme; resten foldes sammen, saa skaermen ikke
+       vokser med hver vejning. Foldningen huskes, til appen lukkes. */
+    var FREMME = 5;
+    k.liste.slice().reverse().forEach(function(x, i){
       var forrige = k.liste[k.liste.length - 2 - i];
       var diff = forrige ? x.kg - forrige.kg : null;
+      if (i === FREMME){
+        h += '<details class="afsnit" id="v-aeldre"' + (S.vejAaben ? " open" : "") + '>'
+          + '<summary>Ældre vejninger · ' + (k.liste.length - FREMME) + '</summary><div>';
+      }
       h += '<button class="raekke" data-vdag="' + x.dag + '"><span class="h">'
         + '<span style="display:block">' + kortDato(x.dag) + '</span>'
         + (diff !== null && Math.abs(diff) >= 0.05
             ? '<span class="u">' + (diff > 0 ? "+" : "−") + kg(Math.abs(diff)) + ' kg</span>' : "")
         + '</span><span class="s">' + kg(x.kg) + '</span></button>';
     });
+    if (k.liste.length > FREMME) h += '</div></details>';
     h += '<p class="fodnote">Tryk på en vejning for at rette eller slette den. '
       + 'Vægten svinger et kilo eller to hen over døgnet, så det er linjen over uger der siger noget.</p>';
   }
@@ -3156,6 +3164,8 @@ function tegnVaegt(){
     S.maal = Math.round(k.tdee); skriv(K_MAAL, String(S.maal)); synkMaerk("#indst"); tegn();
   };
   $("b-vejning").onclick = function(){ aabnVejning(S.iDag); };
+  var va = $("v-aeldre");
+  if (va){ bindFoldning($("rod")); va.addEventListener("toggle", function(){ S.vejAaben = va.open; }); }
   Array.prototype.forEach.call(document.querySelectorAll("[data-vdag]"), function(b){
     b.onclick = function(){ aabnVejning(b.getAttribute("data-vdag")); };
   });
