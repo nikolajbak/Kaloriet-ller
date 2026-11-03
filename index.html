@@ -494,7 +494,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 104;
+var APP_BUILD = 105;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -3890,6 +3890,8 @@ function tegnKonto(){
         .catch(function(e){
           skriv_besked(/already registered|User already/i.test(e.message)
             ? "Der findes allerede en konto på den mail — tryk Log ind i stedet."
+            : /signups? not allowed/i.test(e.message)
+            ? "Appen er kun for inviterede. Bed Nikolaj om en invitation."
             : e.message, true);
           k.textContent = "Opret en ny konto"; k.disabled = false;
         });

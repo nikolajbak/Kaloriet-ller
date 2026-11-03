@@ -30,7 +30,7 @@ sh tools/gemini-noegle.sh                   # brugeren lægger GEMINI_API_KEY i 
 | Gemini-proxy med appens fælles nøgle | `supabase/functions/gemini/` |
 | Aften-check-in | `supabase/functions/daglig-paamindelse/` |
 | Medicin-påmindelse morgen/aften (Gemini-genereret) | `supabase/functions/medicin-paamindelse/` |
-| Vægt: Zepp Life → Apple Sundhed → Shortcut → webhook | `supabase/functions/modtag-vaegt/`; `genvej-*.shortcut` |
+| Vægt: Zepp Life → Apple Sundhed → Shortcut → webhook | `supabase/functions/modtag-vaegt/` (genvejen ligger ikke i repoet; den bærer en personlig nøgle) |
 
 Cron (pg_cron): `daglig-paamindelse` kl. 18:00 UTC; `medicin-paamindelse-0700`
 hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
@@ -65,6 +65,13 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   `push_abonnenter`.
 - `hemmeligheder` er **en VIEW over `vault.decrypted_secrets`** — skriv aldrig
   til den; brug `vault.create_secret()`.
+- **Kun inviterede** (Nikolaj 2026-11-03: intet offentligt): Auth-tilmelding er slået fra (`disable_signup`), så
+  knappen »Opret« i appen afvises af serveren. En ny bruger inviteres fra Supabase. Interne SQL-funktioner
+  (`saet_hemmelighed`, `udgiv_nu`, `rul_tilbage`, `ryd_gamle_resultater`, `kald_*`, `saet_aendret`) kan kun kaldes af
+  `postgres`/`service_role`; `find_bruger`, `er_ven`, `mit_hold` kun af `authenticated`. Ændringen ligger kun i
+  databasen (ingen migrationsfiler i repoet).
+- Vægtnøglerne (`vaegt_adgang`) skiftes med `sh tools/skift-vaegtnoegler.sh`, som du selv kører. De gamle stod i
+  `genvej-*.shortcut` i repoet til 2026-11-03.
 - `GEMINI_API_KEY` (Supabase-secret) lægges ind af brugeren med
   `sh tools/gemini-noegle.sh`; Claude håndterer den ikke selv. Lokale nøgler:
   `kd:gemini-noegle`, `kd:udbyder` i browserens storage.
