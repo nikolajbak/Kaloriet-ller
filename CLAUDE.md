@@ -29,7 +29,8 @@ sh tools/gemini-noegle.sh                   # brugeren lægger GEMINI_API_KEY i 
 | Offline-cache og push (`push`/`notificationclick`) | `sw.js`, `manifest.webmanifest` |
 | Gemini-proxy med appens fælles nøgle | `supabase/functions/gemini/` |
 | Aften-check-in | `supabase/functions/daglig-paamindelse/` |
-| Medicin-påmindelse morgen/aften (Gemini-genereret) | `supabase/functions/medicin-paamindelse/` |
+| Medicin-påmindelse morgen/aften (Gemini-genereret) + én fast gentagelse 2 t efter | `supabase/functions/medicin-paamindelse/` |
+| Medicinliste, afkrydsning, strimlen på »I dag«, tal på app-ikonet | `index.html` blok »Medicin og kosttilskud« (`normMedicin`, `medDag`, `medhuskHtml`, `tegnMedicinIndst`); badge fra push i `sw.js` |
 | Vægt: Zepp Life → Apple Sundhed → Shortcut → webhook | `supabase/functions/modtag-vaegt/` (genvejen ligger ikke i repoet; den bærer en personlig nøgle) |
 
 Cron (pg_cron): `daglig-paamindelse` kl. 18:00 UTC; `medicin-paamindelse-0700`
@@ -62,14 +63,20 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
 
 - Tabeller: `dagbog` (måltider pr. dag/bruger), `dagbog_indstillinger` (jsonb
   `data`: `kaekhed`, `navn`, `maal`, `medicin` …), `vaegtmaalinger`,
-  `push_abonnenter`.
+  `push_abonnenter`, `medicin_taget` (afkrydsning pr. medicindøgn og punkt, RLS på egne rækker;
+  `supabase/migrations/20261110120000_medicin_taget.sql`).
+- `data.medicin` = `{ morgen/aften: { aktiv, klokkeslaet, sidst_sendt, gentaget }, punkter: [{ id, navn, dosis,
+  slot, dage (ISO 1–7), paakraevet }] }`. Den gamle fritekst `beskrivelse` migreres til punkter af `normMedicin()`;
+  serveren læser stadig `beskrivelse`, hvis `punkter` mangler.
+- **Afkrydsninger ligger ikke i `data`** (Nikolaj 2026-11-10): både `medicin-paamindelse` og andre enheder skriver
+  hele `data` tilbage og ville overskrive dem. Klienten har en lokal kø (`kd:medicin-koe`) til uden net.
 - `hemmeligheder` er **en VIEW over `vault.decrypted_secrets`** — skriv aldrig
   til den; brug `vault.create_secret()`.
 - **Kun inviterede** (Nikolaj 2026-11-03: intet offentligt): Auth-tilmelding er slået fra (`disable_signup`), så
   knappen »Opret« i appen afvises af serveren. En ny bruger inviteres fra Supabase. Interne SQL-funktioner
   (`saet_hemmelighed`, `udgiv_nu`, `rul_tilbage`, `ryd_gamle_resultater`, `kald_*`, `saet_aendret`) kan kun kaldes af
   `postgres`/`service_role`; `find_bruger`, `er_ven`, `mit_hold` kun af `authenticated`. Ændringen ligger kun i
-  databasen (ingen migrationsfiler i repoet).
+  databasen (kun `medicin_taget` har en migrationsfil i repoet).
 - Vægtnøglerne (`vaegt_adgang`) skiftes med `sh tools/skift-vaegtnoegler.sh`, som du selv kører. De gamle stod i
   `genvej-*.shortcut` i repoet til 2026-11-03.
 - `GEMINI_API_KEY` (Supabase-secret) lægges ind af brugeren med
@@ -98,6 +105,12 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   `MAKS_BEVAEGELSE`, `STABIL_KRAV` er **ukalibrerede gæt**.
 
 ## Faldgruber
+
+- **Medicindøgnet løber 06:00–05:59** (Nikolaj 2026-11-10): en påmindelse »for i dag« aktiveres kl. 06, og kl. 03
+  hører til gårsdagen. Reglen står to steder — `medDag()` i `index.html` og i `medicin-paamindelse` — ret begge.
+  Regn på kalenderdele, ikke »nu minus 6 timer«; ellers flytter sommertid skiftet en time.
+- **Tallet på app-ikonet kan ikke skifte kl. 06 af sig selv:** der findes ingen stille push på iOS. Det sættes,
+  når appen åbnes, og når en medicin-push lander (`badge` i payloaden → `sw.js`).
 
 - **Dansk locale bruger punktum i klokkeslæt:** `Intl.DateTimeFormat('da-DK')`
   giver `"07.42"`. Regn aldrig på en formateret streng — brug

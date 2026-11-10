@@ -477,6 +477,66 @@ details.afsnit[open] > summary::after{transform:rotate(45deg);}
   .fejring .linje{margin-top:14px;}
   .fejring button{margin-top:18px;}
 }
+/* --- Medicin: strimlen paa »I dag« og listen i indstillinger --- */
+.medhusk{background:var(--note-bg);border:1px solid var(--note-kant);border-radius:14px;
+  margin-top:16px;padding:4px 4px 4px 14px;overflow:hidden;
+  transition:opacity .25s ease-out,max-height .3s cubic-bezier(.22,.7,.3,1),margin .3s,padding .3s;max-height:640px;}
+.medhusk.ny{animation:fold .28s cubic-bezier(.22,.7,.3,1);}
+.medhusk.vaek{opacity:0;max-height:0;margin-top:0;padding-top:0;padding-bottom:0;border-width:0;}
+.mh-top{display:flex;justify-content:space-between;align-items:center;min-height:34px;padding-right:10px;}
+.mh-tit{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--varm-txt);}
+.medhusk .txtknap{padding:8px 2px;margin:-8px 0;}
+.medhusk.faerdig .mh-tit{color:var(--god-txt);}
+.mh-punkt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;
+  border-top:1px solid var(--note-kant);font:inherit;color:var(--blaek);cursor:pointer;
+  padding:11px 10px 11px 0;min-height:48px;max-height:80px;overflow:hidden;
+  transition:max-height .28s cubic-bezier(.22,.7,.3,1),opacity .22s ease-out,padding .28s,border-color .28s;}
+.mh-punkt.vaek{max-height:0;min-height:0;opacity:0;padding-top:0;padding-bottom:0;border-top-color:transparent;}
+.mh-ring{flex:none;width:24px;height:24px;border-radius:50%;border:2px solid var(--okker);
+  display:flex;align-items:center;justify-content:center;
+  transition:background-color .2s ease-out,border-color .2s ease-out,transform .2s cubic-bezier(.3,1.6,.5,1);}
+.mh-ring svg{width:15px;height:15px;fill:none;stroke:var(--paa-gron);stroke-width:2.6;
+  stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:22;
+  transition:stroke-dashoffset .26s ease-out .08s;}
+.mh-punkt:active .mh-ring{transform:scale(.88);}
+.mh-punkt.taget .mh-ring{background:var(--gron);border-color:var(--gron);transform:scale(1.06);}
+.mh-punkt.taget .mh-ring svg{stroke-dashoffset:0;}
+.mh-punkt.taget .mh-navn{color:var(--daempet);}
+.mh-navn{flex:1;min-width:0;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mh-navn small{font-size:13px;font-weight:400;color:var(--daempet);margin-left:4px;}
+.mh-naar{flex:none;font-size:12px;color:var(--daempet);}
+.mh-punkt.senere .mh-ring{border-color:var(--note-kant);}
+.mh-punkt.senere .mh-navn{color:var(--daempet);}
+.mi-liste{border-top:1px solid var(--linje);}
+.mi-raekke{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;
+  border-bottom:1px solid var(--linje);padding:12px 2px;font:inherit;color:var(--blaek);cursor:pointer;min-height:56px;}
+.mi-h{flex:1;min-width:0;}
+.mi-navn{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mi-navn small{font-weight:400;font-size:13px;color:var(--daempet);margin-left:3px;}
+.mi-u{display:block;font-size:13px;color:var(--daempet);margin-top:1px;}
+.mi-maerke{flex:none;font-size:12px;padding:3px 9px;border-radius:999px;background:var(--varm-bg);color:var(--varm-txt);}
+.mi-pil{flex:none;color:var(--daempet);font-size:20px;line-height:1;}
+.mi-rediger{background:var(--kort);border:1px solid var(--linje);border-radius:12px;padding:14px;margin:10px 0;
+  animation:fold .2s ease-out;}
+.mi-valgfri{color:var(--daempet);opacity:.8;font-size:12px;}
+.mi-slot{margin:0;}
+.mi-dage{display:flex;gap:6px;}
+.mi-dage button{flex:1;min-width:0;height:40px;border-radius:10px;border:1px solid var(--linje);background:none;
+  font:inherit;font-size:14px;color:var(--daempet);cursor:pointer;padding:0;
+  transition:background-color .15s ease-out,color .15s ease-out;}
+.mi-dage button.paa{background:var(--gron);border-color:var(--gron);color:var(--paa-gron);font-weight:600;}
+.mi-status{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;
+  padding:10px 12px;border-radius:10px;background:var(--flade);font-size:14px;}
+.mi-status .txtknap{padding:8px 2px;margin:-8px 0;}
+.mi-knapper{display:flex;justify-content:space-between;margin-top:6px;}
+.kort button.mini.mi-slet,button.mini.mi-slet{color:var(--ler);}
+.mi-push{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:12px;
+  padding:10px 2px;border-bottom:1px solid var(--linje);}
+.mi-push-top{display:flex;align-items:center;gap:11px;font-weight:600;cursor:pointer;}
+.mi-push-top input{width:auto;flex:none;transform:scale(1.25);margin:0;}
+.mi-push input[type=time]{width:auto;}
+.mi-push input[type=time]:disabled{opacity:.45;}
+.mi-push-u{grid-column:1 / -1;margin:6px 0 0 32px;font-size:13px;color:var(--daempet);}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
 </head>
@@ -494,7 +554,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 105;
+var APP_BUILD = 106;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -522,7 +582,8 @@ var P_DAG = "kd:dag:", K_NOEGLE = "kd:noegle", K_MAAL = "kd:maal",
     K_KOMMENTARER = "kd:sete-kommentarer", K_GREB = "kd:greb",
     K_UDBYDER = "kd:udbyder", K_GNOEGLE = "kd:gemini-noegle", K_GAUTO = "kd:gemini-auto",
     K_SYNKTID = "kd:synk-tid", K_SYNKKOE = "kd:synk-koe", K_SYNKSTAND = "kd:synk-stand",
-    K_MEDICIN = "kd:medicin", K_ALKOHOL = "kd:alkohol";
+    K_MEDICIN = "kd:medicin", K_ALKOHOL = "kd:alkohol",
+    K_MEDTAGET = "kd:medicin-taget", K_MEDKOE = "kd:medicin-koe";
 var reserve = {};
 
 function laes(k){
@@ -939,19 +1000,7 @@ var S = {
   get kaek(){ return this.kaekhed !== "fra"; },
   autoreg: laes(K_AUTOREG) === "1",
   alkohol: laes(K_ALKOHOL) !== "0",
-  medicin: (function(){
-    var m;
-    try { m = JSON.parse(laes(K_MEDICIN) || "{}") || {}; } catch(e){ m = {}; }
-    if (!m.morgen && !m.aften){
-      // Migrering fra tidligere flad form { aktiv, beskrivelse } -> morgen-slot
-      m = m.aktiv || m.beskrivelse
-        ? { morgen: { aktiv: !!m.aktiv, klokkeslaet: "07:00", beskrivelse: m.beskrivelse || "" },
-            aften:  { aktiv: false, klokkeslaet: "20:00", beskrivelse: "" } }
-        : { morgen: { aktiv: false, klokkeslaet: "07:00", beskrivelse: "" },
-            aften:  { aktiv: false, klokkeslaet: "20:00", beskrivelse: "" } };
-    }
-    return m;
-  })(),
+  medicin: null,  /* saettes af normMedicin() lige efter S, se »Medicin og kosttilskud« */
   skaerm: "idag",
   skiftRetning: null,
   bruger: null,
@@ -2696,17 +2745,444 @@ function tone(){
           + 'sundhedsprædiken — heller ikke forklædt som en vits.');
 }
 
-/* Paamindelse om medicin/kosttilskud, med et morgen- og et aften-slot, hver
-   med eget klokkeslaet. Selve teksten genereres IKKE her laengere — serveren
-   (medicin-paamindelse edge function) genererer den friskt hver gang, via
-   Gemini, ud fra ugedag, aarstid og dagbogen, saa den ikke lyder ens fra dag
-   til dag. Klienten gemmer kun aktiv/klokkeslaet/beskrivelse pr. slot og
-   tilbyder en valgfri forhaandsvisning, saa man kan se stilen med det samme. */
-function medicinGem(slot, aktiv, klokkeslaet, beskrivelse){
-  S.medicin = S.medicin || {};
-  S.medicin[slot] = { aktiv: !!aktiv, klokkeslaet: klokkeslaet || (slot === "aften" ? "20:00" : "07:00"), beskrivelse: beskrivelse || "" };
+/* ================= Medicin og kosttilskud =================
+   S.medicin = {
+     morgen: { aktiv, klokkeslaet, sidst_sendt?, gentaget? },   push-slot
+     aften:  { … },
+     punkter: [{ id, navn, dosis, slot:"morgen"|"aften", dage:[1..7], paakraevet }]
+   }
+   dage er ISO-ugedage (1 = mandag). Et paakraevet punkt staar oeverst paa
+   »I dag« og som tal paa app-ikonet, til det er krydset af.
+   MEDICINDOEGNET loeber 06:00–05:59 (Nikolaj 2026-11-10): kl. 03 om natten
+   hoerer til gaarsdagen. Samme regel i medicin-paamindelse — ret begge steder.
+   Afkrydsninger ligger i tabellen medicin_taget, IKKE i indstillingerne:
+   serveren og andre enheder skriver hele data-objektet tilbage og ville
+   ellers kunne overskrive en afkrydsning. Push-teksten genereres paa serveren
+   (Gemini) ud fra punkternes navne. */
+var MED_DOEGNSTART = 6;
+var MED_ALLE_DAGE = [1,2,3,4,5,6,7];
+var MED_DAGNAVN = ["", "ma", "ti", "on", "to", "fr", "lø", "sø"];
+function medStdTid(slot){ return slot === "aften" ? "20:00" : "07:00"; }
+function nytMedId(){ return "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function normDage(d){
+  if (!Array.isArray(d)) return MED_ALLE_DAGE.slice();
+  var ud = MED_ALLE_DAGE.filter(function(x){ return d.indexOf(x) >= 0; });
+  return ud.length ? ud : MED_ALLE_DAGE.slice();
+}
+/* Den gamle fritekst (»Magnesium, D-vitamin«) deles i enkelte punkter. */
+function delBeskrivelse(t){
+  return String(t || "").split(/\s*(?:,|;|\n|\+|\bog\b)\s*/i)
+    .map(function(s){ return s.trim(); }).filter(Boolean);
+}
+function normMedicin(raa){
+  var m;
+  try { m = raa && typeof raa === "object" ? JSON.parse(JSON.stringify(raa)) : {}; } catch(e){ m = {}; }
+  var migreret = false;
+  if (!m.morgen && !m.aften && (m.aktiv || m.beskrivelse)){
+    /* Den allerfoerste, flade form { aktiv, beskrivelse } */
+    m = { morgen: { aktiv: !!m.aktiv, klokkeslaet: "07:00", beskrivelse: m.beskrivelse || "" } };
+  }
+  ["morgen", "aften"].forEach(function(s){
+    var x = m[s] || {};
+    m[s] = Object.assign({}, x, {
+      aktiv: !!x.aktiv,
+      klokkeslaet: /^\d\d:\d\d$/.test(x.klokkeslaet || "") ? x.klokkeslaet : medStdTid(s)
+    });
+  });
+  if (!Array.isArray(m.punkter)){
+    m.punkter = [];
+    ["morgen", "aften"].forEach(function(s){
+      delBeskrivelse(m[s].beskrivelse).forEach(function(n){
+        m.punkter.push({ id: nytMedId(), navn: n, dosis: "", slot: s, dage: MED_ALLE_DAGE.slice(), paakraevet: false });
+      });
+    });
+    migreret = true;
+  }
+  ["morgen", "aften"].forEach(function(s){ delete m[s].beskrivelse; });
+  m.punkter = m.punkter.filter(function(p){ return p && p.id; }).map(function(p){
+    return { id: String(p.id), navn: String(p.navn || ""), dosis: String(p.dosis || ""),
+             slot: p.slot === "aften" ? "aften" : "morgen", dage: normDage(p.dage), paakraevet: !!p.paakraevet };
+  });
+  Object.defineProperty(m, "migreret", { value: migreret, enumerable: false });
+  return m;
+}
+S.medicin = (function(){
+  var r;
+  try { r = JSON.parse(laes(K_MEDICIN) || "{}"); } catch(e){ r = {}; }
+  var m = normMedicin(r);
+  /* Gemmes straks, saa punkternes id'er ligger fast — ellers faar de nye id'er
+     ved hver opstart, og afkrydsningerne peger paa ingenting */
+  if (m.migreret) skriv(K_MEDICIN, JSON.stringify(m));
+  return m;
+})();
+function medGemAlt(){
   skriv(K_MEDICIN, JSON.stringify(S.medicin));
   synkMaerk("#indst");
+  opdaterBadge();
+}
+function medicinGem(slot, aktiv, klokkeslaet){
+  S.medicin[slot] = Object.assign({}, S.medicin[slot], {
+    aktiv: !!aktiv, klokkeslaet: klokkeslaet || S.medicin[slot].klokkeslaet || medStdTid(slot) });
+  medGemAlt();
+}
+
+/* --- Medicindoegnet --- */
+function medDag(d){
+  d = d || new Date();
+  if (d.getHours() < MED_DOEGNSTART) d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+  return dagKey(d);
+}
+function isoUgedag(dag){ var w = tilDato(dag).getDay(); return w === 0 ? 7 : w; }
+function medMinutter(hhmm){ var p = String(hhmm || "0:0").split(":"); return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0); }
+/* Minutter siden doegnets start kl. 06, saa 01:00 kommer efter 23:00 */
+function medDoegnMin(min){ return (min - MED_DOEGNSTART * 60 + 1440) % 1440; }
+function medPunkterIDag(dag, kunPaakraevet){
+  var u = isoUgedag(dag);
+  return S.medicin.punkter.filter(function(p){
+    return p.navn.trim() && p.dage.indexOf(u) >= 0 && (!kunPaakraevet || p.paakraevet);
+  }).sort(function(a, b){ return (a.slot === "aften") - (b.slot === "aften"); });
+}
+function medDageTekst(d){
+  if (d.length === 7) return "hver dag";
+  if (d.join() === "1,2,3,4,5") return "hverdage";
+  if (d.join() === "6,7") return "weekend";
+  return d.map(function(x){ return MED_DAGNAVN[x]; }).join(", ");
+}
+
+/* --- Afkrydsning: lokalt med det samme, i skyen naar der er forbindelse --- */
+function medTagetAlle(){ try { return JSON.parse(laes(K_MEDTAGET) || "{}") || {}; } catch(e){ return {}; } }
+function medTaget(dag){ return medTagetAlle()[dag || medDag()] || {}; }
+function medKoe(){ try { return JSON.parse(laes(K_MEDKOE) || "[]") || []; } catch(e){ return []; } }
+function medMangler(dag){
+  dag = dag || medDag();
+  var t = medTaget(dag);
+  return medPunkterIDag(dag, true).filter(function(p){ return !t[p.id]; });
+}
+function medSaetTaget(dag, id, taget){
+  var a = medTagetAlle();
+  a[dag] = a[dag] || {};
+  if (taget) a[dag][id] = Date.now(); else delete a[dag][id];
+  var graense = dagKey(new Date(Date.now() - 14 * 864e5));
+  Object.keys(a).forEach(function(k){ if (k < graense) delete a[k]; });
+  skriv(K_MEDTAGET, JSON.stringify(a));
+  var koe = medKoe().filter(function(o){ return !(o.dag === dag && o.punkt === id); });
+  koe.push({ dag: dag, punkt: id, taget: !!taget, kl: new Date().toISOString() });
+  skriv(K_MEDKOE, JSON.stringify(koe));
+  opdaterBadge();
+  medSynkSend();
+}
+var medSynkIGang = false;
+function medSynkSend(){
+  if (medSynkIGang || !session() || !navigator.onLine) return Promise.resolve();
+  var koe = medKoe();
+  if (!koe.length) return Promise.resolve();
+  medSynkIGang = true;
+  var id = minId();
+  return koe.reduce(function(kaede, o){
+    return kaede.then(function(){
+      var kald = o.taget
+        ? sbRest("medicin_taget?on_conflict=bruger_id,dag,punkt", {
+            method: "POST", headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify([{ bruger_id: id, dag: o.dag, punkt: o.punkt, taget_kl: o.kl }]) })
+        : sbRest("medicin_taget?bruger_id=eq." + encodeURIComponent(id) + "&dag=eq." + o.dag
+                 + "&punkt=eq." + encodeURIComponent(o.punkt), { method: "DELETE" });
+      return kald.then(function(){
+        skriv(K_MEDKOE, JSON.stringify(medKoe().filter(function(x){
+          return !(x.dag === o.dag && x.punkt === o.punkt && x.kl === o.kl); })));
+      });
+    });
+  }, Promise.resolve()).catch(function(){}).then(function(){ medSynkIGang = false; });
+}
+/* Skyen er sandheden for i gaar og i dag; det, der endnu ligger i koeen,
+   laegges ovenpaa, saa en afkrydsning uden net ikke forsvinder igen. */
+function medSynkHent(){
+  if (!session() || !navigator.onLine) return Promise.resolve(false);
+  var idag = medDag(), igaar = dagKey(new Date(tilDato(idag).getTime() - 864e5 + 3600e3 * 12));
+  return sbRest("medicin_taget?select=dag,punkt,taget_kl&dag=gte." + igaar).then(function(r){
+    var a = medTagetAlle(), foer = JSON.stringify(a);
+    a[igaar] = {}; a[idag] = {};
+    (r || []).forEach(function(x){
+      if (!a[x.dag]) a[x.dag] = {};
+      a[x.dag][x.punkt] = Date.parse(x.taget_kl) || Date.now();
+    });
+    medKoe().forEach(function(o){
+      a[o.dag] = a[o.dag] || {};
+      if (o.taget) a[o.dag][o.punkt] = Date.parse(o.kl) || Date.now(); else delete a[o.dag][o.punkt];
+    });
+    skriv(K_MEDTAGET, JSON.stringify(a));
+    return JSON.stringify(a) !== foer;
+  }).catch(function(){ return false; });
+}
+
+/* --- Tal paa app-ikonet (Badging API; iOS 16.4+ som hjemmeskaerms-app) --- */
+function opdaterBadge(){
+  try {
+    if (!("setAppBadge" in navigator)) return;
+    var n = medMangler().length;
+    (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(function(){});
+  } catch(e){}
+}
+/* Er alt i et slot krydset af, fjernes slottets notifikation fra laaseskaermen */
+function medLukNotifikationer(){
+  if (!("serviceWorker" in navigator)) return;
+  var mangler = medMangler();
+  navigator.serviceWorker.ready.then(function(reg){
+    if (!reg.getNotifications) return;
+    ["morgen", "aften"].forEach(function(slot){
+      if (mangler.some(function(p){ return p.slot === slot; })) return;
+      reg.getNotifications({ tag: "medicin-" + slot }).then(function(ns){
+        ns.forEach(function(n){ n.close(); });
+      }).catch(function(){});
+    });
+  }).catch(function(){});
+}
+
+/* --- Strimlen oeverst paa »I dag« --- */
+var medFortryd = null, medFortrydTimer = null, medAnimerer = 0;
+function medhuskHtml(){
+  var dag = medDag();
+  var t = medTaget(dag);
+  var mangler = medPunkterIDag(dag, true).filter(function(p){ return !t[p.id]; });
+  var fortryd = medFortryd && medFortryd.dag === dag && medFortryd.til > Date.now();
+  if (!mangler.length && !fortryd) return "";
+  var nu = new Date(), nuMin = medDoegnMin(nu.getHours() * 60 + nu.getMinutes());
+  var aftenMin = medDoegnMin(medMinutter(S.medicin.aften.klokkeslaet));
+  var h = '<section class="medhusk' + (mangler.length ? "" : " faerdig") + '" id="medhusk" '
+    + 'aria-label="Medicin og kosttilskud i dag">'
+    + '<div class="mh-top"><span class="mh-tit">'
+    + (mangler.length ? "Husk i dag" : "Alt er taget i dag") + '</span>'
+    + (fortryd ? '<button class="txtknap" id="mh-fortryd">Fortryd</button>' : '')
+    + '</div>';
+  mangler.forEach(function(p){
+    var senere = p.slot === "aften" && nuMin < aftenMin;
+    h += '<button class="mh-punkt' + (senere ? " senere" : "") + '" data-medpunkt="' + esc(p.id) + '" '
+      + 'aria-pressed="false" aria-label="' + esc(p.navn) + (p.dosis ? ", " + esc(p.dosis) : "")
+      + ' — tryk når det er taget">'
+      + '<span class="mh-ring" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5.5 12.5l4 4L18.5 7.5"/></svg></span>'
+      + '<span class="mh-navn">' + esc(p.navn) + (p.dosis ? ' <small>' + esc(p.dosis) + '</small>' : '') + '</span>'
+      + '<span class="mh-naar">' + (p.slot === "aften" ? (senere ? "i aften" : "aften") : "morgen") + '</span>'
+      + '</button>';
+  });
+  return h + '</section>';
+}
+function bindMedhusk(){
+  var boks = $("medhusk");
+  if (!boks) return;
+  Array.prototype.forEach.call(boks.querySelectorAll("[data-medpunkt]"), function(b){
+    b.onclick = function(){
+      if (b.classList.contains("taget")) return;
+      var id = b.getAttribute("data-medpunkt"), dag = medDag();
+      b.classList.add("taget");
+      b.setAttribute("aria-pressed", "true");
+      medSaetTaget(dag, id, true);
+      medFortryd = { dag: dag, id: id, til: Date.now() + 6000 };
+      medLukNotifikationer();
+      if (medFortrydTimer) clearTimeout(medFortrydTimer);
+      medFortrydTimer = setTimeout(function(){ medFortryd = null; opdaterMedhusk(); }, 6100);
+      medAnimerer++;
+      setTimeout(function(){ b.classList.add("vaek"); }, 480);
+      setTimeout(function(){ medAnimerer--; opdaterMedhusk(); }, 800);
+    };
+  });
+  var f = $("mh-fortryd");
+  if (f) f.onclick = function(){
+    if (!medFortryd) return;
+    medSaetTaget(medFortryd.dag, medFortryd.id, false);
+    medFortryd = null;
+    if (medFortrydTimer) clearTimeout(medFortrydTimer);
+    opdaterMedhusk();
+  };
+}
+/* Tegner kun strimlen om — resten af »I dag« (og et felt i fokus) roeres ikke */
+function opdaterMedhusk(){
+  if (medAnimerer > 0 || S.skaerm !== "idag") return;
+  var gl = $("medhusk"), ny = medhuskHtml();
+  if (gl && ny){ gl.outerHTML = ny; }
+  else if (gl){
+    gl.classList.add("vaek");
+    setTimeout(function(){ if (gl.parentNode) gl.parentNode.removeChild(gl); }, 320);
+  } else if (ny){
+    var sa = document.querySelector(".spalter.idag .s-a");
+    if (sa){ sa.insertAdjacentHTML("afterbegin", ny); $("medhusk").classList.add("ny"); }
+  }
+  bindMedhusk();
+}
+/* Kl. 06 skifter doegnet, og ved aftenens klokkeslaet holder aftenpunkterne
+   op med at vaere daempede. Timeren er kun for en aaben app; iOS fryser den i
+   baggrunden, saa visibilitychange tager resten. */
+var medSkiftTimer = null;
+function planlaegMedSkift(){
+  if (medSkiftTimer) clearTimeout(medSkiftTimer);
+  var nu = new Date(), kandidater = [];
+  [MED_DOEGNSTART * 60, medMinutter(S.medicin.aften.klokkeslaet)].forEach(function(min){
+    var t = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate(), Math.floor(min / 60), min % 60, 2);
+    if (t <= nu) t = new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1, t.getHours(), t.getMinutes(), 2);
+    kandidater.push(t - nu);
+  });
+  medSkiftTimer = setTimeout(function(){
+    opdaterBadge(); opdaterMedhusk(); planlaegMedSkift();
+  }, Math.min.apply(null, kandidater));
+}
+function medFrisk(){
+  opdaterBadge(); opdaterMedhusk(); planlaegMedSkift();
+  medSynkSend().then(medSynkHent).then(function(rort){
+    if (rort){ opdaterBadge(); opdaterMedhusk(); medLukNotifikationer(); }
+  });
+}
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "visible") medFrisk();
+});
+window.addEventListener("online", function(){ medSynkSend(); });
+
+/* --- Indstillinger: listen og push-tiderne --- */
+var medAaben = null;  /* id paa det punkt, der er foldet ud til redigering */
+function medPunkt(id){ return S.medicin.punkter.filter(function(p){ return p.id === id; })[0]; }
+function medKlok(ms){
+  var d = new Date(ms);
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+function medRedigerHtml(p){
+  var dag = medDag(), iDag = p.dage.indexOf(isoUgedag(dag)) >= 0, taget = medTaget(dag)[p.id];
+  return '<div class="mi-rediger" data-medkort="' + esc(p.id) + '">'
+    + '<span class="lbl" style="margin-top:2px">Navn</span>'
+    + '<input id="mi-navn" value="' + esc(p.navn) + '" placeholder="fx D-vitamin" autocomplete="off" enterkeyhint="done">'
+    + '<span class="lbl">Dosis <span class="mi-valgfri">valgfri</span></span>'
+    + '<input id="mi-dosis" value="' + esc(p.dosis) + '" placeholder="fx 20 µg eller 2 tabletter" autocomplete="off" enterkeyhint="done">'
+    + '<span class="lbl">Hvornår</span>'
+    + '<div class="valg mi-slot" role="radiogroup" aria-label="Hvornår">'
+    + [["morgen","Morgen"],["aften","Aften"]].map(function(a){
+        return '<button type="button" role="radio" aria-checked="' + (p.slot === a[0]) + '" data-slot="' + a[0] + '"'
+          + (p.slot === a[0] ? ' class="aktiv"' : '') + '>' + a[1] + '</button>';
+      }).join("") + '</div>'
+    + '<span class="lbl">Dage</span>'
+    + '<div class="mi-dage" role="group" aria-label="Dage">'
+    + MED_ALLE_DAGE.map(function(x){
+        var paa = p.dage.indexOf(x) >= 0;
+        return '<button type="button" data-dag="' + x + '" aria-pressed="' + paa + '"' + (paa ? ' class="paa"' : '') + '>'
+          + MED_DAGNAVN[x] + '</button>';
+      }).join("") + '</div>'
+    + '<div class="tjek"><input type="checkbox" id="mi-pk"' + (p.paakraevet ? " checked" : "") + '>'
+    + '<label for="mi-pk">Skal krydses af</label></div>'
+    + '<p class="grafnote" style="margin:5px 0 0 32px">Står øverst på »I dag« og som tal på app-ikonet fra kl. 06, '
+    + 'til du har krydset det af.</p>'
+    + (p.paakraevet && iDag
+        ? '<div class="mi-status">' + (taget
+            ? '<span>Taget i dag kl. ' + medKlok(taget) + '</span><button type="button" class="txtknap" id="mi-fortryd">Fortryd</button>'
+            : '<span>Ikke taget i dag endnu</span><button type="button" class="txtknap" id="mi-tag">Markér som taget</button>')
+          + '</div>'
+        : '')
+    + '<div class="mi-knapper"><button type="button" class="mini" id="mi-faerdig">Færdig</button>'
+    + '<button type="button" class="mini mi-slet" id="mi-slet">Slet</button></div>'
+    + '</div>';
+}
+function medRaekkeHtml(p){
+  return '<button type="button" class="mi-raekke" data-medaaben="' + esc(p.id) + '">'
+    + '<span class="mi-h"><span class="mi-navn">' + esc(p.navn || "Uden navn")
+    + (p.dosis ? ' <small>' + esc(p.dosis) + '</small>' : '') + '</span>'
+    + '<span class="mi-u">' + (p.slot === "aften" ? "Aften" : "Morgen") + ' · ' + medDageTekst(p.dage) + '</span></span>'
+    + (p.paakraevet ? '<span class="mi-maerke">Krydses af</span>' : '')
+    + '<span class="mi-pil" aria-hidden="true">›</span></button>';
+}
+function tegnMedicinIndst(){
+  var boks = $("medboks");
+  if (!boks) return;
+  var m = S.medicin, push = !!laes(K_PUSH);
+  var h = '<p class="grafnote" style="margin:4px 0 12px">Det, du tager fast. Markér det, der ikke må glemmes, '
+    + 'som <b>skal krydses af</b> — så bliver det hængende på forsiden, til det er taget.</p>';
+  h += m.punkter.length
+    ? '<div class="mi-liste">' + m.punkter.map(function(p){
+        return p.id === medAaben ? medRedigerHtml(p) : medRaekkeHtml(p);
+      }).join("") + '</div>'
+    : '<div class="tom" style="padding:16px 16px">Intet på listen endnu.</div>';
+  h += '<button type="button" class="knap sek" id="mi-ny" style="margin-top:10px">Tilføj medicin eller tilskud</button>';
+
+  h += '<div class="gruppelabel" style="margin-top:24px">Push-påmindelser</div>';
+  if (!push){
+    h += '<p class="grafnote" style="margin:6px 2px 0">Slå notifikationer til under »Konto og notifikationer« for at få en '
+      + 'besked på klokkeslættet. Afkrydsningen på forsiden virker uden.</p>';
+  } else {
+    ["morgen", "aften"].forEach(function(slot){
+      var s = m[slot], navne = medPunkterIDag(medDag(), false).filter(function(p){ return p.slot === slot; })
+        .map(function(p){ return p.navn; });
+      var alleNavne = m.punkter.filter(function(p){ return p.slot === slot && p.navn.trim(); }).map(function(p){ return p.navn; });
+      h += '<div class="mi-push">'
+        + '<label class="mi-push-top"><input type="checkbox" id="mi-push-' + slot + '"' + (s.aktiv ? " checked" : "") + '>'
+        + '<span>' + (slot === "aften" ? "Aften" : "Morgen") + '</span></label>'
+        + '<input type="time" id="mi-tid-' + slot + '" value="' + esc(s.klokkeslaet) + '"' + (s.aktiv ? "" : " disabled") + '>'
+        + '<p class="mi-push-u">' + (alleNavne.length
+            ? esc(alleNavne.join(", ")) + (navne.length < alleNavne.length ? ' — kun på de valgte dage' : '')
+            : 'Intet på listen ' + (slot === "aften" ? "om aftenen" : "om morgenen") + ' — så sendes intet.') + '</p>'
+        + '</div>';
+    });
+    h += '<p class="grafnote" style="margin:8px 2px 0">Er noget, der skal krydses af, ikke taget to timer efter, '
+      + 'kommer én påmindelse mere.</p>';
+  }
+  boks.innerHTML = h;
+  bindMedicinIndst();
+}
+function bindMedicinIndst(){
+  var boks = $("medboks");
+  function gentegn(fokus){
+    tegnMedicinIndst();
+    if (fokus && $(fokus)) $(fokus).focus();
+  }
+  Array.prototype.forEach.call(boks.querySelectorAll("[data-medaaben]"), function(b){
+    b.onclick = function(){ medRydTomme(); medAaben = b.getAttribute("data-medaaben"); gentegn(); };
+  });
+  $("mi-ny").onclick = function(){
+    medRydTomme();
+    var p = { id: nytMedId(), navn: "", dosis: "", slot: new Date().getHours() >= 15 ? "aften" : "morgen",
+              dage: MED_ALLE_DAGE.slice(), paakraevet: false };
+    S.medicin.punkter.push(p);
+    medAaben = p.id;
+    gentegn("mi-navn");
+  };
+  ["morgen", "aften"].forEach(function(slot){
+    var c = $("mi-push-" + slot), t = $("mi-tid-" + slot);
+    if (c) c.onchange = function(){ medicinGem(slot, c.checked, t.value); t.disabled = !c.checked; };
+    if (t) t.onchange = function(){ if (t.value) medicinGem(slot, c.checked, t.value); };
+  });
+
+  var p = medAaben && medPunkt(medAaben);
+  if (!p) return;
+  function gem(){ medGemAlt(); opdaterMedhusk(); }
+  var navn = $("mi-navn"), dosis = $("mi-dosis");
+  navn.oninput = function(){ p.navn = navn.value; };
+  dosis.oninput = function(){ p.dosis = dosis.value; };
+  navn.onchange = dosis.onchange = function(){ p.navn = navn.value.trim(); p.dosis = dosis.value.trim(); gem(); };
+  [navn, dosis].forEach(function(f){
+    f.onkeydown = function(e){ if (e.key === "Enter"){ e.preventDefault(); f.blur(); } };
+  });
+  Array.prototype.forEach.call(boks.querySelectorAll(".mi-slot [data-slot]"), function(b){
+    b.onclick = function(){ p.slot = b.getAttribute("data-slot"); gem(); gentegn(); };
+  });
+  Array.prototype.forEach.call(boks.querySelectorAll(".mi-dage [data-dag]"), function(b){
+    b.onclick = function(){
+      var x = Number(b.getAttribute("data-dag")), i = p.dage.indexOf(x);
+      if (i >= 0){ if (p.dage.length === 1) return; p.dage.splice(i, 1); }
+      else p.dage = normDage(p.dage.concat([x]));
+      gem(); gentegn();
+    };
+  });
+  $("mi-pk").onchange = function(){ p.paakraevet = $("mi-pk").checked; gem(); gentegn(); };
+  var tag = $("mi-tag"), fortryd = $("mi-fortryd");
+  if (tag) tag.onclick = function(){ medSaetTaget(medDag(), p.id, true); medLukNotifikationer(); opdaterMedhusk(); gentegn(); };
+  if (fortryd) fortryd.onclick = function(){ medSaetTaget(medDag(), p.id, false); opdaterMedhusk(); gentegn(); };
+  $("mi-faerdig").onclick = function(){
+    p.navn = navn.value.trim(); p.dosis = dosis.value.trim();
+    medAaben = null; medRydTomme(); gem(); gentegn();
+  };
+  $("mi-slet").onclick = function(){
+    if (p.navn.trim() && !confirm("Slet " + p.navn.trim() + " fra listen?")) return;
+    S.medicin.punkter = S.medicin.punkter.filter(function(x){ return x.id !== p.id; });
+    medAaben = null; gem(); gentegn();
+  };
+}
+/* Et punkt, der aldrig fik et navn, forsvinder igen, naar man gaar videre */
+function medRydTomme(){
+  var foer = S.medicin.punkter.length;
+  S.medicin.punkter = S.medicin.punkter.filter(function(p){ return p.navn.trim(); });
+  if (S.medicin.punkter.length !== foer) medGemAlt();
 }
 
 /* De officielle danske kostraad og Sundhedsstyrelsens tilskudsanbefalinger.
@@ -2891,7 +3367,7 @@ function tegnHoved(){
   var stortTekst = S.maal <= 0 ? "kalorier i dag"
     : over ? "kcal over dagens mål" : "kcal tilbage i dag";
   var h = '<div class="indhold">' + hoved(langDato(S.iDag))
-    + '<div class="spalter idag"><div class="s-a">'
+    + '<div class="spalter idag"><div class="s-a">' + medhuskHtml()
     + '<div class="hero"><div class="stortal' + (over ? " over" : "") + '">' + tal(stort) + '</div>'
     + '<div class="maallinje' + (over ? " over" : "") + '">' + stortTekst + '</div>'
     + '<div class="baand" role="progressbar" aria-label="Spist af dagens mål" aria-valuemin="0" aria-valuemax="'
@@ -2973,6 +3449,8 @@ function tegnHoved(){
 
   $("rod").innerHTML = h;
   bindHoved();
+  bindMedhusk();
+  opdaterBadge();
   $("b-maal").onclick = function(){ S.indst = true; tegn(); };
   $("b-foto").onclick = function(){ if (S.autoreg) startKamera(); else $("fil").click(); };
   $("b-skriv").onclick = function(){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); };
@@ -3793,32 +4271,6 @@ function tegnTilskud(a){
 }
 
 /* --- Kontoafsnittet i indstillinger --- */
-function medicinSlotKort(slot, titel){
-  var s = (S.medicin && S.medicin[slot]) || { aktiv:false, klokkeslaet: slot === "aften" ? "20:00" : "07:00", beskrivelse:"" };
-  var tid = s.klokkeslaet || (slot === "aften" ? "20:00" : "07:00");
-  return '<div class="kort">'
-    + '<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer">'
-    +   '<span style="display:flex;align-items:center;gap:11px">'
-    +     '<input type="checkbox" id="konto-med-' + slot + '-aktiv" style="width:auto;flex:none;transform:scale(1.25);margin:0"'
-    +     (s.aktiv ? " checked" : "") + '>'
-    +     '<span style="font-weight:600">' + titel + '</span>'
-    +   '</span>'
-    +   (s.aktiv
-        ? '<input type="time" id="konto-med-' + slot + '-tid" value="' + esc(tid) + '" style="width:auto;flex:none">'
-        : '<span class="raekke u" style="padding:0">kl. ' + esc(tid) + '</span>')
-    + '</label>'
-    + (s.aktiv
-        ? '<textarea id="konto-med-' + slot + '-besk" rows="2" style="margin-top:10px" placeholder="Fx: Magnesium, D-vitamin">'
-          + esc(s.beskrivelse || "") + '</textarea>'
-        : '')
-    + '</div>';
-}
-function medicinBlok(){
-  return '<div class="gruppelabel">Medicin/kosttilskud-påmindelser</div>'
-    + (laes(K_PUSH)
-        ? (medicinSlotKort("morgen", "Morgenpåmindelse") + medicinSlotKort("aften", "Aftenpåmindelse"))
-        : '<p class="grafnote">Kræver at notifikationer er slået til ovenfor.</p>');
-}
 function tegnKonto(){
   var boks = $("kontoboks");
   if (!boks) return;
@@ -3937,36 +4389,19 @@ function tegnKonto(){
         ? '<button class="knap sek" id="konto-pushfra" style="margin-top:12px">Slå notifikationer fra</button>'
         : '<button class="knap sek" id="konto-pushtil" style="margin-top:12px">Slå notifikationer til</button>')
     + '<button class="knap sek" id="konto-ud" style="margin-top:8px">Log ud</button>'
-    + medicinBlok()
     + '<div id="konto-besked"></div>';
 
   var pt = $("konto-pushtil");
   if (pt) pt.onclick = function(){
     pt.textContent = "Beder om lov …"; pt.disabled = true;
-    slaaPushTil().then(function(){ tegnKonto(); skriv_besked("Notifikationer er slået til på denne telefon."); })
+    slaaPushTil().then(function(){ tegnKonto(); tegnMedicinIndst(); skriv_besked("Notifikationer er slået til på denne telefon."); })
       .catch(function(e){ skriv_besked(e.message, true); pt.textContent = "Slå notifikationer til"; pt.disabled = false; });
   };
   var pf = $("konto-pushfra");
   if (pf) pf.onclick = function(){
     pf.disabled = true;
-    slaaPushFra().then(function(){ tegnKonto(); skriv_besked("Notifikationer er slået fra."); });
+    slaaPushFra().then(function(){ tegnKonto(); tegnMedicinIndst(); skriv_besked("Notifikationer er slået fra."); });
   };
-  ["morgen", "aften"].forEach(function(slot){
-    var ma = $("konto-med-" + slot + "-aktiv");
-    var mt = $("konto-med-" + slot + "-tid");
-    var mb = $("konto-med-" + slot + "-besk");
-    var gemt = (S.medicin && S.medicin[slot]) || {};
-    if (ma) ma.onchange = function(){
-      medicinGem(slot, ma.checked, (mt || {}).value || gemt.klokkeslaet, (mb || {}).value || gemt.beskrivelse);
-      tegnKonto(); // felterne folder ud/ind, så panelet skal gentegnes
-    };
-    if (mt) mt.onchange = function(){
-      medicinGem(slot, ma.checked, mt.value, (mb || {}).value);
-    };
-    if (mb) mb.onchange = function(){
-      medicinGem(slot, ma.checked, (mt || {}).value, mb.value);
-    };
-  });
   $("konto-ud").onclick = function(){ logUd(); tegnKonto(); };
 }
 
@@ -5053,6 +5488,7 @@ function tegnIndstillinger(){
           + '<button class="knap fare" id="s-laasfra" style="margin-top:8px">Slå kodelås fra</button>'
         : '<button class="knap sek" id="s-laastil" style="margin-top:12px">Slå kodelås til</button>')
     + '</div></details>'
+    + '<details class="afsnit" id="med-afsnit"><summary>Medicin og kosttilskud</summary><div id="medboks"></div></details>'
     + '<details class="afsnit"><summary>Konto og notifikationer</summary><div>'
     + '<div id="kontoboks"></div>'
     + '</div></details>'
@@ -5127,6 +5563,7 @@ function tegnIndstillinger(){
   bindFoldning($("ind-overlay"));
   bindTraekNed("ind-overlay", luk);
   tegnKonto();
+  medAaben = null; medRydTomme(); tegnMedicinIndst();
   var lt = $("s-laastil"); if (lt) lt.onclick = function(){ opsaetKode(); };
   var lf = $("s-laasfra"); if (lf) lf.onclick = function(){
     if (!confirm("Slå kodelåsen fra? API-nøglen bliver derefter liggende ukrypteret på telefonen.")) return;
@@ -5161,7 +5598,7 @@ function tegnIndstillinger(){
     S.maal = 2000; S.skaerm = "idag"; S.valgt = null; S.indst = false;
     aktivNoegle = null; aktivKode = null;
     S.navn = ""; S.kaekhed = "hudløs"; S.profil = {};
-    S.medicin = {};
+    S.medicin = normMedicin({});
     S.forslag = null; S.forslagStatus = "tom";
     var o = $("ind-overlay"); if (o) o.remove();
     tegn();
@@ -6214,7 +6651,7 @@ function synkHent(){
           if (d.profil){ S.profil = d.profil; skriv(K_PROFIL, JSON.stringify(d.profil)); }
           if (d.maal){ S.maal = d.maal; skriv(K_MAAL, String(d.maal)); }
           if (d.navn){ S.navn = d.navn; skriv(K_BRUGER, d.navn); }
-          if (d.medicin){ S.medicin = d.medicin; skriv(K_MEDICIN, JSON.stringify(d.medicin)); }
+          if (d.medicin){ S.medicin = normMedicin(d.medicin); skriv(K_MEDICIN, JSON.stringify(S.medicin)); if (S.medicin.migreret) synkMaerk("#indst"); }
           if (d.kaekhed){ S.kaekhed = d.kaekhed; skriv(K_KAEK, d.kaekhed); }
           if (typeof d.alkohol === "boolean"){ S.alkohol = d.alkohol; skriv(K_ALKOHOL, d.alkohol ? "1" : "0"); }
           rort = true;
@@ -6230,6 +6667,7 @@ function synkHent(){
    Er telefonen tom — ny enhed eller ryddet lager — henter den bare ned. */
 function synkStart(){
   if (!session()) return;
+  if (S.medicin.migreret) synkMaerk("#indst");
   if (!laes(K_SYNKTID)){
     dageMedData().forEach(function(d){ synkMaerk(d); });
     synkMaerk("#indst");
@@ -6253,6 +6691,7 @@ tegn();
 haandterGenvej();
 genkendBruger();
 synkStart();
+medFrisk();
 (function(){ var f = fejringsdag(); if (f) setTimeout(function(){ visFejring(f); }, 420); })();
 tjekOpdatering(false);
 tjekOpdateringLet();

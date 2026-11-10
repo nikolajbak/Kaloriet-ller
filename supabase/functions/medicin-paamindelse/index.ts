@@ -1,4 +1,13 @@
-// Kaloriedagbog · påmindelse (medicin/kosttilskud) · v8
+// Kaloriedagbog · påmindelse (medicin/kosttilskud) · v9
+//
+// v9 (2026-11-10): enkelte punkter (data.medicin.punkter) med ugedage og
+// »skal krydses af«. Afkrydsning ligger i tabellen medicin_taget. Teksten
+// bygges af dagens punkter i slottet; er alt i slottet påkrævet og allerede
+// taget, sendes intet. To timer efter slottets klokkeslæt kommer én fast
+// gentagelse (intet modelkald), hvis noget påkrævet stadig mangler
+// (data.medicin.<slot>.gentaget). Push bærer `badge` = antal manglende, så
+// sw.js kan sætte tallet på app-ikonet. MEDICINDØGNET løber 06:00–05:59 —
+// samme regel som medDag() i index.html; ret begge steder.
 //
 // Kaldes ubetinget hvert 15. minut af cron. Hver bruger kan have et
 // morgen- og/eller aften-slot, hver med eget klokkeslæt; funktionen finder
@@ -244,10 +253,34 @@ async function genererGodkendtTekst(
   return null;
 }
 
+/* ---------- Medicindøgn og punkter ---------- */
+
+const DOEGNSTART = 6;
+/* Medicindøgnets dato i København: før kl. 06 hører det til i går.
+   Regnes på kalenderdele, ikke ved at trække 6 timer fra, så sommertid ikke
+   flytter skiftet en time to gange om året. */
+function medDag(dele: Record<string, string>): { dag: string; ugedag: number } {
+  let y = Number(dele.year), m = Number(dele.month), d = Number(dele.day);
+  if (Number(dele.hour) < DOEGNSTART) {
+    const g = new Date(Date.UTC(y, m - 1, d - 1));
+    y = g.getUTCFullYear(); m = g.getUTCMonth() + 1; d = g.getUTCDate();
+  }
+  const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return { dag: y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0"), ugedag: w === 0 ? 7 : w };
+}
+
+interface Punkt { id: string; navn?: string; dosis?: string; slot?: string; dage?: number[]; paakraevet?: boolean }
+function punktTekst(p: Punkt): string {
+  return (p.navn || "").trim() + (p.dosis && p.dosis.trim() ? " (" + p.dosis.trim() + ")" : "");
+}
+function opremsning(liste: string[]): string {
+  return liste.length <= 1 ? (liste[0] || "") : liste.slice(0, -1).join(", ") + " og " + liste[liste.length - 1];
+}
+
 /* ---------- Hovedflow ---------- */
 
 type Slot = "morgen" | "aften";
-interface SlotData { aktiv?: boolean; klokkeslaet?: string; beskrivelse?: string; sidst_sendt?: string }
+interface SlotData { aktiv?: boolean; klokkeslaet?: string; beskrivelse?: string; sidst_sendt?: string; gentaget?: string }
 
 Deno.serve(async () => {
   const gNoegle = await hemmelighed("gemini_noegle");
@@ -264,74 +297,112 @@ Deno.serve(async () => {
 
   const dele = koebenhavnDele();
   const nuBucket = floor15FraHM(Number(dele.hour), Number(dele.minute));
-  const idagDato = koebenhavnDato(0);
+  const { dag, ugedag } = medDag(dele);
 
-  type Kandidat = { bruger_id: string; slot: Slot; navn: string; kaekhed: string; beskrivelse: string };
+  /* Hvad er krydset af i dette medicindøgn — ét kald for alle brugere */
+  const { data: tagetRaekker } = await db.from("medicin_taget").select("bruger_id, punkt").eq("dag", dag);
+  const taget = new Set((tagetRaekker ?? []).map((r) => r.bruger_id + "|" + r.punkt));
+
+  type Kandidat = {
+    bruger_id: string; slot: Slot; navn: string; kaekhed: string; beskrivelse: string;
+    gentagelse: boolean; mangler: string[]; badge: number | null;
+  };
   const kandidater: Kandidat[] = [];
   for (const r of indstillinger ?? []) {
-    const m = (r.data?.medicin ?? {}) as Partial<Record<Slot, SlotData>>;
-    (Object.keys(m) as Slot[]).forEach((slot) => {
+    const m = (r.data?.medicin ?? {}) as Partial<Record<Slot, SlotData>> & { punkter?: Punkt[] };
+    const harPunkter = Array.isArray(m.punkter);
+    const iDag = (m.punkter ?? []).filter((p) =>
+      (p.navn || "").trim() && (!Array.isArray(p.dage) || !p.dage.length || p.dage.includes(ugedag)));
+    const manglerAlle = iDag.filter((p) => p.paakraevet && !taget.has(r.bruger_id + "|" + p.id));
+    const badge = harPunkter ? manglerAlle.length : null;
+
+    (["morgen", "aften"] as Slot[]).forEach((slot) => {
       const s = m[slot];
-      if (!s?.aktiv || !s.beskrivelse || !s.klokkeslaet) return;
-      if (floor15FraStreng(s.klokkeslaet) !== nuBucket) return;
-      if (s.sidst_sendt === idagDato) return;
-      kandidater.push({ bruger_id: r.bruger_id, slot, navn: r.data.navn || "", kaekhed: r.data.kaekhed || "hudløs", beskrivelse: s.beskrivelse });
+      if (!s?.aktiv || !s.klokkeslaet) return;
+      const slotMin = floor15FraStreng(s.klokkeslaet);
+      const faelles = { bruger_id: r.bruger_id, slot, navn: r.data.navn || "", kaekhed: r.data.kaekhed || "hudløs", badge };
+      const slotPunkter = iDag.filter((p) => (p.slot === "aften" ? "aften" : "morgen") === slot);
+      const slotMangler = manglerAlle.filter((p) => (p.slot === "aften" ? "aften" : "morgen") === slot);
+
+      if (slotMin === nuBucket && s.sidst_sendt !== dag) {
+        let beskrivelse = "";
+        if (harPunkter) {
+          /* Er alt i slottet påkrævet og allerede krydset af, er der intet at minde om */
+          const relevante = slotPunkter.filter((p) => !p.paakraevet || !taget.has(r.bruger_id + "|" + p.id));
+          beskrivelse = opremsning(relevante.map(punktTekst));
+        } else beskrivelse = (s.beskrivelse || "").trim();
+        if (beskrivelse) kandidater.push({ ...faelles, beskrivelse, gentagelse: false, mangler: [] });
+      }
+      if ((slotMin + 120) % 1440 === nuBucket && s.gentaget !== dag && slotMangler.length) {
+        kandidater.push({ ...faelles, beskrivelse: "", gentagelse: true, mangler: slotMangler.map(punktTekst) });
+      }
     });
   }
 
   if (kandidater.length === 0) {
-    return new Response(JSON.stringify({ sendt: 0, note: "ingen slots rammer dette vindue" }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ sendt: 0, dag, note: "ingen slots rammer dette vindue" }), { headers: { "Content-Type": "application/json" } });
   }
 
-  const modeller = await modelListe(gNoegle);
-  const ugedag = ugedagDansk(), sæson = aarstid(Number(dele.month)), vinkel = dagensVinkel();
+  const skalBrugeModel = kandidater.some((k) => !k.gentagelse);
+  const modeller = skalBrugeModel ? await modelListe(gNoegle) : [];
+  const ugedagTekst = ugedagDansk(), sæson = aarstid(Number(dele.month)), vinkel = dagensVinkel();
 
   const idListe = [...new Set(kandidater.map((k) => k.bruger_id))];
   const { data: abonnenter } = await db.from("push_abonnenter").select("endpoint, p256dh, auth, bruger_id").in("bruger_id", idListe);
 
   let sendt = 0, fejlet = 0, fjernet = 0, forkastet = 0;
-  const eksempler: Array<{ bruger_id: string; slot: Slot; tekst: string; model: string }> = [];
+  const eksempler: Array<{ bruger_id: string; slot: Slot; tekst: string; model: string; gentagelse: boolean }> = [];
 
   for (const k of kandidater) {
     const erMorgen = k.slot === "morgen";
-    const [kcal, vaegtNote] = await Promise.all([
-      hentKcal(k.bruger_id, erMorgen ? -1 : 0),
-      hentVaegtudvikling(k.bruger_id)
-    ]);
-
-    const kontekst = "KONTEKST: det er " + ugedag + " i " + sæson + ", og det er " + (erMorgen ? "morgen" : "aften") + "."
-      + (kcal !== null
-          ? (erMorgen ? " I går blev der spist " + kcal + " kcal." : " Der er indtil videre spist " + kcal + " kcal i dag.")
-          : (erMorgen ? " Der er ikke registreret noget i går." : " Der er ikke registreret noget i dag endnu."))
-      + (vaegtNote ? " " + vaegtNote.charAt(0).toUpperCase() + vaegtNote.slice(1) + "." : "");
-
-    const grundprompt = tone(k.kaekhed, k.navn) + "\n\n" + kontekst + "\n\n"
-      + "VINKEL TIL DENNE PÅMINDELSE: " + vinkel + "\n\n"
-      + "OPGAVE: Skriv ÉN kort påmindelse (højst 18 ord) der minder " + (k.navn || "brugeren")
-      + " om at tage det følgende: \"" + k.beskrivelse + "\"\n\n"
-      + "REGEL, UDEN UNDTAGELSE: du kender IKKE noget klokkeslæt for dette — kun beskrivelsen ovenfor "
-      + "gør. Står der intet klokkeslæt i beskrivelsen, må du ALDRIG nævne et, hverken som tal (\"kl. 8\") "
-      + "eller udskrevet (\"klokken otte\") — heller ikke som gæt, antagelse eller for sjov. Det samme "
-      + "gælder doser og ekstra piller/kosttilskud, der ikke står i beskrivelsen. "
-      + "Ingen sundhedsråd, ingen bivirkningsadvarsler. Kun selve påmindelsen, i tonen ovenfor.\n\n"
-      + "FORMAT: svar KUN med gyldig JSON: {\"tekst\": \"...\"}";
-
+    let titel = erMorgen ? "God morgen" : "God aften";
     let tekst = "", brugtModel = "fallback";
-    try {
-      const svar = await genererGodkendtTekst(gNoegle, modeller, grundprompt, k.beskrivelse);
-      if (svar){ tekst = svar.tekst; brugtModel = svar.model; }
-      else { tekst = (erMorgen ? "God morgen — husk: " : "God aften — husk: ") + k.beskrivelse; forkastet++; }
-    } catch {
-      tekst = (erMorgen ? "God morgen — husk: " : "God aften — husk: ") + k.beskrivelse;
-    }
-    eksempler.push({ bruger_id: k.bruger_id, slot: k.slot, tekst, model: brugtModel });
 
+    if (k.gentagelse) {
+      titel = "Ikke krydset af endnu";
+      tekst = opremsning(k.mangler) + " — tryk, når det er taget.";
+      brugtModel = "fast";
+    } else {
+      const [kcal, vaegtNote] = await Promise.all([
+        hentKcal(k.bruger_id, erMorgen ? -1 : 0),
+        hentVaegtudvikling(k.bruger_id)
+      ]);
+
+      const kontekst = "KONTEKST: det er " + ugedagTekst + " i " + sæson + ", og det er " + (erMorgen ? "morgen" : "aften") + "."
+        + (kcal !== null
+            ? (erMorgen ? " I går blev der spist " + kcal + " kcal." : " Der er indtil videre spist " + kcal + " kcal i dag.")
+            : (erMorgen ? " Der er ikke registreret noget i går." : " Der er ikke registreret noget i dag endnu."))
+        + (vaegtNote ? " " + vaegtNote.charAt(0).toUpperCase() + vaegtNote.slice(1) + "." : "");
+
+      const grundprompt = tone(k.kaekhed, k.navn) + "\n\n" + kontekst + "\n\n"
+        + "VINKEL TIL DENNE PÅMINDELSE: " + vinkel + "\n\n"
+        + "OPGAVE: Skriv ÉN kort påmindelse (højst 18 ord) der minder " + (k.navn || "brugeren")
+        + " om at tage det følgende: \"" + k.beskrivelse + "\"\n\n"
+        + "REGEL, UDEN UNDTAGELSE: du kender IKKE noget klokkeslæt for dette — kun beskrivelsen ovenfor "
+        + "gør. Står der intet klokkeslæt i beskrivelsen, må du ALDRIG nævne et, hverken som tal (\"kl. 8\") "
+        + "eller udskrevet (\"klokken otte\") — heller ikke som gæt, antagelse eller for sjov. Det samme "
+        + "gælder doser og ekstra piller/kosttilskud, der ikke står i beskrivelsen. "
+        + "Ingen sundhedsråd, ingen bivirkningsadvarsler. Kun selve påmindelsen, i tonen ovenfor.\n\n"
+        + "FORMAT: svar KUN med gyldig JSON: {\"tekst\": \"...\"}";
+
+      try {
+        const svar = await genererGodkendtTekst(gNoegle, modeller, grundprompt, k.beskrivelse);
+        if (svar) { tekst = svar.tekst; brugtModel = svar.model; }
+        else { tekst = (erMorgen ? "God morgen — husk: " : "God aften — husk: ") + k.beskrivelse; forkastet++; }
+      } catch {
+        tekst = (erMorgen ? "God morgen — husk: " : "God aften — husk: ") + k.beskrivelse;
+      }
+    }
+    eksempler.push({ bruger_id: k.bruger_id, slot: k.slot, tekst, model: brugtModel, gentagelse: k.gentagelse });
+
+    const besked: Record<string, unknown> = { title: titel, body: tekst, tag: "medicin-" + k.slot, url: "./" };
+    if (k.badge !== null) besked.badge = k.badge;
     const mine = (abonnenter ?? []).filter((a) => a.bruger_id === k.bruger_id);
     for (const a of mine) {
       try {
         await webpush.sendNotification(
           { endpoint: a.endpoint, keys: { p256dh: a.p256dh, auth: a.auth } },
-          JSON.stringify({ title: erMorgen ? "God morgen" : "God aften", body: tekst, tag: "medicin-" + k.slot, url: "./" })
+          JSON.stringify(besked)
         );
         sendt++;
       } catch (fejl: unknown) {
@@ -343,15 +414,17 @@ Deno.serve(async () => {
       }
     }
 
-    const raekke = (indstillinger ?? []).find((r) => r.bruger_id === k.bruger_id);
-    if (raekke) {
-      const nyMedicin = { ...(raekke.data.medicin || {}) };
-      nyMedicin[k.slot] = { ...(nyMedicin[k.slot] || {}), sidst_sendt: idagDato };
-      await db.from("dagbog_indstillinger").update({ data: { ...raekke.data, medicin: nyMedicin } }).eq("bruger_id", k.bruger_id);
+    /* Rækken læses frisk lige før skrivningen, så en ændring fra appen under
+       modelkaldet ikke overskrives med en gammel kopi. */
+    const { data: frisk } = await db.from("dagbog_indstillinger").select("data").eq("bruger_id", k.bruger_id).maybeSingle();
+    if (frisk?.data) {
+      const nyMedicin = { ...(frisk.data.medicin || {}) };
+      nyMedicin[k.slot] = { ...(nyMedicin[k.slot] || {}), [k.gentagelse ? "gentaget" : "sidst_sendt"]: dag };
+      await db.from("dagbog_indstillinger").update({ data: { ...frisk.data, medicin: nyMedicin } }).eq("bruger_id", k.bruger_id);
     }
   }
 
-  return new Response(JSON.stringify({ kandidater: kandidater.length, modeller, sendt, fejlet, fjernet, forkastet, eksempler }), {
+  return new Response(JSON.stringify({ dag, kandidater: kandidater.length, modeller, sendt, fejlet, fjernet, forkastet, eksempler }), {
     headers: { "Content-Type": "application/json" }
   });
 });

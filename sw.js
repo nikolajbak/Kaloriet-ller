@@ -144,8 +144,15 @@ self.addEventListener("push", function (e) {
   var basis = d.url && d.url !== "./" ? d.url : "./";
   var maal = basis + (basis.indexOf("?") === -1 ? "?" : "&")
     + "paamindelse=" + encodeURIComponent(d.body) + "&titel=" + encodeURIComponent(d.title);
+  /* Medicin-push har antallet af tilskud, der mangler at blive krydset af,
+     med — saa tallet paa app-ikonet passer, ogsaa naar appen er lukket. */
+  var badge = Promise.resolve();
+  if (typeof d.badge === "number" && self.navigator && self.navigator.setAppBadge) {
+    badge = (d.badge > 0 ? self.navigator.setAppBadge(d.badge) : self.navigator.clearAppBadge()).catch(function () {});
+  }
   e.waitUntil(
     Promise.all([
+      badge,
       gemPaamindelseLokalt(d.title, d.body),
       self.registration.showNotification(d.title, {
         body: d.body,
