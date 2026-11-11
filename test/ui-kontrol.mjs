@@ -22,8 +22,7 @@ const MAKS_DIFF = 0.003;
 /* Kendte fund i den gamle brugerflade, som en senere fase retter. Moenstre mod
    "skaerm:regel:beskrivelse". Fjern linjen, naar fasen er lavet. */
 const KENDT = [
-  /:trykflade:(b-indst|I dag|Vægt|Historik|Trends) \d+×(38|43)$/,          // fase 2: navigation
-  /^(idag|fejring)@\d+:trykflade:.+ \d+×43$/,                               // fase 3: I dag (maaltidsraekker, maal-link)
+  /^(idag|igaar|fejring)@\d+:trykflade:.+ \d+×43$/,                               // fase 3: I dag (maaltidsraekker, maal-link)
   /:trykflade:(Dag|Uge|Måned|7 dage|30 dage|90 dage) \d+×38$/,             // fase 4: periodevaelgere
 ];
 
@@ -205,9 +204,10 @@ async function sammenlign(side, navn){
 // Hver skaerm: navn og en funktion, der bringer siden derhen fra opstart.
 export const skaerme = [
   { navn: "idag", til: async () => {} },
-  { navn: "vaegt", til: async s => { await s.click("[data-skaerm=vaegt]"); } },
-  { navn: "historik", til: async s => { await s.click("[data-skaerm=historik]"); } },
-  { navn: "trends", til: async s => { await s.click("[data-skaerm=trends]"); } },
+  { navn: "igaar", til: async s => { await s.click("#b-forrige"); } },
+  { navn: "vaegt", til: async s => { await s.click("[data-fane=udvikling]"); } },
+  { navn: "historik", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("[data-skaerm=historik]"); } },
+  { navn: "trends", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("[data-skaerm=trends]"); } },
   { navn: "indstillinger", til: async s => { await s.click("#b-indst"); } },
   { navn: "skriv", til: async s => { await s.click("#b-skriv"); } },
   { navn: "fejring", data: () => { const d = testdata(); delete d["kd:fejret"]; return d; }, til: async () => {} },
@@ -218,6 +218,55 @@ export const funktioner = [
   { navn: "version", tjek: async (s, ok) => {
     const r = await s.evaluate(() => ({ build: APP_BUILD, v: (document.querySelector('link[href^="style.css"]') || {}).getAttribute?.("href") }));
     ok(r.v === "style.css?v=" + r.build, "style.css?v= skal være APP_BUILD (" + r.build + "), er " + r.v);
+  } },
+  { navn: "bundbjaelke", tjek: async (s, ok) => {
+    const r = await s.evaluate(() => ({
+      faner: document.querySelectorAll("#bundbjaelke [data-fane]").length,
+      kamera: !!document.querySelector("#bundbjaelke #b-foto"),
+      aktiv: document.querySelector("#bundbjaelke [aria-current=page]")?.dataset.fane }));
+    ok(r.faner === 2 && r.kamera, "bundbjælken skal have 2 faner og kameraknappen");
+    ok(r.aktiv === "idag", "I dag skal være aktiv ved start");
+    await s.click("[data-fane=udvikling]");
+    ok(await s.evaluate(() => S.skaerm === "vaegt" && document.querySelector("[aria-current=page]").dataset.fane === "udvikling"), "Udvikling åbner vægten");
+    await s.click("[data-skaerm=trends]"); await s.click("[data-fane=idag]"); await s.click("[data-fane=udvikling]");
+    ok(await s.evaluate(() => S.skaerm === "trends"), "Udvikling husker sidste underside");
+  } },
+  { navn: "dagbladring", tjek: async (s, ok) => {
+    ok(await s.isDisabled("#b-naeste"), "› skal være slået fra på i dag");
+    await s.click("#b-forrige");
+    const igaar = await s.evaluate(() => dagKey(new Date(Date.now() - 864e5)));
+    ok(await s.evaluate(d => visteDag() === d && maalDag() === d, igaar), "‹ viser i går og gør den til måldag");
+    ok(await s.locator(".fortidslinje").isVisible(), "»Registrerer på …« skal vises på en tidligere dag");
+    ok((await s.locator(".post .navn").first().textContent()).includes("Kylling") || (await s.locator(".post").count()) === 3, "gårsdagens måltider vises");
+    await s.click("#b-skriv");
+    ok(await s.inputValue("#in-dato") === igaar && await s.inputValue("#in-tid") === "12:00", "skriv-arket forudfyldes med den viste dag og 12:00");
+    await s.evaluate(() => { lukArk(); });
+    await s.waitForTimeout(400);
+    ok(await s.evaluate(d => maalDag() === d, igaar), "måldagen er stadig den viste dag efter arket lukkes");
+    await s.click("#b-tilidag");
+    ok(await s.evaluate(() => visteDag() === S.iDag && !document.querySelector(".fortidslinje")), "»Til i dag« går tilbage");
+  } },
+  { navn: "langt-tryk", tjek: async (s, ok) => {
+    await s.click("#b-forrige");
+    const b = await s.locator("#b-foto").boundingBox();
+    await s.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await s.mouse.down();
+    await s.waitForTimeout(700); await s.mouse.up(); await s.waitForTimeout(300);
+    const igaar = await s.evaluate(() => dagKey(new Date(Date.now() - 864e5)));
+    ok(await s.locator("#in-dato").count() === 1, "langt tryk på kameraet åbner skriv-arket");
+    ok(await s.inputValue("#in-dato") === igaar, "langt tryk på en tidligere dag skriver på den dag");
+  } },
+  { navn: "kamera-tidligere-dag", opsaet: { data: Object.assign(testdata(), { "kd:auto-reg": "1" }) }, tjek: async (s, ok) => {
+    await s.evaluate(() => { window.__dag = null; startKamera = function(){ window.__dag = maalDag(); }; });
+    await s.click("#b-forrige"); await s.click("#b-foto");
+    const igaar = await s.evaluate(() => dagKey(new Date(Date.now() - 864e5)));
+    ok(await s.evaluate(() => window.__dag) === igaar, "kameraet på en tidligere dag registrerer på den dag");
+  } },
+  { navn: "midnat", tjek: async (s, ok) => {
+    await s.click("#b-forrige");
+    // Visningen staar paa i gaar; ved midnat bliver i dag til i gaar og visDag maa aldrig ende i fremtiden
+    await s.evaluate(() => { S.iDag = S.visDag; tegn(); });
+    ok(await s.evaluate(() => visteDag() === S.iDag && maalDag() === S.iDag), "efter datoskift falder visningen tilbage til i dag");
+    ok(await s.isDisabled("#b-naeste"), "› er slået fra efter datoskift");
   } },
   { navn: "offline-css", opsaet: { sw: true }, tjek: async (s, ok) => {
     await s.evaluate(() => navigator.serviceWorker.ready);
