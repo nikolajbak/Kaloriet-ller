@@ -364,6 +364,12 @@ export const funktioner = [
     await s.mouse.click(5, 5); await s.waitForTimeout(400);
     ok((await s.locator("#b-maal").textContent()).includes("2.400"), "I dag viser det nye mål");
   } },
+  { navn: "genveje", tjek: async (s, ok) => {
+    await s.goto(base + "?handling=vaegt"); await s.waitForTimeout(500);
+    ok(await s.evaluate(() => S.skaerm === "udvikling") && await s.locator("#v-overlay").isVisible(), "genvejen Vægt åbner Udvikling med vejningsarket");
+    await s.goto(base + "?handling=maaltid"); await s.waitForTimeout(500);
+    ok(await s.locator("#in-dato").count() === 1, "genvejen Måltid åbner skriv-arket");
+  } },
   { navn: "offline-css", opsaet: { sw: true }, tjek: async (s, ok) => {
     await s.evaluate(() => navigator.serviceWorker.ready);
     await s.reload(); await s.waitForTimeout(800);
