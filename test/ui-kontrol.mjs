@@ -22,7 +22,6 @@ const MAKS_DIFF = 0.003;
 /* Kendte fund i den gamle brugerflade, som en senere fase retter. Moenstre mod
    "skaerm:regel:beskrivelse". Fjern linjen, naar fasen er lavet. */
 const KENDT = [
-  /:trykflade:(Dag|Uge|Måned|7 dage|30 dage|90 dage) \d+×38$/,             // fase 4: periodevaelgere
 ];
 
 /* ---------- Testdata ---------- */
@@ -204,9 +203,11 @@ async function sammenlign(side, navn){
 export const skaerme = [
   { navn: "idag", til: async () => {} },
   { navn: "igaar", til: async s => { await s.click("#b-forrige"); } },
-  { navn: "vaegt", til: async s => { await s.click("[data-fane=udvikling]"); } },
-  { navn: "historik", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("[data-skaerm=historik]"); } },
-  { navn: "trends", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("[data-skaerm=trends]"); } },
+  { navn: "udvikling", til: async s => { await s.click("[data-fane=udvikling]"); } },
+  { navn: "udvikling-7", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("[data-udvper='7']"); } },
+  { navn: "udvikling-aar", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("[data-udvper='365']"); } },
+  { navn: "vurdering", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("[data-vurd=tilskudsboks]"); } },
+  { navn: "alle-vejninger", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("#b-allevej"); } },
   { navn: "indstillinger", til: async s => { await s.click("#b-indst"); } },
   { navn: "skriv", til: async s => { await s.click("#b-skriv"); } },
   { navn: "fejring", data: () => { const d = testdata(); delete d["kd:fejret"]; return d; }, til: async () => {} },
@@ -226,9 +227,9 @@ export const funktioner = [
     ok(r.faner === 2 && r.kamera, "bundbjælken skal have 2 faner og kameraknappen");
     ok(r.aktiv === "idag", "I dag skal være aktiv ved start");
     await s.click("[data-fane=udvikling]");
-    ok(await s.evaluate(() => S.skaerm === "vaegt" && document.querySelector("[aria-current=page]").dataset.fane === "udvikling"), "Udvikling åbner vægten");
-    await s.click("[data-skaerm=trends]"); await s.click("[data-fane=idag]"); await s.click("[data-fane=udvikling]");
-    ok(await s.evaluate(() => S.skaerm === "trends"), "Udvikling husker sidste underside");
+    ok(await s.evaluate(() => S.skaerm === "udvikling" && document.querySelector("[aria-current=page]").dataset.fane === "udvikling"), "Udvikling åbner");
+    await s.evaluate(() => { S.skaerm = "trends"; tegn(); });
+    ok(await s.evaluate(() => S.skaerm === "udvikling" && !!document.querySelector("#udv-vaegt")), "gamle skærmnavne vises som Udvikling");
   } },
   { navn: "dagbladring", tjek: async (s, ok) => {
     ok(await s.isDisabled("#b-naeste"), "› skal være slået fra på i dag");
@@ -285,6 +286,48 @@ export const funktioner = [
   } },
   { navn: "tom-dag", opsaet: { data: (() => { const d = testdata(); for (const k of Object.keys(d)) if (k.startsWith("kd:dag:") && JSON.parse(d[k])[0]?.id === "a") delete d[k]; return d; })() }, tjek: async (s, ok) => {
     ok((await s.locator(".tom-pil").textContent()).includes("Intet registreret endnu"), "tom dag: »Intet registreret endnu«");
+  } },
+  { navn: "udvikling-periode", tjek: async (s, ok) => {
+    await s.click("[data-fane=udvikling]");
+    ok(await s.locator("[data-udvper]").count() === 4 && await s.locator("[data-per],[data-vin]").count() === 0, "én periodevælger med 4 valg erstatter de gamle");
+    await s.click("[data-udvper='7']");
+    const p7 = await s.evaluate(() => ({ soejler: document.querySelectorAll("#udv-kal .graf .hit").length,
+      punkter: document.querySelectorAll("#udv-vaegt .graf circle").length }));
+    ok(p7.soejler === 7, "7 d: 7 søjler (er " + p7.soejler + ")");
+    ok(p7.punkter === 7, "7 d: vægtgrafen har 7 vejninger (er " + p7.punkter + ")");
+    await s.click("[data-udvper='90']");
+    ok(await s.evaluate(() => S.periode === "uge" && [...document.querySelectorAll("#udv-kal .graf .hit")].every(h => h.dataset.valg.startsWith("u"))), "90 d: kalorier i uger");
+    await s.click("[data-udvper='365']");
+    ok(await s.evaluate(() => S.periode === "maaned"), "1 år: kalorier i måneder");
+    const tyk = await s.evaluate(() => { const g = document.querySelector("#udv-vaegt .graf"); const l = g.querySelector("line[style*=blaek]"); const p = g.querySelector("polyline");
+      return l && p ? Number(l.getAttribute("stroke-width")) > Number(p.getAttribute("stroke-width")) : false; });
+    ok(tyk, "trendlinjen er kraftigere end målingerne");
+  } },
+  { navn: "udvikling-dag", tjek: async (s, ok) => {
+    await s.click("[data-fane=udvikling]"); await s.click("[data-udvper='7']");
+    const id = await s.evaluate(() => document.querySelectorAll("#udv-kal .graf .hit")[5].dataset.valg);
+    await s.evaluate(i => document.querySelector('#udv-kal .graf .hit[data-valg="' + i + '"]').dispatchEvent(new MouseEvent("click", { bubbles: true })), id);
+    ok(await s.evaluate(i => S.skaerm === "idag" && visteDag() === i, id), "tryk på en dagsøjle åbner dagen på I dag");
+  } },
+  { navn: "udvikling-lister", tjek: async (s, ok) => {
+    await s.click("[data-fane=udvikling]");
+    const r = await s.evaluate(() => [...document.querySelectorAll("#udv-trends h2.sek")].map(h => {
+      let n = 0, el = h.nextElementSibling; while (el && !el.matches("h2")){ if (el.matches(".katraekke,.raekke") && el.getClientRects().length) n++; el = el.nextElementSibling; } return n; }));
+    ok(r.every(n => n <= 3), "mønstre viser højst 3 rækker pr. afsnit (" + r.join(",") + ")");
+    let netkald = 0; s.on("request", q => { if (/anthropic|generativelanguage|supabase/.test(q.url())) netkald++; });
+    await s.click("[data-vurd=forslag]");
+    ok(await s.locator("#vurd-overlay #forslag").isVisible(), "Lettere alternativer åbner i et ark");
+    ok(netkald === 0, "intet AI-kald før man trykker i arket");
+    await s.click("#vurd-luk"); await s.waitForTimeout(300);
+    ok(await s.evaluate(() => !!document.querySelector("#udv-trends #forslag")), "indholdet ligger tilbage efter lukning");
+  } },
+  { navn: "vejninger-faa", opsaet: { data: Object.assign(testdata(), { "kd:vaegte": JSON.stringify({ "2026-09-01": "88.0", "2026-11-11": "84.1" }) }) }, tjek: async (s, ok) => {
+    await s.click("[data-fane=udvikling]"); await s.click("[data-udvper='7']");
+    ok((await s.locator("#udv-vaegt").textContent()).includes("For få vejninger i perioden"), "under 2 vejninger i perioden giver en tekst i stedet for en graf");
+  } },
+  { navn: "dyst-uden-login", tjek: async (s, ok) => {
+    await s.click("[data-fane=udvikling]");
+    ok(await s.locator("#holdboks .tom").count() === 0 && (await s.locator("#holdboks").textContent()).includes("Log ind"), "Dysten uden login er én linje");
   } },
   { navn: "offline-css", opsaet: { sw: true }, tjek: async (s, ok) => {
     await s.evaluate(() => navigator.serviceWorker.ready);

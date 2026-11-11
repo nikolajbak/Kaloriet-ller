@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
-<link rel="stylesheet" href="style.css?v=109">
+<link rel="stylesheet" href="style.css?v=110">
 </head>
 <body>
 
@@ -32,7 +32,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 109;
+var APP_BUILD = 110;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -481,7 +481,7 @@ var S = {
   medicin: null,  /* saettes af normMedicin() lige efter S, se »Medicin og kosttilskud« */
   skaerm: "idag",
   visDag: null,
-  udvFane: "vaegt",
+  udvPeriode: 30,
   skiftRetning: null,
   bruger: null,
   periode: "dag",
@@ -506,20 +506,20 @@ function dageMedData(){
   return dagNoegler().map(function(k){ return k.slice(P_DAG.length); })
     .filter(function(n){ return hentDag(n).length; });
 }
-function byggPerioder(type){
+function byggPerioder(type, antalDage){
   var dage = dageMedData();
   if (!dage.length) return [];
   var foerste = tilDato(dage[0]), idag = tilDato(S.iDag), ud = [];
 
   if (type === "dag"){
-    var start = new Date(idag); start.setDate(start.getDate() - 29);
+    var start = new Date(idag); start.setDate(start.getDate() - ((antalDage || 30) - 1));
     if (start < foerste) start = new Date(foerste);
     for (var d = new Date(start); d <= idag; d.setDate(d.getDate() + 1)){
       var n = dagKey(d), s = dagSum(n), har = hentDag(n).length > 0;
       ud.push({ id:n, titel:kortDato(n), under:"", total:s, snit:s, antal:har?1:0, dage:har?[n]:[] });
     }
   } else if (type === "uge"){
-    var u = mandag(idag); u.setDate(u.getDate() - 7 * 11);
+    var u = mandag(idag); u.setDate(u.getDate() - 7 * (antalDage ? Math.ceil(antalDage / 7) - 1 : 11));
     var fm = mandag(foerste); if (u < fm) u = fm;
     for (var w = new Date(u); w <= idag; w.setDate(w.getDate() + 7)){
       var med = [], sum = 0;
@@ -572,6 +572,8 @@ function graf(perioder){
     var h = p.snit > 0 ? Math.max(2, (p.snit / maks) * hoejde) : 0;
     var x = i * plads + (plads - bredde) / 2, y2 = top + hoejde - h;
     var valgt = S.valgt === p.id;
+    s += '<rect class="hit" data-valg="' + esc(p.id) + '" x="' + (i * plads).toFixed(1) + '" y="0" width="' + plads.toFixed(1)
+       + '" height="' + H + '" fill="transparent"><title>' + esc(p.titel) + ': ' + tal(p.snit) + ' kcal</title></rect>';
     if (h > 0){
       s += '<rect x="' + x.toFixed(1) + '" y="' + y2.toFixed(1) + '" width="' + bredde.toFixed(1)
          + '" height="' + h.toFixed(1) + '" rx="2" fill="' + (valgt ? "var(--blaek)" : "var(--gron)") + '"/>';
@@ -739,17 +741,18 @@ function vaegtgraf(liste, maalvaegt){
   if (tr){
     var dage = (t1 - t0) / 864e5, ya = Y(tr.start), yb = Y(tr.start + tr.prDag * dage);
     s += '<line x1="' + venstre + '" y1="' + ya.toFixed(1) + '" x2="' + (venstre + bredde)
-       + '" y2="' + yb.toFixed(1) + '" style="stroke:var(--daempet)" stroke-width="1" stroke-dasharray="5 3"/>';
+       + '" y2="' + yb.toFixed(1) + '" style="stroke:var(--blaek)" stroke-width="2.6" stroke-linecap="round"/>';
   }
   var punkter = liste.map(function(x){ return X(x.dag).toFixed(1) + "," + Y(x.kg).toFixed(1); });
   if (liste.length > 1){
-    s += '<polyline points="' + punkter.join(" ") + '" fill="none" style="stroke:var(--gron)" '
-       + 'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    /* Daglige vejninger svinger; de tegnes svagt, saa trenden baerer grafen */
+    s += '<polyline points="' + punkter.join(" ") + '" fill="none" style="stroke:var(--gron);opacity:.55" '
+       + 'stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>';
   }
   liste.forEach(function(x, i){
     var sidste = i === liste.length - 1;
     s += '<circle cx="' + X(x.dag).toFixed(1) + '" cy="' + Y(x.kg).toFixed(1) + '" r="'
-       + (sidste ? 4 : 2.4) + '" fill="' + (sidste ? "var(--blaek)" : "var(--gron)") + '"/>';
+       + (sidste ? 4 : 1.8) + '" fill="' + (sidste ? "var(--blaek)" : "var(--gron)") + '"' + (sidste ? "" : ' opacity=".7"') + '/>';
   });
   var sid = liste[liste.length - 1];
   etiketter.push({ y: Y(sid.kg) + 3.5, tekst: kg(sid.kg), attr: 'style="fill:var(--blaek)"' });
@@ -2728,9 +2731,9 @@ function tegn(){
   if (harLaas() && !aktivNoegle) return tegnLaas();
   if (udbyder() === "claude" && !aktivNoegle && !laes(K_NOEGLE)) return tegnOpsaet();
   if (!laes(K_BRUGER)) return tegnOpsaet();
-  if (S.skaerm === "historik") tegnHistorik();
-  else if (S.skaerm === "trends") tegnTrends();
-  else if (S.skaerm === "vaegt") tegnVaegt();
+  /* Gamle skaermnavne (Vaegt, Historik, Trends) bor nu i Udvikling */
+  if (S.skaerm !== "idag") S.skaerm = "udvikling";
+  if (S.skaerm === "udvikling") tegnUdvikling();
   else tegnHoved();
   animerSkift();
   if (S.ark) tegnArk();
@@ -2831,21 +2834,20 @@ function hoved(venstre){
       + '<button class="ikonknap" id="b-naeste" aria-label="Næste dag"' + (erIdag ? " disabled" : "") + '>' + ikon("hoejre") + '</button>'
       + '<span class="fyld"></span>' + gear + '</div>';
   }
-  return '<div class="top"><span class="datolinje">' + venstre + '</span>' + gear + '</div>'
-    + '<div class="valg" role="tablist" aria-label="Udvikling">'
-    + [["vaegt","Vægt"],["historik","Historik"],["trends","Trends"]].map(function(t){
-        return '<button role="tab" aria-selected="' + (S.skaerm === t[0] ? "true" : "false") + '" '
-          + 'data-skaerm="' + t[0] + '" class="' + (S.skaerm === t[0] ? "aktiv" : "") + '">' + t[1] + '</button>';
+  return '<div class="top"><div class="udvtitel"><b>Udvikling</b><span class="datolinje">' + venstre + '</span></div>' + gear + '</div>'
+    + '<div class="valg" role="radiogroup" aria-label="Periode">'
+    + [[7,"7 d"],[30,"30 d"],[90,"90 d"],[365,"1 år"]].map(function(t){
+        var valgt = S.udvPeriode === t[0];
+        return '<button role="radio" aria-checked="' + valgt + '" data-udvper="' + t[0] + '" class="' + (valgt ? "aktiv" : "") + '">' + t[1] + '</button>';
       }).join("")
     + '</div>';
 }
-var FANER = ["idag","vaegt","historik","trends"];
+var FANER = ["idag","udvikling"];
 function skiftSkaerm(ny){
   if (ny === S.skaerm) return;
   /* Retningen foelger raekkefoelgen, saa bevaegelsen svarer til
      den vej man ville skubbe siden med fingeren. */
   S.skiftRetning = FANER.indexOf(ny) > FANER.indexOf(S.skaerm) ? "frem" : "tilbage";
-  if (ny !== "idag") S.udvFane = ny;
   S.skaerm = ny;
   S.valgt = null; skjulFortryd(); window.scrollTo(0,0); tegn();
 }
@@ -2853,8 +2855,14 @@ function bindHoved(){
   $("b-indst").onclick = function(){ S.indst = true; tegn(); };
   if ($("b-forrige")) $("b-forrige").onclick = function(){ skiftDag(-1); };
   if ($("b-naeste")) $("b-naeste").onclick = function(){ skiftDag(1); };
-  Array.prototype.forEach.call(document.querySelectorAll("[data-skaerm]"), function(b){
-    b.onclick = function(){ skiftSkaerm(b.getAttribute("data-skaerm")); };
+  Array.prototype.forEach.call(document.querySelectorAll("[data-udvper]"), function(b){
+    b.onclick = function(){
+      var n = Number(b.getAttribute("data-udvper"));
+      if (n === S.udvPeriode) return;
+      S.udvPeriode = n; S.valgt = null;
+      S.forslag = null; S.forslagStatus = "tom";
+      tegn();
+    };
   });
   opdaterBundbjaelke();
 }
@@ -2886,7 +2894,7 @@ function opdaterBundbjaelke(skjult){
     b.onclick = function(){
       var f = b.getAttribute("data-fane");
       if (f === "idag" && S.skaerm === "idag" && S.visDag){ S.visDag = null; S.skiftRetning = "frem"; skjulFortryd(); window.scrollTo(0,0); tegn(); return; }
-      skiftSkaerm(f === "idag" ? "idag" : S.udvFane);
+      skiftSkaerm(f);
     };
   });
   if ($("b-tilidag")) $("b-tilidag").onclick = function(){ S.visDag = null; S.skiftRetning = "frem"; skjulFortryd(); window.scrollTo(0,0); tegn(); };
@@ -3032,6 +3040,90 @@ function tegnHoved(){
     el.onclick = function(){ aabnVentende(el.getAttribute("data-vent")); };
   });
   if (document.querySelector("[data-timer],[data-sjov]")) startTimere();
+}
+
+/* --- Udvikling: Vaegt, Kalorier og Moenstre under een periodevaelger --- */
+function tegnUdvikling(){
+  S.vindue = S.udvPeriode;
+  S.periode = S.udvPeriode >= 365 ? "maaned" : S.udvPeriode >= 90 ? "uge" : "dag";
+  var aaben = S.vurd;
+  var gl = $("vurd-overlay"); if (gl) gl.remove();
+  $("rod").innerHTML = '<div class="indhold">' + hoved(periodeTekst(S.udvPeriode))
+    + '<section class="udv" id="udv-vaegt" aria-label="Vægt"></section>'
+    + '<section class="udv" id="udv-kal" aria-label="Kalorier"></section>'
+    + '<section class="udv" id="udv-trends" aria-label="Mønstre"></section></div>';
+  bindHoved();
+  tegnVaegt($("udv-vaegt"));
+  tegnHistorik($("udv-kal"));
+  tegnTrends($("udv-trends"));
+  if (aaben) aabnVurdering(aaben, true);
+}
+function gaaTilDag(n){
+  S.visDag = n < S.iDag ? n : null;
+  S.skaerm = "idag"; S.valgt = null; S.skiftRetning = "tilbage";
+  skjulFortryd(); window.scrollTo(0, 0); tegn();
+}
+/* Lange lister i Moenstre: de tre foerste staar fremme, resten bag »Vis flere« */
+function kortListe(rod){
+  Array.prototype.forEach.call(rod.querySelectorAll("h2.sek"), function(h2){
+    var raekker = [], el = h2.nextElementSibling;
+    while (el && !el.matches("h2, .gruppelabel, .vurdering")){
+      if (el.matches(".katraekke, .raekke")) raekker.push(el);
+      el = el.nextElementSibling;
+    }
+    if (raekker.length <= 3) return;
+    raekker.slice(3).forEach(function(r){ r.hidden = true; });
+    var knap = document.createElement("button");
+    knap.className = "txtknap visflere";
+    knap.textContent = "Vis flere (" + (raekker.length - 3) + ")";
+    knap.onclick = function(){ raekker.forEach(function(r){ r.hidden = false; }); knap.remove(); };
+    raekker[raekker.length - 1].insertAdjacentElement("afterend", knap);
+  });
+}
+/* AI-vurderingerne aabner i et ark. Indholdet (#forslag, #tilskudsboks) flyttes
+   ind i arket og tilbage igen, saa tegnForslag/tegnTilskud virker uaendret. */
+function aabnVurdering(id, stille){
+  var boks = $(id); if (!boks) return;
+  S.vurd = id;
+  var titel = id === "forslag" ? "Lettere alternativer" : "Kost og tilskud";
+  var gl = $("vurd-overlay"); if (gl) gl.remove();
+  document.body.insertAdjacentHTML("beforeend", '<div class="overlay' + (stille ? " stille" : "") + '" id="vurd-overlay"><div class="panel">'
+    + '<h3>' + titel + '</h3><div id="vurd-indhold"></div>'
+    + '<button class="knap sek" id="vurd-luk" style="margin-top:16px">Luk</button></div></div>');
+  var parkering = boks.parentNode;
+  $("vurd-indhold").appendChild(boks);
+  boks.hidden = false;
+  function luk(){
+    S.vurd = null;
+    if (parkering && parkering.isConnected){ boks.hidden = true; parkering.appendChild(boks); }
+    lukBlodt("vurd-overlay");
+  }
+  $("vurd-overlay").onclick = function(e){ if (e.target.id === "vurd-overlay") luk(); };
+  bindTraekNed("vurd-overlay", luk);
+  $("vurd-luk").onclick = luk;
+}
+function aabnAlleVejninger(liste){
+  var h = '<div class="overlay" id="alle-overlay"><div class="panel"><h3>Alle vejninger · ' + liste.length + '</h3>';
+  liste.slice().reverse().forEach(function(x, i){
+    var forrige = liste[liste.length - 2 - i];
+    var diff = forrige ? x.kg - forrige.kg : null;
+    h += '<button class="raekke" data-vdag="' + x.dag + '"><span class="h">'
+      + '<span style="display:block">' + kortDato(x.dag) + '</span>'
+      + (diff !== null && Math.abs(diff) >= 0.05
+          ? '<span class="u">' + (diff > 0 ? "+" : "−") + kg(Math.abs(diff)) + ' kg</span>' : "")
+      + '</span><span class="s">' + kg(x.kg) + '</span></button>';
+  });
+  h += '<p class="fodnote">Tryk på en vejning for at rette eller slette den.</p>'
+    + '<button class="knap sek" id="alle-luk" style="margin-top:12px">Luk</button></div></div>';
+  var gl = $("alle-overlay"); if (gl) gl.remove();
+  document.body.insertAdjacentHTML("beforeend", h);
+  function luk(){ lukBlodt("alle-overlay"); }
+  $("alle-overlay").onclick = function(e){ if (e.target.id === "alle-overlay") luk(); };
+  bindTraekNed("alle-overlay", luk);
+  $("alle-luk").onclick = luk;
+  Array.prototype.forEach.call($("alle-overlay").querySelectorAll("[data-vdag]"), function(b){
+    b.onclick = function(){ aabnVejning(b.getAttribute("data-vdag")); };
+  });
 }
 
 /* --- Forslag til resten af dagen --- */
@@ -3190,13 +3282,15 @@ function startSpiseforslag(){
 }
 
 /* --- Vaegt --- */
-function tegnVaegt(){
+function tegnVaegt(maal){
   var k = kropstal();
-  var h = '<div class="indhold">' + hoved(langDato(S.iDag));
+  var h = '<h2 class="udv-ovs"><span>Vægt</span><span class="knaprad">'
+    + (k.liste.length ? '<button class="txtknap" id="b-allevej">Alle vejninger</button>' : "")
+    + '<button class="knap sek lille med-ikon" id="b-vejning">' + ikon("plus") + 'Vej</button></span></h2>';
 
   if (!k.liste.length){
-    h += '<div class="tom" style="margin-top:18px">Ingen vejninger endnu. Registrér den første, '
-      + 'så tegnes kurven her. Én gang om ugen på samme tidspunkt siger mere end hver dag.</div>';
+    h += '<div class="tom">Ingen vejninger endnu. Registrér den første med »Vej«, eller lad vægten sende den '
+      + 'automatisk. Vejer du dig hver dag, viser trendlinjen retningen gennem de daglige udsving.</div>';
   } else {
     var sid = k.liste[k.liste.length - 1], forr = k.liste[k.liste.length - 2];
     h += '<div class="spalter"><div class="s-a">'
@@ -3220,7 +3314,11 @@ function tegnVaegt(){
     }
     if (!(k.maalvaegt > 0)) h += '<p class="grafnote" style="margin:12px 0 0"><button class="txtknap" id="b-profil">sæt et mål</button> — så regnes det ud, hvornår du når det.</p>';
     if (k.maalvaegt > 0) h += maalkort(k, tr);
-    h += '</div>' + vaegtgraf(k.liste, k.maalvaegt);
+    /* Grafen foelger periodevaelgeren; noegletallene ovenfor bruger alle vejninger */
+    var fra = dagKey(new Date(tilDato(S.iDag).getFullYear(), tilDato(S.iDag).getMonth(), tilDato(S.iDag).getDate() - (S.udvPeriode - 1)));
+    var iPerioden = k.liste.filter(function(x){ return x.dag >= fra; });
+    h += '</div></div><div class="s-b">' + (iPerioden.length >= 2 ? vaegtgraf(iPerioden, k.maalvaegt)
+      : '<p class="tom lille">For få vejninger i perioden til en kurve.</p>');
 
     var celler = [];
     if (k.bmi > 0) celler.push('<div><b>' + kg(k.bmi) + '</b>BMI</div>');
@@ -3237,45 +3335,16 @@ function tegnVaegt(){
       h += '<div class="note">Målvægten svarer til et BMI på ' + kg(k.maalBmi)
         + '. Under 18,5 regnes som undervægt. Det er dit valg — men det er værd at vende med en læge.</div>';
     }
-    h += '</div><div class="s-b"><h2 class="sek">Vejninger</h2>';
-    /* De nyeste staar fremme; resten foldes sammen, saa skaermen ikke
-       vokser med hver vejning. Foldningen huskes, til appen lukkes. */
-    var FREMME = 5;
-    k.liste.slice().reverse().forEach(function(x, i){
-      var forrige = k.liste[k.liste.length - 2 - i];
-      var diff = forrige ? x.kg - forrige.kg : null;
-      if (i === FREMME){
-        h += '<details class="afsnit" id="v-aeldre"' + (S.vejAaben ? " open" : "") + '>'
-          + '<summary>Ældre vejninger · ' + (k.liste.length - FREMME) + '</summary><div>';
-      }
-      h += '<button class="raekke" data-vdag="' + x.dag + '"><span class="h">'
-        + '<span style="display:block">' + kortDato(x.dag) + '</span>'
-        + (diff !== null && Math.abs(diff) >= 0.05
-            ? '<span class="u">' + (diff > 0 ? "+" : "−") + kg(Math.abs(diff)) + ' kg</span>' : "")
-        + '</span><span class="s">' + kg(x.kg) + '</span></button>';
-    });
-    if (k.liste.length > FREMME) h += '</div></details>';
-    h += '<p class="fodnote">Tryk på en vejning for at rette eller slette den. '
-      + 'Vægten svinger et kilo eller to hen over døgnet, så det er linjen over uger der siger noget.</p></div></div>';
+    h += '<p class="grafnote" style="margin-top:10px">Vægten svinger et kilo eller to hen over døgnet, så det er trendlinjen der siger noget.</p></div></div>';
   }
 
-  /* Personlig Genveje-fil med egen noegle indbagt. Kun de to kendte konti har
-     faaet en bygget — findes brugernavnet ikke her, springes linket over. */
-
-
-  h += '<button class="knap sek" id="b-vejning" style="margin-top:20px">Registrér vægt</button></div>';
-  $("rod").innerHTML = h;
-  bindHoved();
+  maal.innerHTML = h;
   var bp = $("b-profil"); if (bp) bp.onclick = function(){ S.indst = true; tegn(); };
   var bt = $("b-brugtdee"); if (bt) bt.onclick = function(){
     S.maal = Math.round(k.tdee); skriv(K_MAAL, String(S.maal)); synkMaerk("#indst"); tegn();
   };
   $("b-vejning").onclick = function(){ aabnVejning(S.iDag); };
-  var va = $("v-aeldre");
-  if (va){ bindFoldning($("rod")); va.addEventListener("toggle", function(){ S.vejAaben = va.open; }); }
-  Array.prototype.forEach.call(document.querySelectorAll("[data-vdag]"), function(b){
-    b.onclick = function(){ aabnVejning(b.getAttribute("data-vdag")); };
-  });
+  if ($("b-allevej")) $("b-allevej").onclick = function(){ aabnAlleVejninger(k.liste); };
 }
 
 function aabnVejning(dag){
@@ -3299,11 +3368,11 @@ function aabnVejning(dag){
       alert("Skriv vægten i kilo, fx 84,2.");
       return;
     }
-    gemVaegt(dag, kgv); luk(); tegnVaegt();
+    gemVaegt(dag, kgv); luk(); var al = $("alle-overlay"); if (al) al.remove(); tegn();
   };
   var vs = $("v-slet"); if (vs) vs.onclick = function(){
     var gammel = hentVaegte()[dag];
-    gemVaegt(dag, 0); luk(); tegnVaegt();
+    gemVaegt(dag, 0); luk(); var al = $("alle-overlay"); if (al) al.remove(); tegn();
     visFortryd("Vejningen " + kortDato(dag) + " er slettet", function(){ gemVaegt(dag, gammel); });
   };
 }
@@ -3432,32 +3501,29 @@ function aabnRediger(dag, id){
 }
 
 /* --- Historik --- */
-function tegnHistorik(){
-  var perioder = byggPerioder(S.periode);
+function tegnHistorik(maal){
+  var perioder = byggPerioder(S.periode, S.udvPeriode);
   var medData = perioder.filter(function(p){ return p.antal > 0; });
   var ialt = medData.reduce(function(a,p){ return a + p.total; }, 0);
   var dageIalt = medData.reduce(function(a,p){ return a + p.antal; }, 0);
   var snit = dageIalt ? ialt / dageIalt : 0;
-  var navn = { dag:"30 dage", uge:"12 uger", maaned:"12 måneder" }[S.periode];
+  var enhed = { dag:"dage", uge:"uger", maaned:"måneder" }[S.periode];
+  var aendring = analyseAfVindue(S.udvPeriode).aendring;
+  var retning = aendring !== null && Math.abs(aendring) >= 3 ? (aendring > 0 ? "↑ " : "↓ ") + Math.abs(Math.round(aendring)) + " %" : "";
 
-  var h = '<div class="indhold">' + hoved(langDato(S.iDag))
-    + '<div class="valg" style="margin-top:8px">'
-    + ['dag','uge','maaned'].map(function(t){
-        return '<button data-per="' + t + '" class="' + (S.periode === t ? "aktiv" : "") + '">'
-          + {dag:"Dag",uge:"Uge",maaned:"Måned"}[t] + '</button>';
-      }).join("") + '</div>';
-
+  var h = '<h2 class="udv-ovs"><span>Kalorier</span></h2>';
   if (!perioder.length){
-    h += '<div class="tom" style="margin-top:16px">Der er ikke registreret måltider endnu. Så snart du gemmer det første, tegnes kurven her.</div></div>';
-    $("rod").innerHTML = h; bindHoved(); bindPeriode(); return;
+    maal.innerHTML = h + '<div class="tom">Der er ikke registreret måltider endnu. Så snart du gemmer det første, tegnes kurven her.</div>';
+    return;
   }
 
-  h += '<div class="spalter"><div class="s-a"><div class="noegletal"><div><b>' + tal(snit) + '</b>snit pr. dag</div>'
-    + '<div><b>' + tal(ialt) + '</b>i alt</div>'
-    + '<div><b>' + dageIalt + '</b>dage registreret</div></div>'
+  h += '<div class="spalter"><div class="s-a"><div class="noegletal"><div><b>' + tal(snit) + '</b>snit pr. dag'
+    + (S.maal > 0 ? ' · mål ' + tal(S.maal) : "") + '</div>'
+    + '<div><b>' + dageIalt + '</b>dage registreret</div>'
+    + (retning ? '<div><b>' + retning + '</b>mod forrige periode</div>' : "") + '</div>'
     + graf(perioder)
-    + '<p class="grafnote">Søjlerne viser snit pr. dag, så målet betyder det samme i alle tre visninger. Seneste ' + navn + '.</p>'
-    + '</div><div class="s-b">';
+    + '<p class="grafnote">' + (S.periode === "dag" ? "Tryk på en dag for at se den." : "Søjlerne viser snit pr. dag. Tryk for at se dagene.") + '</p>'
+    + '</div><div class="s-b"><details class="afsnit" id="alle-perioder"' + (S.valgt ? " open" : "") + '><summary>Alle ' + enhed + '</summary><div>';
 
   perioder.slice().reverse().forEach(function(p){
     if (!p.antal && S.periode !== "dag") return;
@@ -3493,14 +3559,17 @@ function tegnHistorik(){
       h += '</div>';
     }
   });
-  h += '</div></div></div>';
-  $("rod").innerHTML = h;
-  bindHoved(); bindPeriode();
-  Array.prototype.forEach.call(document.querySelectorAll("[data-valg]"), function(b){
+  h += '</div></details></div></div>';
+  maal.innerHTML = h;
+  bindFoldning(maal);
+  Array.prototype.forEach.call(maal.querySelectorAll("[data-valg]"), function(b){
     b.onclick = function(){
       var id = b.getAttribute("data-valg");
+      if (S.periode === "dag"){ gaaTilDag(id); return; }
       S.valgt = S.valgt === id ? null : id;
-      tegnHistorik();
+      tegn();
+      var el = document.querySelector('.raekke[data-valg="' + id + '"]');
+      if (el && S.valgt) el.scrollIntoView({ block:"center" });
     };
   });
   bindRediger();
@@ -3516,18 +3585,10 @@ function tegnHistorik(){
   Array.prototype.forEach.call(document.querySelectorAll("[data-gaadag]"), function(b){
     b.onclick = function(e){
       e.stopPropagation();
-      S.periode = "dag"; S.valgt = b.getAttribute("data-gaadag");
-      window.scrollTo(0, 0);
-      tegnHistorik();
+      gaaTilDag(b.getAttribute("data-gaadag"));
     };
   });
 }
-function bindPeriode(){
-  Array.prototype.forEach.call(document.querySelectorAll("[data-per]"), function(b){
-    b.onclick = function(){ S.periode = b.getAttribute("data-per"); S.valgt = null; tegnHistorik(); };
-  });
-}
-
 /* --- Trends --- */
 /* Overskrift paa Trends: hvilke dage vinduet daekker, fx "8. sep. – 7. okt." */
 function periodeTekst(dage){
@@ -3536,30 +3597,19 @@ function periodeTekst(dage){
   var f = {day:"numeric", month:"short"};
   return start.toLocaleDateString("da-DK", f) + " – " + slut.toLocaleDateString("da-DK", f);
 }
-function tegnTrends(){
+function tegnTrends(maal){
   var a = analyseAfVindue(S.vindue);
-  var h = '<div class="indhold">' + hoved(periodeTekst(S.vindue))
-    + '<div class="valg" style="margin-top:8px">'
-    + [7,30,90].map(function(v){
-        return '<button data-vin="' + v + '" class="' + (S.vindue === v ? "aktiv" : "") + '">' + v + ' dage</button>';
-      }).join("") + '</div>';
+  var h = '<h2 class="udv-ovs"><span>Mønstre</span></h2>';
 
   if (!a.poster.length){
-    h += '<div class="tom" style="margin-top:16px">Ingen måltider i perioden. Registrér nogle dage, så finder appen mønstrene.</div></div>';
-    $("rod").innerHTML = h; bindHoved(); bindVindue(); return;
+    maal.innerHTML = h + '<div class="tom">Ingen måltider i perioden. Registrér nogle dage, så finder appen mønstrene.</div>'
+      + '<h2 class="udv-ovs"><span>Dysten</span></h2><div id="holdboks"></div>';
+    tegnHold();
+    return;
   }
-
-  var retning = "";
-  if (a.aendring !== null && Math.abs(a.aendring) >= 3){
-    retning = (a.aendring > 0 ? "↑ " : "↓ ") + Math.abs(Math.round(a.aendring)) + " %";
-  }
-  h += '<div class="spalter"><div class="s-a"><div class="noegletal"><div><b>' + tal(a.snit) + '</b>snit pr. dag</div>'
-    + '<div><b>' + a.antalDage + '</b>dage registreret</div>'
-    + (retning ? '<div><b>' + retning + '</b>mod forrige periode</div>' : '')
-    + '</div>';
 
   /* kategorier */
-  h += '<h2 class="sek">Hvad kalorierne kommer fra</h2>';
+  h += '<div class="spalter"><div class="s-a"><h2 class="sek">Hvad kalorierne kommer fra</h2>';
   var maks = a.kategorier[0] ? a.kategorier[0].kcal : 1;
   a.kategorier.forEach(function(k, i){
     var pct = a.ialt > 0 ? Math.round(k.kcal / a.ialt * 100) : 0;
@@ -3631,16 +3681,19 @@ function tegnTrends(){
     });
   }
 
-  /* forslag */
-  h += '<p class="gruppelabel">AI-vurdering af kosten</p>'
-    + '<details class="afsnit"><summary id="sum-forslag">Lettere alternativer</summary>'
-    + '<div id="forslag"></div></details>'
-    + '<details class="afsnit"><summary id="sum-tilskud">Kost og tilskud</summary>'
-    + '<div id="tilskudsboks"></div></details>'
-    + '<h2 class="sek">Dysten</h2><div id="holdboks"></div>'
-    + '</div></div></div>';
-  $("rod").innerHTML = h;
-  bindHoved(); bindVindue();
+  h += '</div></div>';
+
+  /* AI-vurderingerne: raekker der aabner et ark; indholdet ligger parkeret skjult */
+  h += '<div class="vurdering"><h2 class="udv-ovs"><span>Vurdering af kosten</span></h2>'
+    + '<button class="raekke pil" data-vurd="forslag"><span class="h"><span id="sum-forslag">Lettere alternativer</span></span><span class="s">' + ikon("hoejre") + '</span></button>'
+    + '<button class="raekke pil" data-vurd="tilskudsboks"><span class="h"><span id="sum-tilskud">Kost og tilskud</span></span><span class="s">' + ikon("hoejre") + '</span></button>'
+    + '<div class="parkering"><div id="forslag" hidden></div></div><div class="parkering"><div id="tilskudsboks" hidden></div></div></div>'
+    + '<h2 class="udv-ovs"><span>Dysten</span></h2><div id="holdboks"></div>';
+  maal.innerHTML = h;
+  kortListe(maal);
+  Array.prototype.forEach.call(maal.querySelectorAll("[data-vurd]"), function(b){
+    b.onclick = function(){ aabnVurdering(b.getAttribute("data-vurd")); };
+  });
   tegnForslag(a);
   tegnTilskud(a);
   tegnHold();
@@ -3802,7 +3855,7 @@ function koerGrupperBagud(){
         gemDag(dag, poster);
       });
       grupperBagudKoerer = false;
-      if (S.skaerm === "trends"){ tegnTilskud(analyseAfVindue(S.vindue)); koerGrupperBagud(); }
+      if (S.skaerm === "udvikling"){ tegnTilskud(analyseAfVindue(S.vindue)); koerGrupperBagud(); }
     })
     .catch(function(){ grupperBagudKoerer = false; });
 }
@@ -4052,9 +4105,9 @@ function tegnHold(){
   if (!boks) return;
 
   if (!S.bruger || !S.bruger.brugernavn){
-    boks.innerHTML = '<div class="tom">Log ind under Indstillinger for at dyste med en anden. '
-      + 'Kun dit brugernavn, datoen og hvor stor en del af dit eget mål du brugte bliver delt — '
-      + 'ikke dine måltider.</div>';
+    boks.innerHTML = '<p class="grafnote">Log ind under <button class="txtknap" id="b-dystlogin">Indstillinger</button> for at dyste med en anden. '
+      + 'Kun brugernavn, dato og hvor stor en del af dit mål du brugte bliver delt.</p>';
+    $("b-dystlogin").onclick = function(){ S.indst = true; tegn(); };
     return;
   }
 
@@ -4202,21 +4255,12 @@ function tegnHold(){
         .then(function(){ vt.disabled = false; });
     };
 
-    aabnRealtid(function(){ if (S.skaerm === "trends") tegnHold(); });
+    aabnRealtid(function(){ if (S.skaerm === "udvikling") tegnHold(); });
   }).catch(function(err){
     boks.innerHTML = '<div class="note fejl">' + esc(err.message) + '</div>';
   });
 }
 
-function bindVindue(){
-  Array.prototype.forEach.call(document.querySelectorAll("[data-vin]"), function(b){
-    b.onclick = function(){
-      S.vindue = Number(b.getAttribute("data-vin"));
-      S.forslag = null; S.forslagStatus = "tom";
-      tegnTrends();
-    };
-  });
-}
 /* Forslagene koster et API-kald, saa de gemmes og hentes kun paa opfordring */
 /* Et gemt forslag maa kun vises, hvis alle de retter det naevner stadig
    findes i dagbogen. Ellers kan en slettet registrering leve videre i teksten. */
@@ -6017,7 +6061,7 @@ $("fil").onchange = function(e){
 var skjultSiden = 0;
 document.addEventListener("visibilitychange", function(){
   if (document.visibilityState === "hidden"){ skjultSiden = Date.now(); luklRealtid(); return; }
-  if (S.bruger && S.skaerm === "trends") aabnRealtid(function(){ if (S.skaerm === "trends") tegnHold(); });
+  if (S.bruger && S.skaerm === "udvikling") aabnRealtid(function(){ if (S.skaerm === "udvikling") tegnHold(); });
   if (harLaas() && aktivNoegle && skjultSiden){
     var minutter = (Date.now() - skjultSiden) / 60000;
     if (minutter >= laasTid()){ laasNu(); return; }
