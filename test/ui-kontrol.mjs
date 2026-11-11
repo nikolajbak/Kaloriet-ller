@@ -90,10 +90,10 @@ function bekraeft(betingelse, skaerm, regel, besked){
 }
 
 let browser, base;
-export async function aabn({ skema = "light", bredde = 390, data = testdata(), foer } = {}){
+export async function aabn({ skema = "light", bredde = 390, data = testdata(), foer, sw = false } = {}){
   const kontekst = await browser.newContext({
     viewport: { width: bredde, height: 844 }, colorScheme: skema, locale: "da-DK",
-    timezoneId: "Europe/Copenhagen", serviceWorkers: "block", reducedMotion: "reduce",
+    timezoneId: "Europe/Copenhagen", serviceWorkers: sw ? "allow" : "block", reducedMotion: "reduce",
   });
   await kontekst.route(/supabase|googleapis|anthropic|unsplash|generativelanguage/, r => r.abort());
   const side = await kontekst.newPage();
@@ -214,7 +214,20 @@ export const skaerme = [
 ];
 
 /* ---------- Funktionstjek ---------- */
-export const funktioner = [];
+export const funktioner = [
+  { navn: "version", tjek: async (s, ok) => {
+    const r = await s.evaluate(() => ({ build: APP_BUILD, v: (document.querySelector('link[href^="style.css"]') || {}).getAttribute?.("href") }));
+    ok(r.v === "style.css?v=" + r.build, "style.css?v= skal være APP_BUILD (" + r.build + "), er " + r.v);
+  } },
+  { navn: "offline-css", opsaet: { sw: true }, tjek: async (s, ok) => {
+    await s.evaluate(() => navigator.serviceWorker.ready);
+    await s.reload(); await s.waitForTimeout(800);
+    await s.context().setOffline(true);
+    await s.reload(); await s.waitForTimeout(500);
+    const bg = await s.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    ok(bg === "rgb(232, 233, 227)", "uden net skal style.css komme fra cachen (baggrund " + bg + ")");
+  } },
+];
 
 /* ---------- Koersel ---------- */
 async function main(){
