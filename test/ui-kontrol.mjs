@@ -18,6 +18,7 @@ const OPDATER = process.argv.includes("--opdater");
 const VISUEL = !process.argv.includes("--uden-visuel");
 const NU = new Date("2026-11-11T13:00:00Z"); // onsdag 14:00 dansk tid
 const MAKS_DIFF = 0.003;
+const KUN = (process.argv.find(a => a.startsWith("--kun=")) || "").slice(6);  // fx --kun=igaar
 
 /* Kendte fund i den gamle brugerflade, som en senere fase retter. Moenstre mod
    "skaerm:regel:beskrivelse". Fjern linjen, naar fasen er lavet. */
@@ -115,6 +116,8 @@ async function tjekFejl(side, navn){
 async function tjekLayout(side, navn){
   const r = await side.evaluate(() => {
     const ud = { vandret: document.documentElement.scrollWidth > innerWidth + 1, smaa: [], skjult: [] };
+    if (ud.vandret) ud.vandret = [...document.querySelectorAll("body *")].filter(e => e.getBoundingClientRect().right > innerWidth + 1)
+      .map(e => (e.id ? "#" + e.id : "") + "." + String(e.className.baseVal ?? e.className).split(" ")[0] + " " + Math.round(e.getBoundingClientRect().right)).slice(-3).join(", ") || "ukendt";
     const synlig = el => { const b = el.getBoundingClientRect(); const s = getComputedStyle(el);
       return b.width > 0 && b.height > 0 && s.visibility !== "hidden" && s.display !== "none" && Number(s.opacity) > 0.05; };
     for (const el of document.querySelectorAll("button, [role=button], [role=tab], a[href], input[type=checkbox]")){
@@ -144,7 +147,7 @@ async function tjekLayout(side, navn){
     }
     return ud;
   });
-  if (r.vandret) rapport(navn, "layout", "vandret scroll");
+  if (r.vandret) rapport(navn, "layout", "vandret scroll: " + r.vandret);
   for (const s of r.smaa) rapport(navn, "trykflade", s);
   for (const s of r.skjult) rapport(navn, "bag-bundbjaelke", s);
 }
@@ -209,6 +212,9 @@ export const skaerme = [
   { navn: "vurdering", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("[data-vurd=tilskudsboks]"); } },
   { navn: "alle-vejninger", til: async s => { await s.click("[data-fane=udvikling]"); await s.click("#b-allevej"); } },
   { navn: "indstillinger", til: async s => { await s.click("#b-indst"); } },
+  { navn: "indst-dig", til: async s => { await s.click("#b-indst"); await s.click("[data-gaa=dig]"); } },
+  { navn: "indst-tone", til: async s => { await s.click("#b-indst"); await s.click("[data-gaa=tone]"); } },
+  { navn: "indst-avanceret", til: async s => { await s.click("#b-indst"); await s.click("[data-gaa=avanceret]"); } },
   { navn: "skriv", til: async s => { await s.click("#b-skriv"); } },
   { navn: "fejring", data: () => { const d = testdata(); delete d["kd:fejret"]; return d; }, til: async () => {} },
 ];
@@ -329,6 +335,41 @@ export const funktioner = [
     await s.click("[data-fane=udvikling]");
     ok(await s.locator("#holdboks .tom").count() === 0 && (await s.locator("#holdboks").textContent()).includes("Log ind"), "Dysten uden login er én linje");
   } },
+  { navn: "indstillinger", tjek: async (s, ok) => {
+    await s.click("#b-indst");
+    const r = await s.evaluate(() => [...document.querySelectorAll("#ind-overlay [data-gaa]")].map(b => b.dataset.gaa).join(","));
+    ok(r === "dig,tone,medicin,konto,avanceret", "forsiden har de fem grupper i rækkefølge (" + r + ")");
+    ok(await s.locator("#s-gem").count() === 0, "ingen Gem-knap");
+    for (const g of ["dig","tone","medicin","konto","avanceret"]){
+      await s.click("[data-gaa=" + g + "]");
+      ok(await s.locator('[data-side="' + g + '"]').isVisible(), "underside " + g + " åbner");
+      await s.locator('[data-side="' + g + '"] [data-tilbage]').click();
+      ok(await s.locator(".indforside").isVisible(), "‹ fører tilbage fra " + g);
+    }
+    await s.click("[data-gaa=dig]");
+    await s.fill("#s-maal", "2");
+    ok(await s.evaluate(() => localStorage.getItem("kd:maal")) === "2200", "indtastning uden at forlade feltet gemmer ikke");
+    await s.fill("#s-maal", "2400"); await s.locator("#s-navn").focus();
+    ok(await s.evaluate(() => localStorage.getItem("kd:maal")) === "2400", "målet gemmes, når man forlader feltet");
+    ok(await s.locator("#gemt.vis").count() === 1, "»Gemt« vises");
+    await s.locator('[data-side="dig"] [data-tilbage]').click(); await s.click("[data-gaa=tone]");
+    await s.selectOption("#s-kaek", "skarp");
+    ok(await s.evaluate(() => localStorage.getItem("kd:kaek")) === "skarp", "tonevælgeren gemmer straks");
+    await s.locator('[data-side="tone"] [data-tilbage]').click(); await s.click("[data-gaa=avanceret]");
+    const fare = await s.evaluate(() => { const side = document.querySelector('[data-side="avanceret"]'); const k = [...side.querySelectorAll("button")]; const n = k.indexOf(document.getElementById("s-nulstil")); return { sidst: n === k.length - 1, fare: document.getElementById("s-nulstil").classList.contains("fare") }; });
+    ok(fare.sidst && fare.fare, "»Slet alle data« står nederst i Avanceret som farlig handling");
+    let spurgt = false; s.once("dialog", d => { spurgt = true; d.dismiss(); });
+    await s.click("#s-nulstil");
+    ok(spurgt && await s.evaluate(() => localStorage.getItem("kd:navn")) === "Nikolaj", "sletning beder om bekræftelse og stopper ved nej");
+    await s.mouse.click(5, 5); await s.waitForTimeout(400);
+    ok((await s.locator("#b-maal").textContent()).includes("2.400"), "I dag viser det nye mål");
+  } },
+  { navn: "genveje", tjek: async (s, ok) => {
+    await s.goto(base + "?handling=vaegt"); await s.waitForTimeout(500);
+    ok(await s.evaluate(() => S.skaerm === "udvikling") && await s.locator("#v-overlay").isVisible(), "genvejen Vægt åbner Udvikling med vejningsarket");
+    await s.goto(base + "?handling=maaltid"); await s.waitForTimeout(500);
+    ok(await s.locator("#in-dato").count() === 1, "genvejen Måltid åbner skriv-arket");
+  } },
   { navn: "offline-css", opsaet: { sw: true }, tjek: async (s, ok) => {
     await s.evaluate(() => navigator.serviceWorker.ready);
     await s.reload(); await s.waitForTimeout(800);
@@ -346,6 +387,7 @@ async function main(){
   browser = await chromium.launch();
   try {
     for (const skema of ["light", "dark"]) for (const bredde of [390, 820]) for (const sk of skaerme){
+      if (KUN && sk.navn !== KUN) continue;
       const navn = sk.navn + "-" + skema + "-" + bredde;
       if (process.env.UI_LOG) console.log("→ " + navn);
       const side = await aabn({ skema, bredde, data: sk.data ? sk.data() : testdata() });
@@ -362,6 +404,7 @@ async function main(){
       await side.context().close();
     }
     for (const f of funktioner){
+      if (KUN && f.navn !== KUN) continue;
       const side = await aabn(f.opsaet || {});
       try { await f.tjek(side, (b, besked) => bekraeft(b, f.navn, "funktion", besked)); await tjekFejl(side, f.navn); }
       catch (e){ rapport(f.navn, "funktion", e.message.split("\n")[0]); }

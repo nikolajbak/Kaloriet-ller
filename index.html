@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
-<link rel="stylesheet" href="style.css?v=110">
+<link rel="stylesheet" href="style.css?v=111">
 </head>
 <body>
 
@@ -32,7 +32,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 110;
+var APP_BUILD = 111;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -5015,20 +5015,35 @@ function lukBlodt(id, naar){
 }
 
 function tegnIndstillinger(){
-  var h = '<div class="overlay" id="ind-overlay"><div class="panel"><h3>Indstillinger</h3>'
-    + '<details class="afsnit" open><summary>Dig og dine mål</summary><div>'
+  /* Forside med grupper; hver gruppe er en underside i samme ark. Alle felter
+     ligger i DOM'en hele tiden (skjult), saa gemFelter() ser dem alle. */
+  var side = S.indstSide || null;
+  var toneNavn = { "hudløs":"Hudløs", brutal:"Brutal", skarp:"Skarp", kaek:"Kæk", fra:"Ingen kommentarer" }[S.kaekhed] || "";
+  var grupper = [
+    ["dig", "Dig og dine mål", (S.navn || "Uden navn") + " · " + (S.maal > 0 ? tal(S.maal) + " kcal" : "intet mål")],
+    ["tone", "Tone og registrering", toneNavn + (S.autoreg ? " · automatisk" : "")],
+    ["medicin", "Medicin og kosttilskud", ""],
+    ["konto", "Konto og notifikationer", S.bruger && S.bruger.brugernavn ? "logget ind" : "ikke logget ind"],
+    ["avanceret", "Avanceret", "nøgler, kodelås, opdatering"]
+  ];
+  function underside(id, titel, indhold){
+    return '<div class="indside" data-side="' + id + '"' + (side === id ? "" : " hidden") + '>'
+      + '<button class="tilbageknap" data-tilbage>' + ikon("venstre") + 'Indstillinger</button>'
+      + '<h3>' + titel + '</h3>' + indhold + '</div>';
+  }
+  var h = '<div class="overlay" id="ind-overlay"><div class="panel">'
+    + '<span class="gemt" id="gemt" role="status" aria-live="polite"></span>'
+    + '<div class="indforside"' + (side ? " hidden" : "") + '>'
+    + '<h3>Indstillinger</h3>'
+    + grupper.map(function(g){
+        return '<button class="raekke pil" data-gaa="' + g[0] + '"><span class="h"><span style="display:block">' + g[1] + '</span>'
+          + (g[2] ? '<span class="u">' + esc(g[2]) + '</span>' : "") + '</span><span class="s">' + ikon("hoejre") + '</span></button>';
+      }).join("")
+    + '<p class="fodnote" style="text-align:center;margin-top:20px">Version ' + APP_VERSION
+    + ' (build ' + APP_BUILD + ') · ' + forbrugDenneMaaned() + ' analyser denne måned</p></div>'
+    + underside("dig", "Dig og dine mål", ""
     + '<span class="lbl">Dit fornavn</span>'
     + '<input id="s-navn" value="' + esc(S.navn) + '" placeholder="Fornavn">'
-    + '<span class="lbl">Kommentarer til måltiderne</span>'
-    + '<select id="s-kaek">'
-    + [["hudløs","Hudløs — fuldt Matthesen, intet filter"],["brutal","Brutal — ingen fingre imellem"],
-      ["skarp","Skarp — kontant, må bande"],["kaek","Kæk — tør og venlig"],["fra","Ingen kommentarer"]]
-        .map(function(a){
-          return '<option value="' + a[0] + '"' + (S.kaekhed === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
-        }).join("") + '</select>'
-    + '<p class="grafnote" style="margin-top:7px">Brutal og Hudløs går hårdt til vaner, '
-    + 'undskyldninger og tallene på vægten — Hudløs uden filter på sproget. Ingen af '
-    + 'niveauerne kommenterer, hvordan du ser ud.</p>'
     + '<span class="lbl">Dagligt mål (kalorier)</span>'
     + '<input id="s-maal" type="number" inputmode="numeric" value="' + S.maal + '">'
     + '<h3 style="margin:24px 0 0;font-size:15px">Profil</h3>'
@@ -5056,7 +5071,18 @@ function tegnIndstillinger(){
       }).join("") + '</select>'
     + '<span class="lbl">Målvægt i kilo (valgfri)</span>'
     + '<input id="s-mvaegt" type="text" inputmode="decimal" value="' + (S.profil.maalvaegt || "") + '" placeholder="fx 78,0">'
-    + '</div></details>'
+      )
+    + underside("tone", "Tone og registrering", ""
+    + '<span class="lbl">Kommentarer til måltiderne</span>'
+    + '<select id="s-kaek">'
+    + [["hudløs","Hudløs — fuldt Matthesen, intet filter"],["brutal","Brutal — ingen fingre imellem"],
+      ["skarp","Skarp — kontant, må bande"],["kaek","Kæk — tør og venlig"],["fra","Ingen kommentarer"]]
+        .map(function(a){
+          return '<option value="' + a[0] + '"' + (S.kaekhed === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
+        }).join("") + '</select>'
+    + '<p class="grafnote" style="margin-top:7px">Brutal og Hudløs går hårdt til vaner, '
+    + 'undskyldninger og tallene på vægten — Hudløs uden filter på sproget. Ingen af '
+    + 'niveauerne kommenterer, hvordan du ser ud.</p>'
     + '<div class="tjek"><input type="checkbox" id="s-autoreg"' + (S.autoreg ? " checked" : "") + '>'
     + '<label for="s-autoreg">Registrér måltider automatisk efter analyse, uden at spørge først</label></div>'
     + '<p class="grafnote" style="margin-top:4px">Du får 60 sekunder til at rette det bagefter, hvis noget er forkert. '
@@ -5065,7 +5091,10 @@ function tegnIndstillinger(){
     + '<label for="s-alkohol">Hold øje med genstande i forhold til Sundhedsstyrelsens anbefalinger</label></div>'
     + '<p class="grafnote" style="margin-top:4px">Højst ' + ALK_DAG + ' på en dag og ' + ALK_UGE
     + ' om ugen. Vises kun, når der har været alkohol de seneste 7 dage.</p>'
-    + '<details class="afsnit"><summary>Nøgler og model</summary><div>'
+      )
+    + underside("medicin", "Medicin og kosttilskud", '<div id="medboks"></div>')
+    + underside("konto", "Konto og notifikationer", '<div id="kontoboks"></div>')
+    + underside("avanceret", "Avanceret", '<h2 class="sek">Nøgler og model</h2>'
     + '<span class="lbl">Udbyder</span><select id="s-udbyder">'
     + [["gemini","Gemini — gratis (standard)"],
        ["claude","Claude — betalt, med din egen nøgle"]].map(function(a){
@@ -5090,8 +5119,7 @@ function tegnIndstillinger(){
     + '<span class="lbl">Unsplash-nøgle til billeder (valgfri — der ligger en i appen)</span>'
     + '<input id="s-unsplash" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Uændret">'
     + '<div class="note">' + esc(synkTekst()) + ' Nøglen bliver liggende på telefonen ved opdateringer — du skal kun taste den igen, hvis appen flytter til en ny adresse.</div>'
-    + '</div></details>'
-    + '<details class="afsnit"><summary>Sikkerhed</summary><div>'
+    + '<h2 class="sek">Sikkerhed</h2>'
     + '<p class="grafnote" style="margin:6px 0 0">Koden krypterer din API-nøgle. Uden den ligger '
     + 'nøglen ikke læsbart på telefonen, og ingen kan bruge din konto. Måltider og vægt gemmes '
     + 'derimod ukrypteret — koden holder nysgerrige ude, ikke en teknisk kyndig med din ulåste telefon.</p>'
@@ -5101,25 +5129,41 @@ function tegnIndstillinger(){
               return '<option value="' + a[0] + '"' + (String(laasTid()) === a[0] ? " selected" : "") + '>' + a[1] + '</option>';
             }).join("") + '</select>'
           + '<button class="knap sek" id="s-laasnu" style="margin-top:12px">Lås appen nu</button>'
-          + '<button class="knap fare" id="s-laasfra" style="margin-top:8px">Slå kodelås fra</button>'
         : '<button class="knap sek" id="s-laastil" style="margin-top:12px">Slå kodelås til</button>')
-    + '</div></details>'
-    + '<details class="afsnit" id="med-afsnit"><summary>Medicin og kosttilskud</summary><div id="medboks"></div></details>'
-    + '<details class="afsnit"><summary>Konto og notifikationer</summary><div>'
-    + '<div id="kontoboks"></div>'
-    + '</div></details>'
-    + '<div class="bundfelt">'
-    + '<button class="knap" id="s-gem">Gem</button>'
-    + '<button class="knap sek" id="s-opdater" style="margin-top:8px">Søg efter opdatering</button>'
-    + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data på denne telefon</button>'
-    + '<p class="fodnote" style="text-align:center;margin-top:12px">Version ' + APP_VERSION
-    + ' (build ' + APP_BUILD + ') · ' + forbrugDenneMaaned() + ' analyser denne måned</p>'
-    + '</div></div></div>';
+    + '<h2 class="sek">Opdatering</h2>'
+    + '<button class="knap sek" id="s-opdater">Søg efter opdatering</button>'
+    + '<h2 class="sek fare-ovs">Farligt</h2>'
+    + (harLaas() ? '<button class="knap fare" id="s-laasfra">Slå kodelås fra</button>' : "")
+    + '<button class="knap fare" id="s-nulstil" style="margin-top:8px">Slet alle data på denne telefon</button>')
+    + '</div></div>';
   var gl = $("ind-overlay"); if (gl) gl.remove();
   document.body.insertAdjacentHTML("beforeend", h);
 
-  function luk(){ S.indst = false; lukBlodt("ind-overlay", tegn); }
+  function luk(){
+    var f = document.activeElement; if (f && f.blur) f.blur();  /* et felt i fokus naar at gemme */
+    S.indst = false; S.indstSide = null; lukBlodt("ind-overlay", tegn);
+  }
   $("ind-overlay").onclick = function(e){ if (e.target.id === "ind-overlay") luk(); };
+  function visSide(id){
+    S.indstSide = id;
+    var o = $("ind-overlay");
+    o.querySelector(".indforside").hidden = !!id;
+    Array.prototype.forEach.call(o.querySelectorAll("[data-side]"), function(el){ el.hidden = el.getAttribute("data-side") !== id; });
+    o.querySelector(".panel").scrollTop = 0;
+  }
+  Array.prototype.forEach.call($("ind-overlay").querySelectorAll("[data-gaa]"), function(b){
+    b.onclick = function(){ visSide(b.getAttribute("data-gaa")); };
+  });
+  Array.prototype.forEach.call($("ind-overlay").querySelectorAll("[data-tilbage]"), function(b){
+    b.onclick = function(){ visSide(null); };
+  });
+  var gemtTimer = null;
+  function visGemt(){
+    var g = $("gemt"); if (!g) return;
+    g.textContent = "Gemt"; g.classList.add("vis");
+    clearTimeout(gemtTimer);
+    gemtTimer = setTimeout(function(){ g.classList.remove("vis"); }, 1500);
+  }
   /* Felterne gemmer sig selv, når man forlader dem. Gem-knappen er dermed en
      bekræftelse og ikke et krav — ellers taber man sine rettelser ved at lukke
      arket, og det er nemt at gøre nu hvor det kan strygees ned. */
@@ -5156,6 +5200,7 @@ function tegnIndstillinger(){
        foerste gang — kun selve dagbogen gjorde. Rettet: enhver aendring her
        markeres nu til upload, ligesom en ny vejning eller et nyt maaltid. */
     synkMaerk("#indst");
+    visGemt();
   }
 
   ["s-navn","s-kaek","s-maal","s-hoejde","s-alder","s-koen","s-akt","s-hensigt",
@@ -5163,19 +5208,19 @@ function tegnIndstillinger(){
     var el = $(id);
     if (el) el.onchange = function(){ gemFelter(); };
   });
+  ["s-noegle","s-gnoegle","s-unsplash"].forEach(function(id){
+    var el = $(id);
+    if (el) el.onchange = function(){ gemFelter(); el.value = ""; el.placeholder = "Uændret"; };
+  });
   var uds = $("s-udbyder");
   if (uds) uds.onchange = function(){ gemFelter(); tegnIndstillinger(); };
   var ar = $("s-autoreg");
-  if (ar) ar.onchange = function(){ S.autoreg = ar.checked; skriv(K_AUTOREG, ar.checked ? "1" : "0"); };
+  if (ar) ar.onchange = function(){ S.autoreg = ar.checked; skriv(K_AUTOREG, ar.checked ? "1" : "0"); visGemt(); };
   var alk = $("s-alkohol");
   if (alk) alk.onchange = function(){
-    S.alkohol = alk.checked; skriv(K_ALKOHOL, alk.checked ? "1" : "0"); synkMaerk("#indst");
+    S.alkohol = alk.checked; skriv(K_ALKOHOL, alk.checked ? "1" : "0"); synkMaerk("#indst"); visGemt();
   };
 
-  $("s-gem").onclick = function(){
-    gemFelter();
-    luk();
-  };
   bindFoldning($("ind-overlay"));
   bindTraekNed("ind-overlay", luk);
   tegnKonto();
@@ -5192,7 +5237,7 @@ function tegnIndstillinger(){
     tegn();
   };
   var ln = $("s-laasnu"); if (ln) ln.onclick = function(){ laasNu(); };
-  var ltid = $("s-laastid"); if (ltid) ltid.onchange = function(){ skriv(K_LAASTID, ltid.value); };
+  var ltid = $("s-laastid"); if (ltid) ltid.onchange = function(){ skriv(K_LAASTID, ltid.value); visGemt(); };
   $("s-opdater").onclick = function(){
     var b = $("s-opdater");
     b.textContent = "Søger …"; b.disabled = true;
