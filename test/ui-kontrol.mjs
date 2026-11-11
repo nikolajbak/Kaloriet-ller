@@ -19,8 +19,13 @@ const VISUEL = !process.argv.includes("--uden-visuel");
 const NU = new Date("2026-11-11T13:00:00Z"); // onsdag 14:00 dansk tid
 const MAKS_DIFF = 0.003;
 
-/* Kendte fund, der rettes i en senere fase. Noeglen er "skaerm:regel:beskrivelse". */
-const KENDT = new Set([]);
+/* Kendte fund i den gamle brugerflade, som en senere fase retter. Moenstre mod
+   "skaerm:regel:beskrivelse". Fjern linjen, naar fasen er lavet. */
+const KENDT = [
+  /:trykflade:(b-indst|I dag|Vægt|Historik|Trends) \d+×(38|43)$/,          // fase 2: navigation
+  /^(idag|fejring)@\d+:trykflade:.+ \d+×43$/,                               // fase 3: I dag (maaltidsraekker, maal-link)
+  /:trykflade:(Dag|Uge|Måned|7 dage|30 dage|90 dage) \d+×38$/,             // fase 4: periodevaelgere
+];
 
 /* ---------- Testdata ---------- */
 function dag(forskydning){
@@ -34,6 +39,7 @@ export function testdata(){
   const data = {
     "kd:navn": "Nikolaj", "kd:maal": "2200", "kd:auto-reg": "0",
     "kd:profil": JSON.stringify({ hoejde:182, alder:41, maalvaegt:80 }),
+    "kd:fejret": dag(-1),  // ellers daekker lykønskningen for i gaar alt
   };
   data["kd:dag:" + dag(0)] = JSON.stringify([
     maaltid("a", "08.12", "Havregryn med banan", "Brød & korn", 420, 14, 70, 9, "Solid start. Ingen undskyldninger nødvendige."),
@@ -75,7 +81,7 @@ let antalTjek = 0;
 function rapport(skaerm, regel, besked){
   antalTjek++;
   const noegle = skaerm + ":" + regel + ":" + besked;
-  if (KENDT.has(noegle)) return;
+  if (KENDT.some(m => m.test(noegle))) return;
   fund.push(noegle);
 }
 function bekraeft(betingelse, skaerm, regel, besked){
@@ -96,6 +102,7 @@ export async function aabn({ skema = "light", bredde = 390, data = testdata(), f
   side.on("pageerror", e => side.fejl.push("pageerror: " + e.message));
   side.on("console", m => { if (m.type() === "error" && !/Failed to load resource|ERR_FAILED|net::/.test(m.text())) side.fejl.push("console: " + m.text()); });
   await side.clock.setFixedTime(NU);
+  await side.addInitScript(() => { let x = 42; Math.random = () => ((x = (x * 16807) % 2147483647) / 2147483647); });
   await side.addInitScript(d => { if (!sessionStorage.getItem("ui-klar")){ localStorage.clear(); for (const k in d) localStorage.setItem(k, d[k]); sessionStorage.setItem("ui-klar", "1"); } }, data);
   if (foer) await foer(side);
   await side.goto(base);
@@ -115,7 +122,13 @@ async function tjekLayout(side, navn){
       return b.width > 0 && b.height > 0 && s.visibility !== "hidden" && s.display !== "none" && Number(s.opacity) > 0.05; };
     for (const el of document.querySelectorAll("button, [role=button], [role=tab], a[href], input[type=checkbox]")){
       if (!synlig(el) || el.closest("[aria-hidden=true]")) continue;
+      if (el.id && document.querySelector('label[for="' + el.id + '"]')) continue; // labelen er trykfladen
       const b = el.getBoundingClientRect();
+      // Kun det, der ligger oeverst (ikke elementer under et ark eller en dug)
+      const cx = Math.min(innerWidth - 1, Math.max(0, b.left + b.width / 2)), cy = b.top + b.height / 2;
+      if (cy < 0 || cy > innerHeight) continue;
+      const top = document.elementFromPoint(cx, cy);
+      if (!top || !(el === top || el.contains(top) || top.contains(el))) continue;
       // Udvidet trykflade via padding/negativ margin tæller med (b er border-box)
       if (b.width < 44 || b.height < 44) ud.smaa.push((el.id || el.textContent.trim().slice(0, 24) || el.className) + " " + Math.round(b.width) + "×" + Math.round(b.height));
     }
@@ -197,6 +210,7 @@ export const skaerme = [
   { navn: "trends", til: async s => { await s.click("[data-skaerm=trends]"); } },
   { navn: "indstillinger", til: async s => { await s.click("#b-indst"); } },
   { navn: "skriv", til: async s => { await s.click("#b-skriv"); } },
+  { navn: "fejring", data: () => { const d = testdata(); delete d["kd:fejret"]; return d; }, til: async () => {} },
 ];
 
 /* ---------- Funktionstjek ---------- */
@@ -211,7 +225,7 @@ async function main(){
     for (const skema of ["light", "dark"]) for (const bredde of [390, 820]) for (const sk of skaerme){
       const navn = sk.navn + "-" + skema + "-" + bredde;
       if (process.env.UI_LOG) console.log("→ " + navn);
-      const side = await aabn({ skema, bredde });
+      const side = await aabn({ skema, bredde, data: sk.data ? sk.data() : testdata() });
       try {
         await sk.til(side);
         await side.waitForTimeout(500);
