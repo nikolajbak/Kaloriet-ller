@@ -170,7 +170,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--gron);outl
 .graf{width:100%;height:auto;display:block;margin:14px 0 4px;}
 .graf-forkl{display:flex;justify-content:center;gap:16px;font-size:12px;color:var(--daempet);margin:2px 0 6px;}
 .graf-forkl i{display:inline-block;width:14px;margin-right:6px;vertical-align:middle;border-top:2px solid var(--gron);}
-.graf-forkl .fk-trend{border-top:1.5px dashed var(--daempet);}
+.graf-forkl .fk-trend{border-top:2.6px solid var(--blaek);}
 .graf-forkl .fk-maal{border-top:1.5px dashed var(--graf-maal);}
 .grafnote{font-size:12px;color:var(--daempet);margin:0 0 6px;}
 .raekke{width:100%;text-align:left;background:none;border:none;
@@ -601,3 +601,28 @@ button.knap.sek{background:var(--kort);}
 button.knap.med-ikon{display:flex;align-items:center;justify-content:center;gap:8px;}
 button.knap.med-ikon .ikon{width:20px;height:20px;color:var(--gron);}
 .slettebag{inset:1px;border-radius:11px;}
+/* --- Udvikling (redesign fase 4) --- */
+.udvtitel{display:flex;flex-direction:column;min-width:0;}
+.udvtitel b{font-size:var(--t4);font-weight:600;line-height:1.2;}
+.udvtitel .datolinje{font-size:var(--t1);}
+.udv{background:var(--kort);border:1px solid var(--linje);border-radius:var(--r3);padding:var(--a4);margin-top:var(--a4);}
+.udv > .tom{border:none;padding:4px 0;}
+.udv .spalter > .s-a > h2.sek:first-child{margin-top:var(--a2);}
+[hidden]{display:none !important;}
+h2.udv-ovs{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 var(--a2);
+  font-size:var(--t4);font-weight:600;color:var(--blaek);min-height:44px;}
+.vurdering h2.udv-ovs,.udv > h2.udv-ovs:not(:first-child){margin-top:var(--a5);}
+.knaprad{display:flex;align-items:center;gap:var(--a3);}
+.knaprad .txtknap{margin:0;padding:0 2px;min-height:44px;font-size:var(--t2);}
+button.knap.lille{width:auto;padding:0 14px;min-height:44px;font-size:var(--t2);border-radius:var(--rund);}
+button.knap.lille .ikon{width:18px;height:18px;}
+.tom.lille{padding:14px;margin:12px 0;font-size:var(--t2);}
+.graf .hit{cursor:pointer;}
+.raekke.pil .s{color:var(--daempet);}
+.raekke.pil .s .ikon{width:20px;height:20px;}
+.raekke{min-height:52px;}
+.parkering{display:contents;}
+.txtknap.visflere{margin:4px 0 0;padding:0 2px;min-height:44px;display:inline-flex;align-items:center;}
+.overlay.stille,.overlay.stille > .panel{animation:none;}
+.udv .noegletal{border-top:none;padding-top:0;}
+@media (min-width:760px){ .udv{padding:var(--a5);} }
