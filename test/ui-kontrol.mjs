@@ -22,7 +22,6 @@ const MAKS_DIFF = 0.003;
 /* Kendte fund i den gamle brugerflade, som en senere fase retter. Moenstre mod
    "skaerm:regel:beskrivelse". Fjern linjen, naar fasen er lavet. */
 const KENDT = [
-  /^(idag|igaar|fejring)@\d+:trykflade:.+ \d+×43$/,                               // fase 3: I dag (maaltidsraekker, maal-link)
   /:trykflade:(Dag|Uge|Måned|7 dage|30 dage|90 dage) \d+×38$/,             // fase 4: periodevaelgere
 ];
 
@@ -267,6 +266,25 @@ export const funktioner = [
     await s.evaluate(() => { S.iDag = S.visDag; tegn(); });
     ok(await s.evaluate(() => visteDag() === S.iDag && maalDag() === S.iDag), "efter datoskift falder visningen tilbage til i dag");
     ok(await s.isDisabled("#b-naeste"), "› er slået fra efter datoskift");
+  } },
+  { navn: "idag-indhold", tjek: async (s, ok) => {
+    ok(await s.locator(".makro .makrofelt").count() === 3, "makro står i tre felter");
+    ok((await s.locator("h2.sek-sum").textContent()).includes("1.510"), "dagens sum står ved Måltider");
+    ok(await s.locator("#b-spise.knap.sek").count() === 1, "»Hvad kan jeg spise nu« er en sekundær knap");
+    ok(await s.locator(".indhold .fodnote").count() === 0, "fodnoten om estimater er ikke på I dag");
+    ok(await s.evaluate(() => getComputedStyle(document.querySelector(".post .kom")).webkitLineClamp === "2"), "kommentaren har op til 2 linjer");
+    ok(await s.evaluate(() => getComputedStyle(document.querySelector(".post .kcal")).fontFamily.indexOf("Georgia") < 0), "kcal i måltider er sans-serif");
+  } },
+  { navn: "under-analyse", opsaet: { data: (() => { const d = testdata(); const k = Object.keys(d).find(x => x.startsWith("kd:dag:") && JSON.parse(d[x])[0]?.id === "a");
+      const l = JSON.parse(d[k]); l.push({ id:"z", tid:"16.00", navn:"Analyserer…", kategori:"Andet", kalorier:0, analyserer:true, status:"analyserer", grovNavn:"Burger", grovKcal:440 });
+      d[k] = JSON.stringify(l); return d; })() }, tjek: async (s, ok) => {
+    await s.evaluate(() => { ventende.z = { stor: "", lille: "" }; tegn(); });
+    const b = await s.evaluate(() => { const e = document.querySelector(".under-analyse"); return e ? e.getBoundingClientRect().width : 0; });
+    ok(b > 0, "kalorier under analyse vises som skraveret stykke af bjælken");
+    ok(await s.locator(".post.analyserer .skjold").count() === 0, "analyserende måltid har intet mørkt skjold");
+  } },
+  { navn: "tom-dag", opsaet: { data: (() => { const d = testdata(); for (const k of Object.keys(d)) if (k.startsWith("kd:dag:") && JSON.parse(d[k])[0]?.id === "a") delete d[k]; return d; })() }, tjek: async (s, ok) => {
+    ok((await s.locator(".tom-pil").textContent()).includes("Intet registreret endnu"), "tom dag: »Intet registreret endnu«");
   } },
   { navn: "offline-css", opsaet: { sw: true }, tjek: async (s, ok) => {
     await s.evaluate(() => navigator.serviceWorker.ready);

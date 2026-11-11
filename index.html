@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
-<link rel="stylesheet" href="style.css?v=108">
+<link rel="stylesheet" href="style.css?v=109">
 </head>
 <body>
 
@@ -32,7 +32,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 108;
+var APP_BUILD = 109;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -2712,7 +2712,8 @@ var IKON = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   blyant: '<path d="M4.5 19.5h4l10-10-4-4-10 10z M13 7l4 4"/>',
   dag: '<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M9 3.5v4M15 3.5v4"/>',
-  kurve: '<path d="M4 18l5-6 4 3.5L20 7"/><path d="M15.5 7H20v4.5"/>'
+  kurve: '<path d="M4 18l5-6 4 3.5L20 7"/><path d="M15.5 7H20v4.5"/>',
+  gnist: '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'
 };
 function ikon(n){
   return '<svg class="ikon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
@@ -2938,23 +2939,27 @@ function tegnHoved(){
   var h = '<div class="indhold">' + hoved(langDato(dag))
     + '<div class="spalter idag"><div class="s-a">' + (erIdag ? medhuskHtml() : "")
     + '<div class="hero"><div class="stortal' + (over ? " over" : "") + '">' + tal(stort) + '</div>'
-    + '<div class="maallinje' + (over ? " over" : "") + '">' + stortTekst + '</div>'
+    + '<div class="maallinje' + (over ? " over" : "") + '"><span>' + stortTekst + '</span>'
+    + '<button class="txtknap" id="b-maal">' + (S.maal > 0 ? 'mål ' + tal(S.maal) : 'sæt et mål') + '</button></div>'
     + '<div class="baand" role="progressbar" aria-label="Spist af dagens mål" aria-valuemin="0" aria-valuemax="'
     + Math.round(S.maal) + '" aria-valuenow="' + Math.round(sum.kcal) + '"><span class="' + (over ? "over" : "")
-    + '" style="width:' + pct + '%"></span></div>'
-    + '<div class="status"><span><b>' + tal(sum.kcal) + '</b> spist'
-    + (venter > 0 ? ' · ca. ' + tal(venter) + ' under analyse' : '') + '</span>'
-    + '<button class="txtknap" id="b-maal">' + (S.maal > 0 ? 'mål ' + tal(S.maal) : 'sæt et mål') + '</button></div>'
-    + '<div class="makro"><div>protein <b>' + tal(sum.pro) + ' g</b></div>'
-    + '<div>kulhydrat <b>' + tal(sum.kul) + ' g</b></div>'
-    + '<div>fedt <b>' + tal(sum.fedt) + ' g</b></div>'
-    + (gen > 0 && !S.alkohol ? '<div>genstande <b>' + kg(gen).replace(",0","") + '</b></div>' : "")
+    + '" style="width:' + pct + '%"></span>'
+    /* Det, der stadig analyseres, staar skraveret i forlaengelse af det spiste */
+    + (venter > 0 && S.maal > 0 && !over ? '<span class="under-analyse" title="ca. ' + tal(venter) + ' kcal under analyse" style="width:'
+      + Math.max(0, Math.min(100 - pct, venter / S.maal * 100)) + '%"></span>' : "") + '</div>'
+    + (venter > 0 ? '<div class="status"><span>ca. <b>' + tal(venter) + '</b> kcal under analyse</span></div>' : "")
+    + '<div class="makro">'
+    + [["protein", sum.pro], ["kulhydrat", sum.kul], ["fedt", sum.fedt]].map(function(m){
+        return '<div class="makrofelt"><b>' + tal(m[1]) + ' g</b><span>' + m[0] + '</span></div>';
+      }).join("")
+    + (gen > 0 && !S.alkohol ? '<div class="makrofelt"><b>' + kg(gen).replace(",0","") + '</b><span>genstande</span></div>' : "")
     + '</div>' + alkoholHtml() + '</div></div>'
-    + '<div class="s-b"><h2 class="sek">Dagens måltider</h2>';
+    + '<div class="s-b"><h2 class="sek sek-sum"><span>Måltider</span>'
+    + (poster.length ? '<span>' + tal(sum.kcal) + ' kcal</span>' : "") + '</h2>';
 
   if (!poster.length){
-    h += '<div class="tom">' + (erIdag ? 'Ingen måltider endnu. Tryk på kameraet nederst, så regner appen resten ud.'
-      : 'Intet registreret den dag. Tryk på kameraet eller »Skriv et måltid« for at tilføje.') + '</div>';
+    h += '<div class="tom tom-pil"><b>Intet registreret ' + (erIdag ? "endnu" : "den dag") + '</b>'
+      + '<span>Tryk på kameraet nederst — eller skriv det.</span></div>';
   } else {
     poster.forEach(function(p){
       if (p.analyserer){
@@ -2976,7 +2981,7 @@ function tegnHoved(){
         var metaTxt = st === "spoergsmaal" ? "Tryk for at svare"
           : st === "fejl" ? esc(ventende[p.id] ? (p.fejlTekst || "Prøv selv") + " · tryk for at prøve selv" : "Afbrudt · stryg for at slette")
           : (grov ? "Grov skøn · " : "") + '<span data-sjov="' + esc(p.id) + '">' + esc(sjovTekst(p.id)) + '</span> · <span class="tm" data-timer="' + esc(p.id) + '">0 s</span>';
-        var glyf = st === "spoergsmaal" ? "?" : st === "fejl" ? "!" : '<span class="spin"></span>';
+        var glyf = st === "spoergsmaal" ? "?" : st === "fejl" ? "!" : "";
         h += '<div class="postrum">'
           + '<div class="slettebag" aria-hidden="true">'
           + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
@@ -2987,7 +2992,7 @@ function tegnHoved(){
           + '<div class="thumb">'
           + (p.billede ? '<img src="' + p.billede + '" alt="">'
                        : '<div class="tom-foto">' + kategoriIkon("Andet") + '</div>')
-          + '<div class="skjold">' + glyf + '</div></div>'
+          + (glyf ? '<div class="skjold">' + glyf + '</div>' : "") + '</div>'
           + '<div class="txt"><div class="navn">' + navnTxt + '</div>'
           + '<div class="meta">' + metaTxt + '</div></div>'
           + '<div class="kcal">' + (grov ? "ca. " + tal(p.grovKcal) : st === "analyserer" ? "…" : "") + '</div></div></div>';
@@ -3012,8 +3017,7 @@ function tegnHoved(){
   if (poster.length && dagNoegler().length <= 3) h += '<p class="grafnote" style="margin:2px 2px 0">Tryk på et måltid for at rette det. Stryg til venstre for at slette.</p>';
   h += '<button class="txtknap tilfoej" id="b-skriv">' + ikon("blyant") + 'Skriv et måltid</button>';
   h += '</div><div class="s-c">' + (erIdag ? '<h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>' : "")
-    + '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
-    + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div></div></div>';
+    + '</div></div></div>';
 
   $("rod").innerHTML = h;
   bindHoved();
@@ -3099,7 +3103,7 @@ function tegnSpiseforslag(){
     };
     return;
   }
-  boks.innerHTML = '<button class="knap sek" id="b-spise">Hvad kan jeg spise nu</button>';
+  boks.innerHTML = '<button class="knap sek med-ikon" id="b-spise">' + ikon("gnist") + 'Hvad kan jeg spise nu</button>';
   $("b-spise").onclick = startSpiseforslag;
 }
 function opskriftHtml(i){
@@ -4388,7 +4392,9 @@ function tegnArk(){
       + (r.usikkerhed === "hoej" ? '<div style="margin-top:4px">Usikkert gæt — ret gerne tallet.</div>' : '')
       + '</div>';
     h += '<button class="knap" id="b-gem" style="margin-top:16px">Gem i dagbogen</button>'
-      + '<button class="knap sek" id="b-luk" style="margin-top:8px">Kassér</button>';
+      + '<button class="knap sek" id="b-luk" style="margin-top:8px">Kassér</button>'
+      + '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
+      + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p>';
   }
   h += '</div></div>';
   var gl = $("overlay"); if (gl) gl.remove();
