@@ -1,7 +1,7 @@
 # Kaloriedagbog
 
 Personlig kaloriedagbog-PWA med AI-madanalyse til Nikolaj og hans kæreste
-(to brugere, hver sin konto). Hele klienten er én fil uden build.
+(to brugere, hver sin konto). Klienten er `index.html` (HTML+JS) og `style.css`, uden build.
 
 ## Overblik
 
@@ -17,6 +17,8 @@ Personlig kaloriedagbog-PWA med AI-madanalyse til Nikolaj og hans kæreste
 
 ```bash
 python3 -m http.server 5173                 # appen lokalt
+node test/ui-kontrol.mjs                    # UI-kontrol: fejl, layout, trykflader, kontrast, funktion, skærmbilleder (~5 min)
+node test/ui-kontrol.mjs --opdater          # nye referencebilleder efter en bevidst visuel ændring (se dem igennem først)
 node test/gemini-test.mjs <billede.jpg>     # måler appens ægte Gemini-kode mod API'et (bruger kvote, ingen asserts)
 sh tools/gemini-noegle.sh                   # brugeren lægger GEMINI_API_KEY i Supabase fra udklipsholderen
 ```
@@ -25,7 +27,9 @@ sh tools/gemini-noegle.sh                   # brugeren lægger GEMINI_API_KEY i 
 
 | Del | Filer |
 |---|---|
-| Hele klienten (HTML, CSS, JS) | `index.html` |
+| Klienten (HTML, JS) | `index.html` |
+| Al CSS (tokens øverst, lys/mørk) | `style.css` — linkes `style.css?v=<APP_BUILD>` |
+| UI-kontrol og referencebilleder | `test/ui-kontrol.mjs`, `test/ui-reference/`; CI: `.github/workflows/ui-kontrol.yml` (uden visuel) |
 | Offline-cache og push (`push`/`notificationclick`) | `sw.js`, `manifest.webmanifest` |
 | Gemini-proxy med appens fælles nøgle | `supabase/functions/gemini/` |
 | Aften-check-in | `supabase/functions/daglig-paamindelse/` |
@@ -39,7 +43,9 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
 ## Udrulning
 
 - **Klienten:** rediger, commit, push → GitHub Pages. **Øg `APP_BUILD`**
-  (nær toppen af `index.html`) med 1 ved hver ændring af filen. Appen bruger
+  (nær toppen af `index.html`) med 1 ved hver ændring af `index.html` eller `style.css`, **og sæt samme tal i
+  `style.css?v=`** (UI-kontrollen fejler ellers). `sw.js` henter `.css` netværk først og gemmer den uden `?v`
+  til brug uden net. Appen bruger
   den til selv at opdage en nyere version (`tjekOpdatering()`/`hentNyVersion()`);
   glemmes det, opdager klienterne ikke ændringen.
   Klienterne opdaterer selv: HEAD-tjek hvert minut, mens appen er synlig

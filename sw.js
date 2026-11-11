@@ -11,11 +11,12 @@
  * denne fil, så der aldrig gemmes svar med dine måltider i en cache.
  */
 
-var CACHE = "kaloriedagbog-skal-3";
+var CACHE = "kaloriedagbog-skal-4";
 
 var SKAL = [
   "./",
   "./index.html",
+  "./style.css",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
@@ -79,7 +80,24 @@ self.addEventListener("fetch", function (e) {
     return;
   }
 
-  // Alt med en forespørgselsstreng går uden om cachen — den slags er altid
+  // Stylesheetet: netværk først som siden, så HTML og CSS altid følges ad.
+  // Det hentes med ?v=<APP_BUILD>, men gemmes uden, så det også findes uden net.
+  if (sti.slice(-4) === ".css") {
+    e.respondWith(
+      fetch(req).then(function (svar) {
+        if (svar && svar.ok) {
+          var kopi = svar.clone();
+          caches.open(CACHE).then(function (c) { c.put(url.origin + sti, kopi); });
+        }
+        return svar;
+      }).catch(function () {
+        return caches.match(url.origin + sti, { ignoreSearch: true });
+      })
+    );
+    return;
+  }
+
+  // Alt andet med en forespørgselsstreng går uden om cachen — den slags er altid
   // et bevidst forsøg på at hente noget friskt
   if (url.search) return;
 
