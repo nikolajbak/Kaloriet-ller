@@ -626,3 +626,17 @@ button.knap.lille .ikon{width:18px;height:18px;}
 .overlay.stille,.overlay.stille > .panel{animation:none;}
 .udv .noegletal{border-top:none;padding-top:0;}
 @media (min-width:760px){ .udv{padding:var(--a5);} }
+/* --- Indstillinger (redesign fase 5): forside med grupper og undersider --- */
+.indforside > h3,.indside > h3{font-size:var(--t5);font-weight:600;margin:0 0 var(--a3);}
+.indforside .raekke{min-height:60px;}
+.tilbageknap{display:inline-flex;align-items:center;gap:2px;background:none;border:none;font:inherit;font-size:var(--t3);
+  color:var(--gron);cursor:pointer;min-height:44px;padding:0 8px 0 0;margin:-8px 0 4px -8px;}
+.tilbageknap .ikon{width:22px;height:22px;}
+.gemt{position:sticky;top:0;float:right;z-index:2;margin:-14px -4px 0 0;padding:4px 12px;border-radius:var(--rund);
+  background:var(--god-bg);color:var(--god-txt);font-size:var(--t2);font-weight:600;opacity:0;transform:translateY(-4px);
+  transition:opacity .2s, transform .2s;pointer-events:none;}
+.gemt.vis{opacity:1;transform:none;}
+.indside h2.sek:first-of-type{margin-top:var(--a3);}
+h2.sek.fare-ovs{color:var(--ler);margin-top:var(--a6);}
+.indside .tjek{min-height:44px;}
+.indside .tjek label{flex:1;min-height:44px;display:flex;align-items:center;}

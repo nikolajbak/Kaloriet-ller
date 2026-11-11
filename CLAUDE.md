@@ -30,6 +30,7 @@ sh tools/gemini-noegle.sh                   # brugeren lægger GEMINI_API_KEY i 
 | Klienten (HTML, JS) | `index.html` |
 | Al CSS (tokens øverst, lys/mørk) | `style.css` — linkes `style.css?v=<APP_BUILD>` |
 | UI-kontrol og referencebilleder | `test/ui-kontrol.mjs`, `test/ui-reference/`; CI: `.github/workflows/ui-kontrol.yml` (uden visuel) |
+| Navigation og skærme | Bundbjælke (`opdaterBundbjaelke()`: I dag · kamera · Udvikling; langt tryk på kameraet = skriv), »I dag« blader mellem dage (`S.visDag`, `visteDag()`, `maalDag()` registrerer på den viste dag), »Udvikling« (`tegnUdvikling()`: Vægt, Kalorier, Mønstre under `S.udvPeriode` 7/30/90/365), Indstillinger som forside med undersider (`S.indstSide`) og autogem |
 | Offline-cache og push (`push`/`notificationclick`) | `sw.js`, `manifest.webmanifest` |
 | Gemini-proxy med appens fælles nøgle | `supabase/functions/gemini/` |
 | Aften-check-in | `supabase/functions/daglig-paamindelse/` |
@@ -111,6 +112,9 @@ hvert 15. min (tjekker selv, om brugerens klokkeslæt rammes).
   `MAKS_BEVAEGELSE`, `STABIL_KRAV` er **ukalibrerede gæt**.
 
 ## Faldgruber
+
+- **Klassenavne kolliderer let:** `.indhold.frem`/`.indhold.tilbage` er animationsklasser fra skærmskift. En ny
+  komponent må ikke hedde `.frem` eller `.tilbage` (det lagde »I går« ud som én række, 2026-11-11).
 
 - **Medicindøgnet løber 06:00–05:59** (Nikolaj 2026-11-10): en påmindelse »for i dag« aktiveres kl. 06, og kl. 03
   hører til gårsdagen. Reglen står to steder — `medDag()` i `index.html` og i `medicin-paamindelse` — ret begge.
