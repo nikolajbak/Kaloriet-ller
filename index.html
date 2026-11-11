@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
-<link rel="stylesheet" href="style.css?v=107">
+<link rel="stylesheet" href="style.css?v=108">
 </head>
 <body>
 
@@ -32,7 +32,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 107;
+var APP_BUILD = 108;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -480,6 +480,8 @@ var S = {
   alkohol: laes(K_ALKOHOL) !== "0",
   medicin: null,  /* saettes af normMedicin() lige efter S, se »Medicin og kosttilskud« */
   skaerm: "idag",
+  visDag: null,
+  udvFane: "vaegt",
   skiftRetning: null,
   bruger: null,
   periode: "dag",
@@ -993,7 +995,7 @@ function bindStryg(){
       el.classList.remove("glider");
       if (laast === "vandret" && raa <= -graense){
         el.style.transform = "translateX(-100%)";
-        setTimeout(function(){ sletPost(S.iDag, id); tegn(); }, 180);
+        setTimeout(function(){ sletPost(visteDag(), id); tegn(); }, 180);
       } else {
         el.style.transform = "";
       }
@@ -1030,7 +1032,17 @@ function dagsbudget(dag){
   return { spist:spist, maal:S.maal, tilbage:S.maal - spist };
 }
 /* Den dag nye registreringer havner paa. Normalt i dag, men kan saettes fra historikken. */
-function maalDag(){ return S.maalDag || S.iDag; }
+function maalDag(){ return S.maalDag || (S.skaerm === "idag" ? visteDag() : S.iDag); }
+/* Dagen »I dag« viser. S.visDag er null for i dag; en dato i fremtiden (fx efter
+   midnat, hvor S.iDag rykker) falder automatisk tilbage til i dag. */
+function visteDag(){ return S.visDag && S.visDag < S.iDag ? S.visDag : S.iDag; }
+function skiftDag(retning){
+  var d = tilDato(visteDag());
+  var ny = dagKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() + retning));
+  S.visDag = ny < S.iDag ? ny : null;
+  S.skiftRetning = retning > 0 ? "frem" : "tilbage";
+  skjulFortryd(); window.scrollTo(0,0); tegn();
+}
 function nuKlokken(){
   return new Date().toLocaleTimeString("da-DK", { hour:"2-digit", minute:"2-digit" });
 }
@@ -2690,9 +2702,28 @@ function profiltekst(){
   return d.join(", ");
 }
 
+/* ================= Ikoner =================
+   Ens streg (1,8), tegnet i 24-gitteret. Farven arves (currentColor). */
+var IKON = {
+  kamera: '<path d="M4 8.5h3.2L9 6h6l1.8 2.5H20V19H4z"/><circle cx="12" cy="13.2" r="3.4"/>',
+  indst: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  venstre: '<path d="M14.5 5.5L8 12l6.5 6.5"/>',
+  hoejre: '<path d="M9.5 5.5L16 12l-6.5 6.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  blyant: '<path d="M4.5 19.5h4l10-10-4-4-10 10z M13 7l4 4"/>',
+  dag: '<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M9 3.5v4M15 3.5v4"/>',
+  kurve: '<path d="M4 18l5-6 4 3.5L20 7"/><path d="M15.5 7H20v4.5"/>'
+};
+function ikon(n){
+  return '<svg class="ikon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
+    + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IKON[n] + '</svg>';
+}
+
 /* ================= Skaerme ================= */
 
 function tegn(){
+  var udenfor = (harLaas() && !aktivNoegle) || (udbyder() === "claude" && !aktivNoegle && !laes(K_NOEGLE)) || !laes(K_BRUGER);
+  if (udenfor) opdaterBundbjaelke(true);
   if (harLaas() && !aktivNoegle) return tegnLaas();
   if (udbyder() === "claude" && !aktivNoegle && !laes(K_NOEGLE)) return tegnOpsaet();
   if (!laes(K_BRUGER)) return tegnOpsaet();
@@ -2788,33 +2819,92 @@ function tegnOpsaet(){
 }
 
 function hoved(venstre){
-  return '<div class="top"><span class="datolinje">' + venstre + '</span>'
-    + '<button class="txtknap" id="b-indst">Indstillinger</button></div>'
-    + '<div class="valg" role="tablist">'
-    + [["idag","I dag"],["vaegt","Vægt"],["historik","Historik"],["trends","Trends"]].map(function(t){
+  var gear = '<button class="ikonknap" id="b-indst" aria-label="Indstillinger">' + ikon("indst") + '</button>';
+  if (S.skaerm === "idag"){
+    var d = visteDag(), erIdag = d === S.iDag;
+    var igaar = dagKey(new Date(tilDato(S.iDag).getTime() - 864e5 + 36e5 * 2));
+    var navn = erIdag ? "I dag" : d === igaar ? "I går" : kortDato(d);
+    return '<div class="top dagnav">'
+      + '<button class="ikonknap" id="b-forrige" aria-label="Forrige dag">' + ikon("venstre") + '</button>'
+      + '<div class="dagtitel"><b>' + esc(navn) + '</b><span class="datolinje">' + esc(langDato(d)) + '</span></div>'
+      + '<button class="ikonknap" id="b-naeste" aria-label="Næste dag"' + (erIdag ? " disabled" : "") + '>' + ikon("hoejre") + '</button>'
+      + '<span class="fyld"></span>' + gear + '</div>';
+  }
+  return '<div class="top"><span class="datolinje">' + venstre + '</span>' + gear + '</div>'
+    + '<div class="valg" role="tablist" aria-label="Udvikling">'
+    + [["vaegt","Vægt"],["historik","Historik"],["trends","Trends"]].map(function(t){
         return '<button role="tab" aria-selected="' + (S.skaerm === t[0] ? "true" : "false") + '" '
           + 'data-skaerm="' + t[0] + '" class="' + (S.skaerm === t[0] ? "aktiv" : "") + '">' + t[1] + '</button>';
       }).join("")
     + '</div>';
 }
 var FANER = ["idag","vaegt","historik","trends"];
+function skiftSkaerm(ny){
+  if (ny === S.skaerm) return;
+  /* Retningen foelger raekkefoelgen, saa bevaegelsen svarer til
+     den vej man ville skubbe siden med fingeren. */
+  S.skiftRetning = FANER.indexOf(ny) > FANER.indexOf(S.skaerm) ? "frem" : "tilbage";
+  if (ny !== "idag") S.udvFane = ny;
+  S.skaerm = ny;
+  S.valgt = null; skjulFortryd(); window.scrollTo(0,0); tegn();
+}
 function bindHoved(){
   $("b-indst").onclick = function(){ S.indst = true; tegn(); };
+  if ($("b-forrige")) $("b-forrige").onclick = function(){ skiftDag(-1); };
+  if ($("b-naeste")) $("b-naeste").onclick = function(){ skiftDag(1); };
   Array.prototype.forEach.call(document.querySelectorAll("[data-skaerm]"), function(b){
-    b.onclick = function(){
-      var ny = b.getAttribute("data-skaerm");
-      if (ny === S.skaerm) return;
-      /* Retningen foelger fanernes raekkefoelge, saa bevaegelsen svarer til
-         den vej man ville skubbe siden med fingeren. */
-      S.skiftRetning = FANER.indexOf(ny) > FANER.indexOf(S.skaerm) ? "frem" : "tilbage";
-      S.skaerm = ny;
-      S.valgt = null; skjulFortryd(); window.scrollTo(0,0); tegn();
-    };
+    b.onclick = function(){ skiftSkaerm(b.getAttribute("data-skaerm")); };
   });
+  opdaterBundbjaelke();
 }
 
-/* Indgangen spilles kun ved et rigtigt faneskift — ikke hver gang skaermen
-   tegnes om efter et gemt maaltid eller en sletning. */
+/* --- Bundbjaelken: I dag · kamera · Udvikling. Ligger uden for #rod, saa den
+   overlever, naar en skaerm tegner sig selv om. Langt tryk paa kameraet = skriv. --- */
+function opdaterBundbjaelke(skjult){
+  var el = $("bundbjaelke");
+  if (!el){
+    el = document.createElement("nav");
+    el.id = "bundbjaelke"; el.className = "bundbjaelke"; el.setAttribute("aria-label", "Hovedmenu");
+    document.body.appendChild(el);
+  }
+  el.hidden = !!skjult;
+  if (skjult) return;
+  var d = visteDag(), fortid = S.skaerm === "idag" && d !== S.iDag;
+  document.body.classList.toggle("fortid", fortid);
+  var fane = function(id, tekst, ik){
+    var aktiv = id === "idag" ? S.skaerm === "idag" : S.skaerm !== "idag";
+    return '<button class="bb-fane' + (aktiv ? " aktiv" : "") + '" data-fane="' + id + '"'
+      + (aktiv ? ' aria-current="page"' : "") + '>' + ikon(ik) + '<span>' + tekst + '</span></button>';
+  };
+  el.innerHTML = (fortid ? '<div class="fortidslinje"><span>Registrerer på ' + esc(kortDato(d)) + '</span>'
+      + '<button class="txtknap" id="b-tilidag">Til i dag</button></div>' : "")
+    + '<div class="bb-indre">' + fane("idag", "I dag", "dag")
+    + '<button class="kameraknap" id="b-foto" aria-label="Tag billede af et måltid (hold for at skrive)">' + ikon("kamera") + '</button>'
+    + fane("udvikling", "Udvikling", "kurve") + '</div>';
+  Array.prototype.forEach.call(el.querySelectorAll("[data-fane]"), function(b){
+    b.onclick = function(){
+      var f = b.getAttribute("data-fane");
+      if (f === "idag" && S.skaerm === "idag" && S.visDag){ S.visDag = null; S.skiftRetning = "frem"; skjulFortryd(); window.scrollTo(0,0); tegn(); return; }
+      skiftSkaerm(f === "idag" ? "idag" : S.udvFane);
+    };
+  });
+  if ($("b-tilidag")) $("b-tilidag").onclick = function(){ S.visDag = null; S.skiftRetning = "frem"; skjulFortryd(); window.scrollTo(0,0); tegn(); };
+  var foto = $("b-foto"), holdt = null, lang = false;
+  var skriv = function(){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); };
+  foto.addEventListener("pointerdown", function(){
+    lang = false; clearTimeout(holdt);
+    holdt = setTimeout(function(){ lang = true; if (navigator.vibrate) navigator.vibrate(10); skriv(); }, 500);
+  });
+  ["pointerup","pointerleave","pointercancel"].forEach(function(t){ foto.addEventListener(t, function(){ clearTimeout(holdt); }); });
+  foto.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+  foto.onclick = function(e){
+    if (lang){ e.preventDefault(); lang = false; return; }
+    /* Fra Udvikling registreres altid paa i dag */
+    if (S.skaerm !== "idag"){ S.skaerm = "idag"; S.visDag = null; tegn(); }
+    if (S.autoreg) startKamera(); else $("fil").click();
+  };
+}
+
 function animerSkift(){
   if (!S.skiftRetning) return;
   var retning = S.skiftRetning;
@@ -2827,7 +2917,8 @@ function animerSkift(){
 
 /* --- I dag --- */
 function tegnHoved(){
-  var poster = hentDag(S.iDag);
+  var dag = visteDag(), erIdag = dag === S.iDag;
+  var poster = hentDag(dag);
   var nyId = S.nyPost; S.nyPost = null;
   var sum = poster.reduce(function(a,p){
     return { kcal:a.kcal+p.kalorier, pro:a.pro+p.protein_g, kul:a.kul+p.kulhydrat_g, fedt:a.fedt+p.fedt_g };
@@ -2842,10 +2933,10 @@ function tegnHoved(){
   /* Det store tal er det, der er TILBAGE — det er det, man skal handle paa.
      Uden et mael er der intet at traekke fra, saa vises det spiste. */
   var stort = S.maal > 0 ? Math.abs(S.maal - sum.kcal) : sum.kcal;
-  var stortTekst = S.maal <= 0 ? "kalorier i dag"
-    : over ? "kcal over dagens mål" : "kcal tilbage i dag";
-  var h = '<div class="indhold">' + hoved(langDato(S.iDag))
-    + '<div class="spalter idag"><div class="s-a">' + medhuskHtml()
+  var stortTekst = S.maal <= 0 ? (erIdag ? "kalorier i dag" : "kalorier den dag")
+    : over ? "kcal over dagens mål" : erIdag ? "kcal tilbage i dag" : "kcal under målet";
+  var h = '<div class="indhold">' + hoved(langDato(dag))
+    + '<div class="spalter idag"><div class="s-a">' + (erIdag ? medhuskHtml() : "")
     + '<div class="hero"><div class="stortal' + (over ? " over" : "") + '">' + tal(stort) + '</div>'
     + '<div class="maallinje' + (over ? " over" : "") + '">' + stortTekst + '</div>'
     + '<div class="baand" role="progressbar" aria-label="Spist af dagens mål" aria-valuemin="0" aria-valuemax="'
@@ -2862,7 +2953,8 @@ function tegnHoved(){
     + '<div class="s-b"><h2 class="sek">Dagens måltider</h2>';
 
   if (!poster.length){
-    h += '<div class="tom">Ingen måltider endnu. Tag et billede af det første, så regner appen resten ud.</div>';
+    h += '<div class="tom">' + (erIdag ? 'Ingen måltider endnu. Tryk på kameraet nederst, så regner appen resten ud.'
+      : 'Intet registreret den dag. Tryk på kameraet eller »Skriv et måltid« for at tilføje.') + '</div>';
   } else {
     poster.forEach(function(p){
       if (p.analyserer){
@@ -2876,7 +2968,7 @@ function tegnHoved(){
               setTimeout(function(){
                 kaldAnalyse(pp.billede, pp.billede, "", null, null, dg, pp.tid, 1, pp.id);
               }, 0);
-            })(p, S.iDag);
+            })(p, dag);
           } else st = "fejl";
         }
         var grov = st === "analyserer" && p.grovNavn && p.grovKcal > 0;
@@ -2909,7 +3001,7 @@ function tegnHoved(){
         + '<div class="post' + (nyId === p.id ? " ny" : "") + '" data-glid="' + esc(p.id) + '">'
         + (p.billede ? '<img src="' + p.billede + '" alt="">'
                      : '<div class="tom-foto" title="' + esc(p.kategori) + '">' + kategoriIkon(p.kategori) + '</div>')
-        + '<div class="txt" role="button" tabindex="0" aria-label="Ret ' + esc(p.navn) + '" data-red="' + esc(S.iDag) + '|' + esc(p.id) + '"><div class="navn">' + esc(p.navn) + '</div>'
+        + '<div class="txt" role="button" tabindex="0" aria-label="Ret ' + esc(p.navn) + '" data-red="' + esc(dag) + '|' + esc(p.id) + '"><div class="navn">' + esc(p.navn) + '</div>'
         + '<div class="meta">' + esc(p.tid) + " · " + esc(p.kategori)
         + (portionsTekst(p) ? " · " + portionsTekst(p) : "") + '</div>'
         + (p.kommentar ? '<div class="kom">' + esc(p.kommentar) + '</div>' : "") + '</div>'
@@ -2918,21 +3010,18 @@ function tegnHoved(){
   }
   /* Hjaelpeteksten er til de foerste dage — derefter ved man det */
   if (poster.length && dagNoegler().length <= 3) h += '<p class="grafnote" style="margin:2px 2px 0">Tryk på et måltid for at rette det. Stryg til venstre for at slette.</p>';
-  h += '</div><div class="s-c"><h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>'
+  h += '<button class="txtknap tilfoej" id="b-skriv">' + ikon("blyant") + 'Skriv et måltid</button>';
+  h += '</div><div class="s-c">' + (erIdag ? '<h2 class="sek">Forslag til resten af dagen</h2><div id="spiseboks"></div>' : "")
     + '<p class="fodnote">Tallene er estimater ud fra fotoet. De rammer typisk 20–30 % fra, '
-    + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div></div></div>'
-    + '<div class="bund"><div class="bundindhold">'
-    + '<button class="knap" id="b-foto">Tag billede</button>'
-    + '<button class="knap sek smal" id="b-skriv">Skriv det</button></div></div>';
+    + 'og lavest ved sovs, olie og skjulte ingredienser. Ret dem, før du gemmer, når du ved bedre.</p></div></div></div>';
 
   $("rod").innerHTML = h;
   bindHoved();
   bindMedhusk();
   opdaterBadge();
   $("b-maal").onclick = function(){ S.indst = true; tegn(); };
-  $("b-foto").onclick = function(){ if (S.autoreg) startKamera(); else $("fil").click(); };
   $("b-skriv").onclick = function(){ S.ark = { status:"skriv", tekst:"" }; tegnArk(); };
-  tegnSpiseforslag();
+  if (erIdag) tegnSpiseforslag();
   bindRediger();
   bindStryg();
   Array.prototype.forEach.call(document.querySelectorAll("[data-vent]"), function(el){
@@ -3170,8 +3259,7 @@ function tegnVaegt(){
      faaet en bygget — findes brugernavnet ikke her, springes linket over. */
 
 
-  h += '</div><div class="bund"><div class="bundindhold">'
-    + '<button class="knap" id="b-vejning">Registrér vægt</button></div></div>';
+  h += '<button class="knap sek" id="b-vejning" style="margin-top:20px">Registrér vægt</button></div>';
   $("rod").innerHTML = h;
   bindHoved();
   var bp = $("b-profil"); if (bp) bp.onclick = function(){ S.indst = true; tegn(); };
