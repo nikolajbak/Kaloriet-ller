@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
-<link rel="stylesheet" href="style.css?v=111">
+<link rel="stylesheet" href="style.css?v=112">
 </head>
 <body>
 
@@ -32,7 +32,7 @@ var APP_VERSION = "31.1";
    id i tabellen "udgivelser". Modsat en git-commit-hash kan det indlejres i
    selve patchen uden en ekstra efterfoelgende commit, fordi id'et reserveres
    med nextval() foer patchen bygges, saa det er kendt paa forhaand. */
-var APP_BUILD = 111;
+var APP_BUILD = 112;
 /* Knibe-zoom: iOS ignorerer user-scalable=no, saa gestus stoppes her. */
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){
   document.addEventListener(t,function(e){e.preventDefault();},{passive:false});
@@ -1155,12 +1155,42 @@ function gAdgang(){
 
 /* Fejltekster uden motorens navn: brugeren skal vide, hvad de kan goere, ikke
    hvilken model der sad fast. */
-function gFejl(status, m){
+/* Googles 429 siger i details, hvilken kvote der er ramt: pr. minut, pr. dag
+   eller "limit: 0" (modellen er slet ikke paa gratisniveauet). Dagskvoten
+   nulstilles ved midnat Pacific-tid. */
+function gKvote(m, fejlobj){
+  var tekst = String(m || ""), id = "", sek = 0;
+  ((fejlobj && fejlobj.details) || []).forEach(function(d){
+    (d.violations || []).forEach(function(v){ id += " " + (v.quotaId || "") + " " + (v.quotaMetric || ""); });
+    if (d.retryDelay) sek = Math.ceil(parseFloat(d.retryDelay) || 0);
+  });
+  if (!sek){ var r = tekst.match(/retry in ([\d.]+)\s*s/i); if (r) sek = Math.ceil(parseFloat(r[1])); }
+  return { nul: /limit:\s*0\b/.test(tekst), dag: /PerDay/i.test(id) || /per day/i.test(tekst), sek: sek };
+}
+/* Millisekunder til naeste midnat i America/Los_Angeles (dagskvotens nulstilling).
+   Regnes paa kalenderdele, ikke paa en formateret streng. */
+function gTilNulstil(){
+  var nu = new Date(), del = {};
+  new Intl.DateTimeFormat("en-US", { timeZone:"America/Los_Angeles", hour12:false,
+    hour:"2-digit", minute:"2-digit", second:"2-digit" }).formatToParts(nu)
+    .forEach(function(x){ del[x.type] = Number(x.value); });
+  var gaaet = ((del.hour % 24) * 3600 + del.minute * 60 + del.second) * 1000;
+  return 864e5 - gaaet;
+}
+function gNulstilKl(){
+  return new Date(Date.now() + gTilNulstil()).toLocaleTimeString("da-DK", { hour:"2-digit", minute:"2-digit" });
+}
+function gFejl(status, m, fejlobj){
   var egen = !!laes(K_GNOEGLE);
   if (status === 401) return new Error(LOG_IND_GRATIS);
   if (status === 403) return new Error(egen ? "Din egen n\u00f8gle blev afvist. Opret en ny p\u00e5 aistudio.google.com og indl\u00e6s den under Indstillinger."
                                             : "Analysen er ikke tilg\u00e6ngelig lige nu. Pr\u00f8v igen senere.");
-  if (status === 429) return new Error("Analysen er ramt af gratisgr\u00e6nsen. Vent et minut.");
+  if (status === 429){
+    var k = gKvote(m, fejlobj);
+    if (k.nul) return new Error("Analysen har ikke en gratis model til r\u00e5dighed lige nu. Pr\u00f8v igen senere.");
+    if (k.dag) return new Error("Dagens gratiskvote er brugt op. Den nulstilles kl. " + gNulstilKl() + ".");
+    return new Error("Analysen er ramt af gratisgr\u00e6nsen. Vent " + (k.sek > 0 ? k.sek + " sekunder" : "et minut") + ".");
+  }
   if (status === 503 || status === 500 || status === 502) return new Error("Analysen er overbelastet lige nu. Pr\u00f8v igen om lidt.");
   if (status === 400 && /API key/i.test(m)) return new Error(egen ? "Din egen n\u00f8gle blev afvist. Ret den under Indstillinger."
                                                                    : "Analysen er ikke tilg\u00e6ngelig lige nu. Pr\u00f8v igen senere.");
@@ -1393,9 +1423,10 @@ function geminiKald(krop){
     }).then(function(r){
       return r.json().catch(function(){ return {}; }).then(function(d){
         if (!r.ok){
-          var e = gFejl(r.status, (d.error && d.error.message) || "");
+          var e = gFejl(r.status, (d.error && d.error.message) || "", d.error);
           e.status = r.status;
           e.rod = (d.error && d.error.message) || "";
+          if (r.status === 429){ var k = gKvote(e.rod, d.error); e.nul = k.nul; e.dag = k.dag; }
           throw e;
         }
         var k = d.candidates && d.candidates[0];
@@ -1438,11 +1469,14 @@ function geminiKald(krop){
     if (gTaenkFejl(e)) return;
     if (s === 404) gMaerk(model, { vaek: nu + 6048e5 });
     else if (s === 400 && /image input|modality/i.test(e.rod || "")) gMaerk(model, { vaek: nu + 6048e5 });
+    else if (s === 429 && e.nul) gMaerk(model, { vaek: nu + 6048e5 });
+    else if (s === 429 && e.dag) gMaerk(model, { straf: nu + gTilNulstil() });
     else if (s === 429 || s === 500 || s === 503 || e.timeout) gMaerk(model, { straf: nu + 6e5 });
   }
 
   function midlertidig(e){
     var s = e.status || 0;
+    if (s === 429 && e.nul) return false;
     return s === 429 || s === 500 || s === 503 || s === 0 || !!e.timeout;
   }
 
@@ -1494,7 +1528,7 @@ function geminiKald(krop){
   function omgang(n){
     return gListeTil(krop.gModus).then(function(l){ return kapløb(l); }).catch(function(e){
       var s = e.status || 0;
-      if (n < 1 && (s === 429 || s === 500 || s === 503 || s === 0 || e.timeout))
+      if (n < 1 && !e.dag && !e.nul && (s === 429 || s === 500 || s === 503 || s === 0 || e.timeout))
         return gVent(4000).then(function(){ return omgang(n + 1); });
       if (s === 0 && !e.timeout) throw new Error("Mistede forbindelsen undervejs. Tjek din internetforbindelse og prøv igen.");
       throw e;
